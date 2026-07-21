@@ -1,0 +1,115 @@
+import { ProjectionLabError } from "./errors.js";
+
+export type PlanObj = Record<string, unknown>;
+
+export const PLAN_SECTIONS = [
+  "income",
+  "expenses",
+  "accounts",
+  "assets",
+  "milestones",
+  "variables",
+  "withdrawalStrategy",
+  "montecarlo",
+  "priorities",
+] as const;
+
+export type PlanSection = (typeof PLAN_SECTIONS)[number];
+
+/**
+ * Find a plan by identifier. Match priority: exact ID, exact name
+ * (case-insensitive), then partial name. Exact matches win over partial so
+ * plans with shared name prefixes can't be silently confused on write paths.
+ */
+export function findPlanIndex(plans: unknown[], identifier: string): number {
+  const lower = identifier.toLowerCase();
+  let exactName = -1;
+  let partial = -1;
+
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i];
+    if (!plan || typeof plan !== "object") continue;
+    const obj = plan as PlanObj;
+    if (String(obj.id ?? "") === identifier) return i;
+    const name = String(obj.name ?? "").toLowerCase();
+    if (name === lower && exactName === -1) exactName = i;
+    else if (name.includes(lower) && partial === -1) partial = i;
+  }
+
+  return exactName !== -1 ? exactName : partial;
+}
+
+export function findPlan(
+  plans: unknown[],
+  identifier: string,
+): PlanObj | null {
+  const i = findPlanIndex(plans, identifier);
+  return i === -1 ? null : (plans[i] as PlanObj);
+}
+
+export function planNotFoundError(
+  plans: unknown[],
+  identifier: string,
+): ProjectionLabError {
+  const available = plans
+    .map((p) => {
+      const obj = p as PlanObj;
+      return `  - "${obj.name}" (${obj.id})`;
+    })
+    .join("\n");
+  return new ProjectionLabError(
+    "INVALID_INPUT",
+    `No plan matching "${identifier}" found`,
+    `Available plans:\n${available}`,
+  );
+}
+
+export function requirePlans(data: { plans?: unknown[] }): unknown[] {
+  if (!Array.isArray(data.plans) || data.plans.length === 0) {
+    throw new ProjectionLabError(
+      "INVALID_INPUT",
+      "No plans found in ProjectionLab",
+      "Create a plan in ProjectionLab first",
+    );
+  }
+  return data.plans;
+}
+
+/**
+ * Extract the events array from a plan section. Most sections are
+ * { events: [] }; milestones is a direct array.
+ */
+export function getEvents(sectionData: unknown): unknown[] {
+  if (Array.isArray(sectionData)) return sectionData;
+  if (sectionData && typeof sectionData === "object") {
+    const events = (sectionData as PlanObj).events;
+    if (Array.isArray(events)) return events;
+  }
+  return [];
+}
+
+export function eventLabel(event: unknown): string {
+  if (event && typeof event === "object") {
+    const obj = event as PlanObj;
+    return String(obj.name ?? obj.id ?? "unnamed");
+  }
+  return "unnamed";
+}
+
+/** Field-by-field diff of two objects; values rendered as "from → to". */
+export function diffFields(
+  current: unknown,
+  incoming: unknown,
+): Record<string, string> {
+  const cur = (current ?? {}) as PlanObj;
+  const inc = (incoming ?? {}) as PlanObj;
+  const changes: Record<string, string> = {};
+  for (const key of new Set([...Object.keys(cur), ...Object.keys(inc)])) {
+    const a = JSON.stringify(cur[key]);
+    const b = JSON.stringify(inc[key]);
+    if (a !== b) {
+      changes[key] = `${a ?? "(absent)"} → ${b ?? "(absent)"}`;
+    }
+  }
+  return changes;
+}

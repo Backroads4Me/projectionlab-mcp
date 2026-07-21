@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "ProjectionLab MCP",
+  "version": "0.1.0",
+  "description": "Connects ProjectionLab's Plugin API to a local projectionlab-mcp server.",
+  "permissions": ["tabs", "scripting", "storage", "alarms"],
+  "host_permissions": ["https://app.projectionlab.com/*"],
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": { "default_title": "ProjectionLab MCP", "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" } },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://127.0.0.1:*"
+  },
+  "background": { "scripts": ["background.js"] },
+  "content_scripts": [{ "matches": ["https://app.projectionlab.com/*"], "js": ["content.js"], "run_at": "document_start" }],
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "browser_specific_settings": { "gecko": { "id": "projectionlab-mcp-bridge@localhost", "strict_min_version": "128.0" } }
+}

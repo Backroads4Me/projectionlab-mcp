@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ProjectionLab MCP Bridge</title>
+<style>body{font:15px system-ui,sans-serif;margin:2rem auto;max-width:36rem;padding:0 1rem;color:#202124}label{display:block;margin:1rem 0}input[type=number],input[type=password]{box-sizing:border-box;display:block;margin-top:.35rem;padding:.55rem;width:100%}button{padding:.55rem 1rem}#status{font-weight:600;text-transform:capitalize}#error{color:#a32424;min-height:1.3em}</style></head>
+<body><h1>ProjectionLab MCP Bridge</h1><p>Status: <span id="status">disconnected</span></p><p id="error"></p>
+<form id="settings"><label>Local WebSocket port <input id="port" type="number" min="1" max="65535" required></label><label>Shared token <input id="token" type="password" autocomplete="off" required></label><label><input id="autoOpen" type="checkbox"> Open ProjectionLab in a background tab when needed</label><button type="submit">Save</button> <span id="saved" role="status"></span></form><script src="options.js"></script></body></html>

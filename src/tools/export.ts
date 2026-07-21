@@ -1,4 +1,3 @@
-import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -6,6 +5,7 @@ import type { Bridge } from "../bridge.js";
 import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { redactSecrets } from "../redact.js";
+import { secureMkdir, secureWriteFile } from "../secureFs.js";
 import { log } from "../logger.js";
 
 const FILE_THRESHOLD = 100_000;
@@ -37,10 +37,10 @@ export function registerExportTool(server: McpServer, bridge: Bridge) {
         const json = toJson(data);
 
         if (json.length > FILE_THRESHOLD) {
-          await mkdir(EXPORT_DIR, { recursive: true });
+          await secureMkdir(EXPORT_DIR);
           const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
           const filePath = join(EXPORT_DIR, `export-${timestamp}.json`);
-          await writeFile(filePath, json);
+          await secureWriteFile(filePath, json);
           log.info("export", `Wrote ${json.length} chars to ${filePath}`);
 
           const planNames = Array.isArray(data.plans)

@@ -1,7 +1,7 @@
-import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { toJson } from "./json.js";
+import { secureMkdir, secureWriteFile } from "./secureFs.js";
 import { log } from "./logger.js";
 
 export const FILE_THRESHOLD = 100_000;
@@ -18,10 +18,10 @@ export async function textOrFile(
 ): Promise<string> {
   if (text.length <= FILE_THRESHOLD) return text;
 
-  await mkdir(EXPORT_DIR, { recursive: true });
+  await secureMkdir(EXPORT_DIR);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filePath = join(EXPORT_DIR, `${label}-${timestamp}.json`);
-  await writeFile(filePath, text);
+  await secureWriteFile(filePath, text);
   log.info("largeOutput", `Wrote ${text.length} chars to ${filePath}`);
 
   return toJson(

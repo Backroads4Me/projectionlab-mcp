@@ -36,17 +36,29 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc",
     "start": "node dist/index.js",
     "test": "npm run build && node --test \"test/**/*.test.mjs\"",
     "dev": "tsx src/index.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^16.4.7",
     "ws": "^8.21.1",
     "zod": "^3.24.0"
+  },
+  "//overrides": "Patched transitive deps of the MCP SDK, kept within each parent's declared range (in-major) for compatibility. All except fast-uri live only in the SDK's HTTP/SSE transport, which this stdio-only server never loads; fast-uri is used by ajv for schema validation.",
+  "overrides": {
+    "fast-uri": "^3.1.4",
+    "hono": "^4.12.31",
+    "@hono/node-server": "^1.19.14",
+    "path-to-regexp": "^8.4.2",
+    "body-parser": "^2.3.0",
+    "qs": "^6.15.3",
+    "ip-address": "^10.2.0",
+    "express-rate-limit": "^8.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

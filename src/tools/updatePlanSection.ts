@@ -14,6 +14,7 @@ import {
   getEvents,
   planNotFoundError,
   requirePlans,
+  verifySectionApplied,
   type PlanObj,
 } from "../plans.js";
 
@@ -199,17 +200,18 @@ export function registerUpdatePlanSectionTool(
 
         await bridge.restorePlans(updatedPlans);
 
-        // Verify by re-reading; match by plan id since order may change
+        // Verify by re-reading; match by plan id since order may change.
+        // Compares submitted content (not just counts) so a rejected,
+        // transformed, or dropped write can't report false success.
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (
           Array.isArray(verifyData.plans) ? verifyData.plans : []
         ).find(
           (p) => p && typeof p === "object" && (p as PlanObj).id === plan.id,
         ) as PlanObj | undefined;
-        const verified = verifiedPlan
-          ? getEvents(verifiedPlan[section]).length ===
-            getEvents(sectionData).length
-          : false;
+        const check = verifiedPlan
+          ? verifySectionApplied(sectionData, verifiedPlan[section])
+          : { ok: false, reason: "plan not found after write" };
 
         return {
           content: [
@@ -220,10 +222,10 @@ export function registerUpdatePlanSectionTool(
                 planName: plan.name,
                 section,
                 diff: renderDiff(diff),
-                verified,
-                message: verified
+                verified: check.ok,
+                message: check.ok
                   ? "Section updated and verified. Snapshot saved automatically."
-                  : "Section update sent but verification count mismatch — check with projectionlab_get_plan_section.",
+                  : `Section update sent but could not be verified (${check.reason}) — check with projectionlab_get_plan_section. A snapshot was saved; roll back with projectionlab_rollback if needed.`,
               }),
             },
           ],

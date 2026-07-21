@@ -1,13 +1,16 @@
-import { readdir, readFile, writeFile, mkdir, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile, unlink } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { ProjectionLabError } from "./errors.js";
 import { redactSecrets } from "./redact.js";
+import { secureMkdir, secureWriteFile } from "./secureFs.js";
 import { log } from "./logger.js";
 import type { Snapshot } from "./types/projectionlab.js";
 
 const RETENTION_DAYS = 30;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class SnapshotManager {
   private dir = config.snapshotDir;
@@ -15,7 +18,7 @@ export class SnapshotManager {
 
   private async ensureDir(): Promise<void> {
     if (!this.initialized) {
-      await mkdir(this.dir, { recursive: true });
+      await secureMkdir(this.dir);
       this.initialized = true;
     }
   }
@@ -57,7 +60,7 @@ export class SnapshotManager {
     };
 
     const filePath = join(this.dir, `${snapshot.id}.json`);
-    await writeFile(filePath, JSON.stringify(snapshot, null, 2));
+    await secureWriteFile(filePath, JSON.stringify(snapshot, null, 2));
     log.info("snapshot", `Created snapshot ${snapshot.id} for ${operation}`);
 
     // Prune old snapshots in the background
@@ -99,7 +102,26 @@ export class SnapshotManager {
   async get(snapshotId: string): Promise<Snapshot> {
     await this.ensureDir();
 
+    // Snapshot IDs are UUIDs we generate; reject anything else so a
+    // caller-supplied value can't traverse out of the snapshot directory.
+    if (!UUID_RE.test(snapshotId)) {
+      throw new ProjectionLabError(
+        "SNAPSHOT_NOT_FOUND",
+        `Snapshot ${snapshotId} not found`,
+        "Use projectionlab_list_snapshots to see available snapshots",
+      );
+    }
+
     const filePath = join(this.dir, `${snapshotId}.json`);
+    // Defense in depth: ensure the resolved path stays inside the snapshot dir.
+    const dirPrefix = resolve(this.dir) + sep;
+    if (!resolve(filePath).startsWith(dirPrefix)) {
+      throw new ProjectionLabError(
+        "SNAPSHOT_NOT_FOUND",
+        `Snapshot ${snapshotId} not found`,
+        "Use projectionlab_list_snapshots to see available snapshots",
+      );
+    }
     try {
       const raw = await readFile(filePath, "utf-8");
       return JSON.parse(raw) as Snapshot;

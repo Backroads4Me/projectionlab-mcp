@@ -2,6 +2,8 @@
 
 Guidance for AI agents and contributors working in this repository.
 
+Workspace rules: `../AGENTS.md`.
+
 ## What this is
 
 A local **stdio MCP server** (TypeScript, ESM) that bridges an MCP host to the

@@ -39,6 +39,16 @@ const EVENT_FIELD_CONTEXT = {
   example: '{ "taxHandling.withholding": "auto" }',
 } as const;
 
+function assertMutableEventPath(path: string): void {
+  if (path === "id" || path.startsWith("id.")) {
+    throw new ProjectionLabError(
+      "INVALID_INPUT",
+      "The event ID is immutable",
+      "Use the ID only to select the event",
+    );
+  }
+}
+
 function findEventIndex(events: unknown[], identifier: string): number {
   const lower = identifier.toLowerCase();
   let exactName = -1;
@@ -187,6 +197,9 @@ export function registerUpdatePlanEventTool(
         let changes: Record<string, string> | Record<string, PathValueChange>;
         let pathDiff: Record<string, PathValueChange> | undefined;
         if (pathChanges !== undefined) {
+          for (const path of Object.keys(pathChanges)) {
+            assertMutableEventPath(path);
+          }
           const result = applyExistingPathChanges(
             event,
             pathChanges,
@@ -196,6 +209,9 @@ export function registerUpdatePlanEventTool(
           changes = result.changes;
           pathDiff = result.changes;
         } else {
+          for (const key of Object.keys(patch ?? {})) {
+            assertMutableEventPath(key);
+          }
           patched = { ...event, ...patch };
           changes = diffFields(event, patched);
         }

@@ -15,10 +15,12 @@ import { registerSchemaTool } from "./tools/schema.js";
 import { registerSummaryTool } from "./tools/summary.js";
 import { registerGetPlanTool } from "./tools/getPlan.js";
 import { registerGetPlanSectionTool } from "./tools/getPlanSection.js";
+import { registerGetPlanSettingsTool } from "./tools/getPlanSettings.js";
 import { registerGetCurrentFinancesTool } from "./tools/getCurrentFinances.js";
 import { registerUpdateAccountTool } from "./tools/updateAccount.js";
 import { registerUpdatePlanSectionTool } from "./tools/updatePlanSection.js";
 import { registerUpdatePlanEventTool } from "./tools/updatePlanEvent.js";
+import { registerUpdatePlanSettingsTool } from "./tools/updatePlanSettings.js";
 import { registerRestoreTools } from "./tools/restore.js";
 import { registerSnapshotTools } from "./tools/snapshots.js";
 
@@ -56,12 +58,14 @@ async function main() {
   registerSummaryTool(server, bridge);
   registerGetPlanTool(server, bridge);
   registerGetPlanSectionTool(server, bridge);
+  registerGetPlanSettingsTool(server, bridge);
   registerGetCurrentFinancesTool(server, bridge);
 
   // Register write tools
   registerUpdateAccountTool(server, bridge, snapshots);
   registerUpdatePlanSectionTool(server, bridge, snapshots);
   registerUpdatePlanEventTool(server, bridge, snapshots);
+  registerUpdatePlanSettingsTool(server, bridge, snapshots);
   registerRestoreTools(server, bridge, snapshots);
 
   // Register snapshot/rollback tools

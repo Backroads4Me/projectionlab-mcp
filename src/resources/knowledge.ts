@@ -28,6 +28,15 @@ via web search; they change annually.
 - Monte Carlo and projection *math* run only in the ProjectionLab UI. This
   server reads/writes the plan definition; it does not compute projections.
 
+## Plan-change outcome metrics
+
+Evaluate a plan change primarily with ProjectionLab's projected ending net worth
+and Chance of Success from a completed simulation. Current Finances net worth is
+an input balance sheet, not an outcome. Mutation before/after values verify that
+the requested input changed; they do not measure its financial impact. The
+Plugin API currently does not expose a supported calculation/result method, so
+recalculate both outcomes in the UI after applying a change.
+
 ## Core FIRE / decumulation concepts
 
 - **Safe Withdrawal Rate (SWR)** — the classic "4% rule" (Trinity study) is a

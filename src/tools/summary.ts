@@ -62,7 +62,6 @@ function buildSummary(data: ExportedData): FinancialSummary {
     "currentAge",
     "withdrawalRate",
     "inflationRate",
-    "successRate",
   ];
 
   const plans: PlanSummary[] = Array.isArray(data.plans)
@@ -82,6 +81,8 @@ function buildSummary(data: ExportedData): FinancialSummary {
     : [];
 
   return {
+    scope: "currentFinances",
+    projectedOutcomesAvailable: false,
     totalNetWorth,
     accountsByType,
     planCount: plans.length,
@@ -96,16 +97,20 @@ export function registerSummaryTool(server: McpServer, bridge: Bridge) {
   server.registerTool(
     "projectionlab_get_summary",
     {
-      title: "Financial Summary",
+      title: "Current Finances Summary",
       description:
-        "Returns a high-level snapshot of CURRENT finances: net worth as of today " +
-        "(sum of current balances, not a projection), account breakdown by type, " +
-        "number of plans/incomes/expenses/milestones, and plan names. " +
-        "Use this for a quick overview before diving into full data.",
+        "Returns a compact inventory of CURRENT finances: net worth as of today " +
+        "(sum of current balances, not a projected outcome), account breakdown " +
+        "by type, counts, and plan names. It does not return ending net worth or " +
+        "Chance of Success and must not be used to judge a plan change's impact.",
       outputSchema: {
+        scope: z.literal("currentFinances"),
+        projectedOutcomesAvailable: z.literal(false),
         totalNetWorth: z
           .number()
-          .describe("Current-finances net worth (today's balances, not projected)"),
+          .describe(
+            "Current-finances net worth from today's balances; not projected ending net worth",
+          ),
         accountsByType: z.record(
           z.string(),
           z.object({ count: z.number(), total: z.number() }),

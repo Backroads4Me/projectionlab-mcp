@@ -11,15 +11,19 @@ const ANALYSIS_FRAMEWORK = `You are an expert retirement planning analyst integr
 Use these tools in order of preference (smallest first):
 1. projectionlab_check_connection — verify session
 2. projectionlab_describe_schema — plan names, account IDs (small)
-3. projectionlab_get_summary — current net worth, totals (small)
-4. projectionlab_get_plan_section — one section; supports eventIdentifier and dot-path filters for single events/fields (smallest targeted read)
-5. projectionlab_get_current_finances — account balances (medium)
-6. projectionlab_get_plan — full single plan (large)
-7. projectionlab_export_data — all data (very large, avoid unless needed)
+3. projectionlab_get_summary — Current Finances inventory only; never treat its
+   net worth as a projected outcome (small)
+4. projectionlab_get_plan_settings — assumptions, tax, Monte Carlo, and withdrawal configuration as discrete paths (small)
+5. projectionlab_get_plan_section — one section; supports eventIdentifier and dot-path filters for single events/fields (smallest targeted read)
+6. projectionlab_get_current_finances — account balances (medium)
+7. projectionlab_get_plan — full single plan (large)
+8. projectionlab_export_data — all data (very large, avoid unless needed)
 
-For writes, prefer projectionlab_update_plan_event (patches one event, safest)
-over projectionlab_update_plan_section (replaces a whole section) over the
-restore tools (full replacement).
+For writes, use projectionlab_update_plan_settings for assumptions and strategy
+values, projectionlab_update_plan_event for one plan event, and
+projectionlab_update_account for one Current Finances item. Prefer these
+path/patch tools over projectionlab_update_plan_section (replaces a whole
+section), and prefer section replacement over restore tools (full replacement).
 
 ## Tax Data Freshness
 
@@ -44,6 +48,22 @@ Plans use milestone-driven lifecycle phases. Each plan contains:
 
 Cross-references: milestone IDs in event start.value/end.value; accountId links plan accounts to current finances.
 
+## Outcome Evaluation
+
+The primary measures of a plan change are:
+
+1. projected ending net worth; and
+2. Chance of Success from a completed simulation.
+
+Current Finances balances are inputs, not outcome measures. Before/after values
+returned by mutation tools are field-level safety diffs that prove the requested
+input changed; they do not establish financial impact. The Plugin API currently
+exposes plan definitions and Monte Carlo configuration, but not a supported way
+to recalculate and read these two outcomes. Never substitute current net worth,
+an input diff, or an unrun simulation setting for an outcome. Ask the user to
+recalculate the plan and run Chance of Success in the ProjectionLab UI, then
+compare the resulting ending net worth and success percentage.
+
 ## Mutation Safety
 
 If changes are requested:
@@ -51,7 +71,9 @@ If changes are requested:
 2. Re-fetch fresh data before constructing mutations (never use stale data)
 3. Dry-run with confirm: false, show preview
 4. Only apply with confirm: true after explicit approval
-5. Verify via projectionlab_get_summary after applying`;
+5. Re-fetch the exact setting, event, or account and verify the requested input
+6. State that input verification is not impact evaluation; use UI-calculated
+   ending net worth and Chance of Success for the before/after decision`;
 
 export function registerPrompts(server: McpServer, _bridge: Bridge) {
   // --- Analyze Plan ---
@@ -84,8 +106,8 @@ Analyze the plan named "${planName}". Follow this structure:
 3. **Tax Optimization** — Roth conversion schedule analysis, MAGI/ACA/IRMAA management
 4. **Risk Assessment** — Assumptions review, sequence of returns risk, longevity risk, cash cushion adequacy
 5. **Withdrawal Strategy** — Drawdown order, SWR sustainability, early withdrawal penalties, RMD planning
-6. **Estate & Legacy** — Terminal net worth, estate tax exposure, step-up basis
-7. **Monte Carlo Review** — Configuration evaluation, recommend running simulations in ProjectionLab UI
+6. **Estate & Legacy** — Projected ending net worth, estate tax exposure, step-up basis
+7. **Chance of Success** — Review configuration and use a completed UI simulation result when available
 
 Summarize with: Strengths, Risks (quantified), and Recommendations (ranked by impact with comparison tables).
 
@@ -126,7 +148,8 @@ Compare plans "${plan1}" and "${plan2}". Build side-by-side tables for:
 4. **Expenses** — Total by phase, healthcare approach, discretionary spending
 5. **Account Strategies** — Roth conversion schedules, withdrawal rules, drawdown order
 6. **Tax Strategy** — Filing status, withholding, IRMAA, capital gains
-7. **Monte Carlo** — Simulation parameters
+7. **Outcome Comparison** — Projected ending net worth and completed Chance of Success result; otherwise state that the UI run is required
+8. **Monte Carlo** — Simulation parameters
 
 Conclude with: Key Differences, Risk Comparison, Recommendation, and any Hybrid Suggestions.
 

@@ -117,6 +117,10 @@ The rest of this document is for developers or advanced users. Everyday use need
 
 ProjectionLab has no REST API, so the server reaches its browser-side `window.projectionlabPluginAPI` over a localhost WebSocket that a browser-side executor — the **extension** (normal use) or a pasted **bootstrap snippet** (zero-install) — connects out to. See **[HOW-IT-WORKS.md](HOW-IT-WORKS.md)** for the full architecture: the bridge design, wire protocol, extension internals, and safety model.
 
+The **[configuration support audit](CONFIGURATION-AUDIT.md)** maps
+ProjectionLab plan settings and event forms to MCP reads and mutations, and
+records remaining data-model and Plugin API constraints.
+
 ### Manual setup
 
 ```bash
@@ -152,12 +156,14 @@ Register the server with your MCP host (see the JSON example above), load the bu
 | `projectionlab_describe_plugin_api` | Describe the available Plugin API surface | No |
 | `projectionlab_describe_schema` | Describe the data schema (plan names, account IDs) | No |
 | `projectionlab_export_data` | Export full plan state as JSON | No |
-| `projectionlab_get_summary` | Get net worth and high-level financial summary | No |
+| `projectionlab_get_summary` | Inventory Current Finances balances and current net worth (not projected outcomes) | No |
 | `projectionlab_get_plan` | Retrieve a single plan | No |
-| `projectionlab_get_plan_section` | Retrieve a specific section of a plan (supports path/event filters) | No |
-| `projectionlab_get_current_finances` | Get current financial accounts | No |
-| `projectionlab_update_account` | Update a single account (dry-run by default) | Yes |
-| `projectionlab_update_plan_event` | Patch one event in a plan section (safest write) | Yes |
+| `projectionlab_get_plan_section` | Retrieve a plan section; supports event/path filters and typed field-path listing | No |
+| `projectionlab_get_plan_settings` | List discrete plan settings as path-addressable values | No |
+| `projectionlab_get_current_finances` | Get Current Finances or list typed paths for one account | No |
+| `projectionlab_update_account` | Patch one Current Finances account by top-level fields or nested dot paths | Yes |
+| `projectionlab_update_plan_event` | Patch one event by top-level fields or nested dot paths | Yes |
+| `projectionlab_update_plan_settings` | Patch existing assumptions, Monte Carlo, or withdrawal settings by path | Yes |
 | `projectionlab_update_plan_section` | Replace a whole section of a plan (dry-run by default) | Yes |
 | `projectionlab_list_snapshots` | List saved pre-mutation snapshots | No |
 | `projectionlab_restore_current_finances` | Restore Current Finances from snapshot | Yes |
@@ -186,6 +192,57 @@ Register the server with your MCP host (see the JSON example above), load the bu
 ### Safety model
 
 Write operations (`update_*`, `restore_*`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Set `PL_READ_ONLY=true` to disable writes entirely.
+
+For a small assumptions or strategy change, first call
+`projectionlab_get_plan_settings` with the plan name. It returns the current
+`variables`, `montecarlo`, and `withdrawalStrategy` values as dot paths with
+their JSON types. Preview a path-level patch with
+`projectionlab_update_plan_settings`, for example:
+
+```json
+{
+  "planIdentifier": "Retire at 55",
+  "section": "variables",
+  "changes": {
+    "showFutureDollars": true
+  }
+}
+```
+
+The update tool preserves sibling settings, rejects unknown paths and JSON type
+changes, and still requires `"confirm": true` before it sends a mutation.
+Advanced inflation, stock-growth, dividend-yield, bond-growth, and bond-yield
+schedules expose both the complete ordered array and indexed control-point
+fields, so one existing year or rate can be adjusted without replacing the
+rest of the schedule.
+
+Event forms use the same path workflow. Fetch one event with
+`projectionlab_get_plan_section` using its `eventIdentifier` and
+`"listPaths": true`, then pass selected paths to
+`projectionlab_update_plan_event` as `pathChanges`. The older `patch` input
+remains available for shallow top-level changes.
+
+Current Finances accounts also support targeted discovery and nested patches.
+Call `projectionlab_get_current_finances` with an exact `accountId` and
+`"listPaths": true`, then pass selected paths to
+`projectionlab_update_account` as `pathChanges`. The legacy `data` input
+remains available for top-level fields. Dry runs validate the account and
+return before/after values as a safety diff; confirmed no-ops do not create a
+snapshot or send a mutation.
+
+### Evaluating plan impact
+
+Projected ending net worth and Chance of Success are the primary outcome
+metrics for comparing a plan before and after a change. Current Finances
+balances are inputs. Mutation before/after values verify that the requested
+input changed, but they do not measure the plan's financial impact.
+
+ProjectionLab's Plugin API currently exposes plan definitions and simulation
+settings, but not a supported method to recalculate and retrieve projected
+ending net worth or a completed Chance of Success result. After a confirmed
+mutation, re-read the targeted input through MCP for verification, then
+recalculate the plan and run Chance of Success in the ProjectionLab UI before
+drawing a conclusion.
 
 ### Secret handling
 

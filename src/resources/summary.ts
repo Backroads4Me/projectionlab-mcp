@@ -38,7 +38,14 @@ function buildSummary(data: Record<string, unknown>) {
       })
     : [];
 
-  return { totalNetWorth, accountsByType, planCount: plans.length, plans };
+  return {
+    scope: "currentFinances",
+    projectedOutcomesAvailable: false,
+    totalNetWorth,
+    accountsByType,
+    planCount: plans.length,
+    plans,
+  };
 }
 
 export function registerSummaryResource(
@@ -49,9 +56,9 @@ export function registerSummaryResource(
     "summary",
     "projectionlab://summary",
     {
-      title: "Financial Summary",
+      title: "Current Finances Summary",
       description:
-        "High-level financial snapshot: net worth, account breakdown, plan count. Refreshed on each access.",
+        "Current balances, current net worth, and plan inventory. Does not contain projected ending net worth or Chance of Success.",
       mimeType: "application/json",
     },
     async (uri) => {

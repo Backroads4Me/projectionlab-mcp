@@ -39,6 +39,7 @@ test("tarball ships the expected entrypoints", () => {
     "dist/extensionBridge.js",
     "dist/bridge.js",
     "README.md",
+    "CONFIGURATION-AUDIT.md",
   ]) {
     assert.ok(
       files.includes(required),

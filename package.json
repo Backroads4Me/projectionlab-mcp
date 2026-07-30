@@ -29,6 +29,7 @@
     "dist",
     "README.md",
     "HOW-IT-WORKS.md",
+    "CONFIGURATION-AUDIT.md",
     "LICENSE"
   ],
   "publishConfig": {

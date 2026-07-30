@@ -8,6 +8,10 @@ const REDACTED = "[REDACTED]";
 const SECRET_KEY_PATTERN =
   /^(.*[-_])?(api[-_]?key|plugin[-_]?api[-_]?key|token|auth[-_]?token|authorization|password|passwd|secret|client[-_]?secret)([-_].*)?$/i;
 
+export function isSecretFieldName(name: string): boolean {
+  return SECRET_KEY_PATTERN.test(name);
+}
+
 export interface RedactOptions {
   /**
    * Also redact any field whose *name* looks like a secret (apiKey, token,
@@ -41,7 +45,7 @@ export function redactSecrets<T>(value: T, opts: RedactOptions = {}): T {
       seen.add(v as object);
       const out: Record<string, unknown> = {};
       for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-        out[k] = byName && SECRET_KEY_PATTERN.test(k) ? REDACTED : walk(val);
+        out[k] = byName && isSecretFieldName(k) ? REDACTED : walk(val);
       }
       return out;
     }

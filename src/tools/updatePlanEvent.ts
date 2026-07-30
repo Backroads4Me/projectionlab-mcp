@@ -7,6 +7,12 @@ import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
+  applyExistingPathChanges,
+  pathChangesApplied,
+  type PathValueChange,
+} from "../pathPatch.js";
+import { redactSecrets } from "../redact.js";
+import {
   diffFields,
   eventLabel,
   findPlanIndex,
@@ -16,8 +22,8 @@ import {
   type PlanObj,
 } from "../plans.js";
 
-// Only the event-based sections; variables/montecarlo/etc. go through
-// projectionlab_update_plan_section.
+// Only event-based sections; configuration objects use
+// projectionlab_update_plan_settings.
 const EVENT_SECTIONS = [
   "income",
   "expenses",
@@ -26,6 +32,12 @@ const EVENT_SECTIONS = [
   "milestones",
   "priorities",
 ] as const;
+
+const EVENT_FIELD_CONTEXT = {
+  label: "event field",
+  discoveryTool: "projectionlab_get_plan_section with listPaths=true",
+  example: '{ "taxHandling.withholding": "auto" }',
+} as const;
 
 function findEventIndex(events: unknown[], identifier: string): number {
   const lower = identifier.toLowerCase();
@@ -71,9 +83,11 @@ export function registerUpdatePlanEventTool(
       title: "Update Plan Event",
       description:
         "Patches ONE event (income source, expense, account, asset, milestone, or priority) " +
-        "within ONE plan. The patch is merged into the existing event server-side, so only the " +
-        "changed fields need to be supplied — all sibling events and other fields are preserved " +
-        "untouched. This is the PREFERRED write tool for single-event changes: much smaller and " +
+        "within ONE plan. Use pathChanges for nested fields so nested siblings are preserved; " +
+        "get valid paths from projectionlab_get_plan_section with eventIdentifier and listPaths=true. " +
+        "The legacy patch input shallowly merges top-level fields and replaces any nested object " +
+        "supplied there. Supply exactly one of patch or pathChanges. All sibling events are preserved. " +
+        "This is the PREFERRED write tool for single-event changes: much smaller and " +
         "safer than regenerating a whole section. " +
         "When confirm is false (default), returns a dry-run field-level diff. " +
         "When confirm is true, auto-snapshots all plans, applies the patch, and verifies.",
@@ -93,8 +107,15 @@ export function registerUpdatePlanEventTool(
           ),
         patch: z
           .record(z.string(), z.unknown())
+          .optional()
           .describe(
-            "Fields to change on the event, e.g. { amount: 5000 }. Merged shallowly into the existing event — nested objects supplied here replace the existing nested object wholesale.",
+            "Top-level fields to change, e.g. { amount: 5000 }. Merged shallowly; a nested object replaces that complete nested object. Use pathChanges for nested fields.",
+          ),
+        pathChanges: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe(
+            'Preferred for nested fields. Dot-path to value map, e.g. { "taxHandling.withholding": "auto" }. Paths must exist and retain their current JSON types.',
           ),
         confirm: z
           .boolean()
@@ -110,13 +131,28 @@ export function registerUpdatePlanEventTool(
         openWorldHint: true,
       },
     },
-    async ({ planIdentifier, section, eventIdentifier, patch, confirm }) => {
+    async ({
+      planIdentifier,
+      section,
+      eventIdentifier,
+      patch,
+      pathChanges,
+      confirm,
+    }) => {
       try {
         if (config.readOnly) {
           throw new ProjectionLabError(
             "READ_ONLY_MODE",
             "Write operations are disabled (PL_READ_ONLY=true)",
             "Set PL_READ_ONLY=false to enable writes",
+          );
+        }
+
+        if ((patch === undefined) === (pathChanges === undefined)) {
+          throw new ProjectionLabError(
+            "INVALID_INPUT",
+            "Supply exactly one of patch or pathChanges",
+            "Use patch for top-level fields or pathChanges for nested dot paths",
           );
         }
 
@@ -147,8 +183,23 @@ export function registerUpdatePlanEventTool(
         }
 
         const event = events[eventIndex] as PlanObj;
-        const patched = { ...event, ...patch };
-        const changes = diffFields(event, patched);
+        let patched: PlanObj;
+        let changes: Record<string, string> | Record<string, PathValueChange>;
+        let pathDiff: Record<string, PathValueChange> | undefined;
+        if (pathChanges !== undefined) {
+          const result = applyExistingPathChanges(
+            event,
+            pathChanges,
+            EVENT_FIELD_CONTEXT,
+          );
+          patched = result.updated;
+          changes = result.changes;
+          pathDiff = result.changes;
+        } else {
+          patched = { ...event, ...patch };
+          changes = diffFields(event, patched);
+        }
+        const renderedChanges = redactSecrets(changes, { byName: true });
 
         if (!confirm) {
           return {
@@ -162,11 +213,31 @@ export function registerUpdatePlanEventTool(
                   planId: plan.id,
                   section,
                   event: eventLabel(event),
-                  changes,
+                  changes: renderedChanges,
                   warning:
                     Object.keys(changes).length === 0
                       ? "Patch matches the current event — nothing would change."
                       : `This will patch event "${eventLabel(event)}" in "${section}" of plan "${plan.name}". Set confirm=true to proceed.`,
+                }),
+              },
+            ],
+          };
+        }
+
+        if (Object.keys(changes).length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: toJson({
+                  success: true,
+                  planName: plan.name,
+                  section,
+                  event: eventLabel(event),
+                  changes: renderedChanges,
+                  verified: true,
+                  message:
+                    "The supplied values already match the event; no mutation was sent.",
                 }),
               },
             ],
@@ -207,13 +278,20 @@ export function registerUpdatePlanEventTool(
                 (e as PlanObj).id === event.id) ||
                 eventLabel(e) === eventLabel(patched)),
           ) as PlanObj | undefined;
-          verified =
-            !!verifiedEvent &&
-            Object.entries(patch).every(
-              ([key, expected]) =>
-                JSON.stringify(verifiedEvent[key]) ===
-                JSON.stringify(expected),
-            );
+          if (verifiedEvent) {
+            verified =
+              pathDiff !== undefined
+                ? pathChangesApplied(
+                    verifiedEvent,
+                    pathDiff,
+                    EVENT_FIELD_CONTEXT,
+                  )
+                : Object.entries(patch ?? {}).every(
+                    ([key, expected]) =>
+                      JSON.stringify(verifiedEvent[key]) ===
+                      JSON.stringify(expected),
+                  );
+          }
         }
 
         return {
@@ -225,7 +303,7 @@ export function registerUpdatePlanEventTool(
                 planName: plan.name,
                 section,
                 event: eventLabel(patched),
-                changes,
+                changes: renderedChanges,
                 verified,
                 message: verified
                   ? "Event patched and verified. Snapshot saved automatically."

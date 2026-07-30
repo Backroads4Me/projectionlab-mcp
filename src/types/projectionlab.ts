@@ -30,6 +30,8 @@ export interface SchemaDescription {
 }
 
 export interface FinancialSummary {
+  scope: "currentFinances";
+  projectedOutcomesAvailable: false;
   totalNetWorth: number;
   accountsByType: Record<string, { count: number; total: number }>;
   planCount: number;

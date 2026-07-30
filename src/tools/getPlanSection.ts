@@ -4,6 +4,8 @@ import type { Bridge } from "../bridge.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
+import { listAddressableValues } from "../pathPatch.js";
+import { redactSecrets } from "../redact.js";
 import {
   PLAN_SECTIONS,
   eventLabel,
@@ -46,6 +48,8 @@ export function registerGetPlanSectionTool(
         "accounts, variables, etc.). Much smaller than a full plan export. " +
         "Narrow further with eventIdentifier (single event by name/ID) or path " +
         "(dot-path within the section, e.g. 'events[2].rothConversions'). " +
+        "Set listPaths=true to flatten the selected object into discrete, typed dot paths " +
+        "that can be used with projectionlab_update_plan_event pathChanges. " +
         "Use this for targeted analysis of a specific aspect of a plan.",
       inputSchema: {
         planIdentifier: z
@@ -70,6 +74,12 @@ export function registerGetPlanSectionTool(
             "Dot-path within the section to return, e.g. 'events[2].rothConversions'. " +
               "Applied after eventIdentifier if both are given (path is then relative to the event).",
           ),
+        listPaths: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Flatten the selected object into addressable leaf paths with current values and JSON types. Arrays remain intact.",
+          ),
       },
       annotations: {
         readOnlyHint: true,
@@ -77,7 +87,7 @@ export function registerGetPlanSectionTool(
         openWorldHint: true,
       },
     },
-    async ({ planIdentifier, section, eventIdentifier, path }) => {
+    async ({ planIdentifier, section, eventIdentifier, path, listPaths }) => {
       try {
         const data = await bridge.exportData();
         const plans = requirePlans(data);
@@ -128,12 +138,17 @@ export function registerGetPlanSectionTool(
           sectionData = resolved;
         }
 
+        if (listPaths) {
+          sectionData = listAddressableValues(sectionData);
+        }
+
         const output = {
           planName: plan.name,
           planId: plan.id,
           section,
           ...(eventIdentifier !== undefined ? { eventIdentifier } : {}),
           ...(path !== undefined ? { path } : {}),
+          ...(listPaths ? { listPaths: true } : {}),
           data: sectionData,
         };
 
@@ -141,10 +156,14 @@ export function registerGetPlanSectionTool(
           content: [
             {
               type: "text",
-              text: await textOrFile(toJson(output), `section-${section}`, {
-                planName: plan.name,
-                section,
-              }),
+              text: await textOrFile(
+                toJson(redactSecrets(output, { byName: true })),
+                `section-${section}`,
+                {
+                  planName: plan.name,
+                  section,
+                },
+              ),
             },
           ],
         };

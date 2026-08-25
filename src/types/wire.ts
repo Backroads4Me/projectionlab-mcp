@@ -2,8 +2,8 @@
  * Wire protocol between the MCP server (WebSocket listener) and a browser-side
  * executor — the extension's service worker or a pasted Tier-0 bootstrap
  * snippet. This file is the contract both sides build against; changes here
- * require agreement from both the server and extension implementations (see
- * docs/EXTENSION-BRIDGE-PLAN.md and docs/HANDOFF-EXTENSION.md).
+ * require agreement from both the server and extension implementations
+ * (src/extensionBridge.ts, src/bootstrap.ts, extension/src/).
  *
  * Transport: JSON text frames over ws://127.0.0.1:<port>. The browser side is
  * always the WebSocket client. The server accepts one active executor

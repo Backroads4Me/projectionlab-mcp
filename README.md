@@ -117,10 +117,6 @@ The rest of this document is for developers or advanced users. Everyday use need
 
 ProjectionLab has no REST API, so the server reaches its browser-side `window.projectionlabPluginAPI` over a localhost WebSocket that a browser-side executor — the **extension** (normal use) or a pasted **bootstrap snippet** (zero-install) — connects out to. See **[HOW-IT-WORKS.md](HOW-IT-WORKS.md)** for the full architecture: the bridge design, wire protocol, extension internals, and safety model.
 
-The **[configuration support audit](CONFIGURATION-AUDIT.md)** maps
-ProjectionLab plan settings and event forms to MCP reads and mutations, and
-records remaining data-model and Plugin API constraints.
-
 ### Manual setup
 
 ```bash

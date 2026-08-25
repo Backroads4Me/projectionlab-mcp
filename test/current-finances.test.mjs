@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.PL_API_KEY = "test-api-key";
+process.env.PL_READ_ONLY = "false";
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-current-finances-")),
   "snapshots",

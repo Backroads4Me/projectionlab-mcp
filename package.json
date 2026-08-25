@@ -52,13 +52,13 @@
   },
   "//overrides": "Patched transitive deps of the MCP SDK, kept within each parent's declared range (in-major) for compatibility. All except fast-uri live only in the SDK's HTTP/SSE transport, which this stdio-only server never loads; fast-uri is used by ajv for schema validation.",
   "overrides": {
-    "fast-uri": "^3.1.4",
-    "hono": "^4.12.31",
-    "@hono/node-server": "^1.19.14",
+    "fast-uri": "^3.1.6",
+    "hono": "^4.13.4",
+    "@hono/node-server": "^1.19.17",
     "path-to-regexp": "^8.4.2",
     "body-parser": "^2.3.0",
     "qs": "^6.15.3",
-    "ip-address": "^10.2.0",
+    "ip-address": "^10.5.0",
     "express-rate-limit": "^8.6.0"
   },
   "devDependencies": {

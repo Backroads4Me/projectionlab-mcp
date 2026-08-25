@@ -4,13 +4,13 @@ Here is a breakdown of exactly how the ProjectionLab Model Context Protocol (MCP
 
 ## 1. The Core Problem It Solves
 
-ProjectionLab is a purely client-side application. All calculations and state management live within the browser tab; there is no REST API or backend webhook endpoint for an agent to talk to. The only programmatic access is a local JavaScript object (`window.projectionlabPluginAPI`) exposed when a user enables Plugins in their settings.
+ProjectionLab exposes its supported automation surface through a JavaScript object (`window.projectionlabPluginAPI`) inside the logged-in browser tab rather than through a public REST API or webhook endpoint.
 
-Because an LLM agent (like Claude Code) runs as a CLI tool in your terminal, it cannot directly call a JavaScript object inside your browser. This MCP server bridges that gap.
+Because an MCP host runs outside that page, it cannot directly call a JavaScript object inside the browser. This MCP server bridges that gap.
 
 ## 2. The Architecture
 
-The server speaks the Model Context Protocol (MCP) over `stdio` to Claude Code — it appears as a set of tools (`projectionlab_update_account`, `projectionlab_export_data`, …) and resources. To reach the Plugin API, everything above the bridge depends only on the `Bridge` interface (`src/bridge.ts`), implemented by `ExtensionBridge`:
+The server speaks the Model Context Protocol (MCP) over `stdio` to its host and exposes tools (`projectionlab_update_account`, `projectionlab_export_data`, …), resources, and prompts. Everything above the browser transport depends only on the `Bridge` interface (`src/bridge.ts`), which `ExtensionBridge` implements.
 
 The server opens a WebSocket listener on `127.0.0.1:<PL_WS_PORT>`. A browser-side **executor** — either the packaged browser extension or a pasted bootstrap snippet — connects *out* to it, receives command frames, calls `window.projectionlabPluginAPI` in the real, already-logged-in ProjectionLab tab, and returns results. No second browser, no second login.
 
@@ -24,7 +24,7 @@ The server opens a WebSocket listener on `127.0.0.1:<PL_WS_PORT>`. A browser-sid
 
 ### The browser extension
 
-Manifest V3, in `extension/`. A background service worker owns the WebSocket (with reconnect/backoff and an `alarms`-based wake so it recovers even after the worker is suspended). Because content scripts run in an isolated world and cannot see `window.projectionlabPluginAPI`, a **page script is injected into the MAIN world** and bridged to the content script via nonce-scoped `postMessage`. It routes commands to the ProjectionLab tab (auto-opening one if none is present) and executes them against the Plugin API. Chrome/Edge/Brave use the service-worker manifest; Firefox (≥ 128, for MAIN-world `scripting`) uses an event-page manifest.
+Manifest V3, in `extension/`. A background service worker owns the WebSocket, reconnects with exponential backoff, and uses an `alarms` wake after suspension. For each request it locates a ProjectionLab tab (opening one in the background when configured to do so) and uses `scripting.executeScript` to run the operation directly in the page's **MAIN world**, where `window.projectionlabPluginAPI` is visible. The structured result returns through the scripting API without a content-script relay. Chrome/Edge/Brave use the service-worker manifest; Firefox 128 or newer uses an event-page manifest with MAIN-world scripting support.
 
 ### The bootstrap snippet
 
@@ -36,21 +36,22 @@ Manifest V3, in `extension/`. A background service worker owns the WebSocket (wi
 
 The server starts listening immediately. Tool calls made before an executor connects return an actionable `EXTENSION_NOT_CONNECTED` error. Once the extension (or snippet) connects and authenticates, requests flow.
 
-### B. Read Operations (`export_data`, `get_summary`, `describe_schema`)
+### B. Read Operations (`export_data`, `get_plan`, `get_summary`, …)
 
 1. The MCP tool validates input with Zod.
 2. The bridge sends an `exportData({ key })` request over the WebSocket to the executor, which calls it in the browser context.
 3. The browser serializes your financial state to JSON and returns it.
-4. The server shapes the payload (schema stripping, net-worth calc, redaction) and returns it to Claude. A short-lived export cache avoids re-serializing hundreds of KB on every read; every write invalidates it.
+4. The server selects or summarizes the requested data, redacts secrets where appropriate, and returns it to the MCP host. Results above the inline size limit are written to a protected local export file and returned as a file pointer. A short-lived export cache avoids re-serializing the complete state on every read; every write invalidates it.
 
 ### C. Write Operations & Safety Flow (`update_*`, `restore_*`)
 
-Because the Plugin API relies on **full state replacements** rather than surgical patches, the server enforces a multi-layered safety net:
+The Plugin API provides a targeted `updateAccount` operation for Current Finances and full-section restore operations for broader plan state. The server builds safe patches on top of those primitives and enforces a multi-layered safety net:
 
 1. **Dry-Run by Default:** without `confirm: true`, the tool returns a structured diff preview instead of mutating anything.
-2. **Auto-Snapshotting:** on `confirm: true`, the `SnapshotManager` requests a fresh export, extracts the section about to be replaced, and writes it to a local JSON file with an ID and timestamp.
-3. **Execution:** only then does the bridge inject the `updateAccount()` / `restore*()` call.
-4. **Verification:** the server re-reads and confirms the change landed.
+2. **Fresh State:** the tool requests an uncached export and validates the requested change against the current data.
+3. **Auto-Snapshotting:** on `confirm: true`, the tool passes the affected current section to `SnapshotManager`, which writes a restore-safe local JSON snapshot with an ID and timestamp.
+4. **Execution:** only then does the bridge call `updateAccount()` or the appropriate `restore*()` method.
+5. **Verification:** the tool performs a fresh re-read and checks that the requested change landed. A verification failure is reported with the snapshot retained for recovery.
 
 ### D. Rollbacks & Recovery
 
@@ -58,9 +59,10 @@ Because the Plugin API relies on **full state replacements** rather than surgica
 
 ## 4. Security
 
-- The WebSocket binds to `127.0.0.1` only, validates the `Origin` header, and requires a shared token — this blocks both other local processes and JavaScript on arbitrary web pages from driving your financial data.
-- The Plugin API key stays server-side (`.env`) and is passed per request; the executor never stores it.
-- Snapshots and full exports pass through a redactor before touching disk or leaving the process.
+- The WebSocket binds to `127.0.0.1` only, accepts only the ProjectionLab app and browser-extension origins, and requires a shared token stored with owner-only permissions by default. Native clients without an `Origin` header still need the token.
+- The Plugin API key stays in the server process and is passed to the page only as an argument to Plugin API calls; the extension does not persist it.
+- Snapshots scrub the literal Plugin API key while preserving restore data. Read-only exports additionally redact secret-named fields before they are returned or written to disk.
+- `PL_READ_ONLY=true` rejects mutation tools before they read, snapshot, or write plan data.
 
 ## Local Restart Workflow
 

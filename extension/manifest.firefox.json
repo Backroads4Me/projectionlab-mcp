@@ -11,7 +11,6 @@
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://127.0.0.1:*"
   },
   "background": { "scripts": ["background.js"] },
-  "content_scripts": [{ "matches": ["https://app.projectionlab.com/*"], "js": ["content.js"], "run_at": "document_start" }],
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "browser_specific_settings": { "gecko": { "id": "projectionlab-mcp-bridge@localhost", "strict_min_version": "128.0" } }
 }

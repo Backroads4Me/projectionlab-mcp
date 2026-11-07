@@ -62,7 +62,7 @@ The Plugin API provides a targeted `updateAccount` operation for Current Finance
 - The WebSocket binds to `127.0.0.1` only, accepts only the ProjectionLab app and browser-extension origins, and requires a shared token stored with owner-only permissions by default. Native clients without an `Origin` header still need the token.
 - The Plugin API key stays in the server process and is passed to the page only as an argument to Plugin API calls; the extension does not persist it.
 - Snapshots scrub the literal Plugin API key while preserving restore data. Read-only exports additionally redact secret-named fields before they are returned or written to disk.
-- `PL_READ_ONLY=true` rejects mutation tools before they read, snapshot, or write plan data.
+- Read-only mode (the default; any `PL_READ_ONLY` other than `false`) rejects mutation tools before they read, snapshot, or write plan data.
 
 ## Local Restart Workflow
 

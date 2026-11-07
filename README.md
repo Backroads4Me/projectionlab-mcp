@@ -63,49 +63,35 @@ If anything gets stuck, tell your assistant what you see on screen — it can tr
 
 You are setting this up for a **non-technical user**. Explain each thing you need from them in plain language, one step at a time, and never ask them to do something you can do yourself. Read `AGENTS.md` (conventions + safety model) and `HOW-IT-WORKS.md` (architecture) before starting.
 
-**1. Get the code and build the server.**
-```bash
-git clone https://github.com/Backroads4Me/projectionlab-mcp
-cd projectionlab-mcp
-npm install
-npm run build
-```
-(Or, once published: `npx -y projectionlab-mcp`.)
+**1. Get the user's Plugin API key.** Ask them to open ProjectionLab → Account Settings → Plugins, enable plugins, and copy their **Plugin API Key**. Do **not** invent one, and never print, log, or commit it.
 
-**2. Get the user's Plugin API key.** Ask them to open ProjectionLab → Account Settings → Plugins, enable plugins, and copy their **Plugin API Key**. Do **not** invent one, and never print, log, or commit it.
+**2. Store the key.** Write it to `~/.projectionlab-mcp/.env` as the line `PL_API_KEY=...` and make the file readable only by the user (`chmod 600`). Every MCP host on the machine reads this file, so the key lives in one place. Do not repeat the key back to the user. Writes stay disabled by default; do not set `PL_READ_ONLY=false` until the user has seen the tool working and explicitly asks.
 
-**3. Configure the server.** Create `.env` from `.env.example` and set `PL_API_KEY` to their key. **Keep `PL_READ_ONLY=true`** for now — do not enable writes until the user has seen the tool working and explicitly asks.
-
-**4. Register the server with the user's MCP host.** Add an entry using the absolute path to `dist/index.js` (use `npx` args if installed from npm). Example:
+**3. Register the server with the user's MCP host.** The server runs with `npx`, which needs Node.js 20 or newer:
 ```json
 {
   "mcpServers": {
     "projectionlab": {
-      "command": "node",
-      "args": ["/absolute/path/to/projectionlab-mcp/dist/index.js"],
-      "env": { "PL_API_KEY": "the-users-key", "PL_READ_ONLY": "true" }
+      "command": "npx",
+      "args": ["-y", "projectionlab-mcp"]
     }
   }
 }
 ```
-The MCP host config location varies by assistant — determine the user's host and place it correctly. Have them restart the host so it picks up the server.
+The config location varies by host; see [Adding the server to your MCP host](#adding-the-server-to-your-mcp-host) for common ones. Have the user restart the host so it starts the server. On first start the server creates the browser connection token at `~/.projectionlab-mcp/ws-token`.
 
-**5. Connect the browser.** The server reaches ProjectionLab through the user's own browser. Pick the path that fits:
+**4. Connect the browser.** The server reaches ProjectionLab through the user's own browser. Pick the path that fits:
 
-- **Recommended — browser extension** (persists across restarts). Build it:
-  ```bash
-  cd extension && npm install && npm run build
-  ```
-  Then walk the user through loading it (this is a click-by-click browser task — describe exactly what they'll see):
-  - **Chrome / Edge / Brave:** open `chrome://extensions`, turn on "Developer mode" (top-right), click "Load unpacked", and choose the `extension/dist/chromium` folder.
-  - **Firefox (128+):** open `about:debugging` → "This Firefox" → "Load Temporary Add-on", and choose `extension/dist/firefox/manifest.json`.
-  Then have them open the extension's **options page** and enter the WebSocket **port** (default `8788`) and the **shared token**. On first server start the token is written to `~/.projectionlab-mcp/ws-token` — read it and give it to them (or set `PL_WS_TOKEN` yourself and tell them that value).
+- **Recommended - browser extension** (persists across restarts). Download the zip for the user's browser from the [latest release](https://github.com/Backroads4Me/projectionlab-mcp/releases/latest) and unzip it. Then walk the user through loading it (this is a click-by-click browser task; describe exactly what they'll see):
+  - **Chrome / Edge / Brave:** open `chrome://extensions`, turn on "Developer mode" (top-right), click "Load unpacked", and choose the unzipped Chromium folder.
+  - **Firefox (128+):** open `about:debugging` → "This Firefox" → "Load Temporary Add-on", and choose `manifest.json` in the unzipped Firefox folder. Firefox removes temporary add-ons when it restarts.
+  Then have them open the extension's **options page** and enter the WebSocket **port** (default `8788`) and the **shared token** from `~/.projectionlab-mcp/ws-token`.
 
 - **Quick alternative — no install.** Call the `projectionlab_get_bootstrap` tool, then have the user paste the returned snippet into their ProjectionLab tab's developer console (F12 → Console). It works the same way but must be re-pasted if they reload the page. Good for a first test drive.
 
-**6. Verify.** Have the user open [ProjectionLab](https://app.projectionlab.com), log in, and confirm plugins are enabled. Then call `projectionlab_check_connection` — it should report all checks passing. Do this before any other tool call.
+**5. Verify.** Have the user open [ProjectionLab](https://app.projectionlab.com), log in, and confirm plugins are enabled. Then call `projectionlab_check_connection`; it should report all checks passing. Do this before any other tool call.
 
-**7. Enabling changes (writes).** Leave everything in dry-run/read-only until the user explicitly asks to make changes. When they do: set `PL_READ_ONLY=false`, restart the host, and remember that every write still previews first (`confirm: true` required) and auto-snapshots so it can be rolled back. Reassure the user of this before the first change.
+**6. Enabling changes (writes).** Leave everything in dry-run/read-only until the user explicitly asks to make changes. When they do: set `PL_READ_ONLY=false` in `~/.projectionlab-mcp/.env` or the host's `env` block, restart the host, and remember that every write still previews first (`confirm: true` required) and auto-snapshots so it can be rolled back. Reassure the user of this before the first change.
 
 ---
 
@@ -117,29 +103,78 @@ The rest of this document is for developers or advanced users. Everyday use need
 
 ProjectionLab has no REST API, so the server reaches its browser-side `window.projectionlabPluginAPI` over a localhost WebSocket that a browser-side executor — the **extension** (normal use) or a pasted **bootstrap snippet** (zero-install) — connects out to. See **[HOW-IT-WORKS.md](HOW-IT-WORKS.md)** for the full architecture: the bridge design, wire protocol, extension internals, and safety model.
 
-### Manual setup
+### Adding the server to your MCP host
+
+The server is a standard stdio MCP server started with `npx -y projectionlab-mcp`. Put the key in `~/.projectionlab-mcp/.env` (see [Configuration](#configuration)) so no host config holds a secret.
+
+**Claude Code:**
+```bash
+claude mcp add --scope user projectionlab -- npx -y projectionlab-mcp
+```
+
+**Claude Desktop** (`claude_desktop_config.json`) and other hosts that use the `mcpServers` JSON format:
+```json
+{
+  "mcpServers": {
+    "projectionlab": {
+      "command": "npx",
+      "args": ["-y", "projectionlab-mcp"]
+    }
+  }
+}
+```
+
+**Hermes Agent** (`config.yaml` of the profile):
+```yaml
+mcp_servers:
+  projectionlab:
+    command: npx
+    args: ["-y", "projectionlab-mcp"]
+    enabled: true
+```
+
+Only one server instance can hold the WebSocket port. When a second host starts the server while another instance holds it, the second retries every few seconds and takes over when the first exits; `projectionlab_check_connection` explains the state in the meantime. To run both at once, give one of them its own `PL_WS_PORT` in its `env` block.
+
+### Agent instructions
+
+The server carries its own instructions for the agents that use it, so no per-host prompt setup is needed:
+
+- **Server instructions**, sent in the MCP initialize result. Hosts that surface them give the model the core rules: check the connection first, the read-only/dry-run/confirm workflow, privacy.
+- **The `projectionlab://guide` resource**, the full agent guide: setup walkthrough for each failed connection check, which tool answers which question, the change workflow, and privacy rules. `projectionlab_check_connection` points agents to it.
+- **The `projectionlab` skill** at [`skills/projectionlab/SKILL.md`](skills/projectionlab/SKILL.md), the same guide in the Agent Skills format, for hosts that load skills (copy the folder into the host's skills directory).
+
+### Manual setup from source
 
 ```bash
 npm install
 npm run build
-cp .env.example .env          # set PL_API_KEY
 cd extension && npm install && npm run build   # build the extension
 ```
 
-Register the server with your MCP host (see the JSON example above), load the built extension (`extension/dist/chromium` or `extension/dist/firefox`), configure its port + token on the options page, then run `projectionlab_check_connection`.
+Register `node /absolute/path/to/projectionlab-mcp/dist/index.js` with your MCP host, load the built extension (`extension/dist/chromium` or `extension/dist/firefox`), configure its port + token on the options page, then run `projectionlab_check_connection`.
+
+### Configuration
+
+Each setting is read from the first of these that sets it:
+
+1. The `env` block of the server entry in the MCP host's config.
+2. `~/.projectionlab-mcp/.env`, shared by every MCP host on the machine.
+3. `.env` at the package root, for a development checkout (copy `.env.example`).
+
+The server starts without `PL_API_KEY` so it can tell the agent what is missing; tools that need the key return `API_KEY_MISSING` until it is set.
 
 ### Environment variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `PL_API_KEY` | Yes | — | ProjectionLab Plugin API key |
+| `PL_API_KEY` | Yes | - | ProjectionLab Plugin API key; tools that reach the plan fail until it is set |
 | `PL_WS_PORT` | No | `8788` | Localhost WebSocket port |
 | `PL_WS_TOKEN` | No | auto-generated | Shared auth token; if unset, generated and saved to `~/.projectionlab-mcp/ws-token` |
 | `PL_APP_URL` | No | `https://app.projectionlab.com` | ProjectionLab app URL |
 | `PL_API_READY_TIMEOUT_MS` | No | `30000` | Timeout waiting for Plugin API to attach |
 | `PL_EXPORT_CACHE_MS` | No | `90000` | How long a full export may be served from cache (writes always invalidate) |
 | `PL_PRETTY_JSON` | No | `false` | Pretty-print JSON output (uses ~25–40% more tokens) |
-| `PL_READ_ONLY` | No | `false` | Disable all write/mutation tools |
+| `PL_READ_ONLY` | No | `true` | Write/mutation tools are disabled unless this is exactly `false` |
 | `PL_SNAPSHOT_DIR` | No | `~/.projectionlab-mcp/snapshots` | Directory for pre-mutation snapshots |
 | `LOG_LEVEL` | No | `info` | Log verbosity (`debug`, `info`, `warn`, `error`) |
 
@@ -175,6 +210,7 @@ Register the server with your MCP host (see the JSON example above), load the bu
 | `projectionlab://plan-data` | Full export of all plans/finances/progress/settings (refreshed per access) |
 | `projectionlab://summary` | High-level snapshot: net worth, account breakdown, plan count |
 | `projectionlab://knowledge` | Curated ProjectionLab data-model + FIRE/tax reference (static) |
+| `projectionlab://guide` | Agent guide: setup walkthrough, tool selection, change workflow, privacy rules (static) |
 
 ### Prompts
 
@@ -187,7 +223,7 @@ Register the server with your MCP host (see the JSON example above), load the bu
 
 ### Safety model
 
-Write operations (`update_*`, `restore_*`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Set `PL_READ_ONLY=true` to disable writes entirely.
+Write operations (`update_*`, `restore_*`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Writes are disabled entirely unless `PL_READ_ONLY=false`.
 
 For a small assumptions or strategy change, first call
 `projectionlab_get_plan_settings` with the plan name. It returns the current
@@ -242,7 +278,7 @@ drawing a conclusion.
 
 ### Secret handling
 
-The Plugin API key lives only in `.env` (gitignored) and the MCP host config — it is never logged, and it stays server-side (sent to the browser per request; the browser side never stores it). The WebSocket binds to `127.0.0.1` only, checks the connection's `Origin`, and requires a shared token (`PL_WS_TOKEN`, or auto-generated at `~/.projectionlab-mcp/ws-token` with `600` perms) so neither other local processes nor arbitrary web pages can drive your data. Any data written to disk (snapshots) or emitted as a full export is passed through a redactor first: snapshots use value-only redaction (restore-safe), while exports and the `plan-data` resource also redact secret-named fields. The published npm package ships only `dist/` and docs (see the `files` allowlist), so source and `.env` are never distributed.
+The Plugin API key lives only in `~/.projectionlab-mcp/.env`, a development `.env` (gitignored), or the MCP host config; it is never logged, and it stays server-side (sent to the browser per request; the browser side never stores it). The WebSocket binds to `127.0.0.1` only, checks the connection's `Origin`, and requires a shared token (`PL_WS_TOKEN`, or auto-generated at `~/.projectionlab-mcp/ws-token` with `600` perms) so neither other local processes nor arbitrary web pages can drive your data. Any data written to disk (snapshots) or emitted as a full export is passed through a redactor first: snapshots use value-only redaction (restore-safe), while exports and the `plan-data` resource also redact secret-named fields. The published npm package ships only `dist/`, the agent skill, and docs (see the `files` allowlist), so source and `.env` are never distributed.
 
 ### After code changes
 

@@ -1,0 +1,29 @@
+name: Attach extension zips to release
+
+# Builds the browser extension and uploads the Chromium and Firefox zips to the
+# GitHub Release, so users can install it without cloning the repository.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # required to upload release assets
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - run: npm run package
+      - run: gh release upload "$TAG" dist/*.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}

@@ -4,6 +4,7 @@ export type ErrorCode =
   | "PAGE_NOT_LOADED"
   | "API_NOT_AVAILABLE"
   | "API_KEY_INVALID"
+  | "API_KEY_MISSING"
   | "TIMEOUT"
   | "INVALID_INPUT"
   | "READ_ONLY_MODE"

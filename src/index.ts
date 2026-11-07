@@ -7,6 +7,7 @@ import { ExtensionBridge } from "./extensionBridge.js";
 import { registerBootstrapTool } from "./tools/bootstrap.js";
 import { SnapshotManager } from "./snapshot.js";
 import { log } from "./logger.js";
+import { SERVER_INSTRUCTIONS } from "./instructions.js";
 
 // Tools
 import { registerConnectionTool } from "./tools/connection.js";
@@ -28,6 +29,7 @@ import { registerSnapshotTools } from "./tools/snapshots.js";
 import { registerPlanDataResource } from "./resources/planData.js";
 import { registerSummaryResource } from "./resources/summary.js";
 import { registerKnowledgeResource } from "./resources/knowledge.js";
+import { registerGuideResource } from "./resources/guide.js";
 
 // Prompts
 import { registerPrompts } from "./prompts/index.js";
@@ -44,6 +46,7 @@ async function main() {
         resources: {},
         tools: {},
       },
+      instructions: SERVER_INSTRUCTIONS,
     },
   );
 
@@ -75,6 +78,7 @@ async function main() {
   registerPlanDataResource(server, bridge);
   registerSummaryResource(server, bridge);
   registerKnowledgeResource(server);
+  registerGuideResource(server);
 
   // Register prompts
   registerPrompts(server, bridge);

@@ -4,6 +4,7 @@ import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
+import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import { redactSecrets } from "../redact.js";
@@ -96,7 +97,7 @@ export function registerUpdatePlanSettingsTool(
                   changes: redactSecrets(changes, { byName: true }),
                   warning:
                     Object.keys(changes).length === 0
-                      ? "All supplied values already match the plan — nothing would change."
+                      ? "All supplied values already match the plan - nothing would change."
                       : `This will patch ${Object.keys(changes).length} setting(s) in "${section}" of plan "${plan.name}". Set confirm=true to proceed.`,
                 }),
               },
@@ -130,6 +131,7 @@ export function registerUpdatePlanSettingsTool(
           "updatePlanSettings",
           `Patching ${Object.keys(changes).length} setting(s) in "${section}" of plan "${plan.name}"`,
         );
+        await assertPlansUnchanged(bridge, plans);
         await bridge.restorePlans(updatedPlans);
 
         const verifyData = await bridge.exportData({ fresh: true });

@@ -1,14 +1,14 @@
 # ProjectionLab MCP Server
 
-**Talk to an AI assistant about your retirement plan — and let it read and update your numbers in [ProjectionLab](https://projectionlab.com) for you.**
+**Talk to an AI assistant about your retirement plan, and let it read and update your numbers in [ProjectionLab](https://projectionlab.com) for you.**
 
-ProjectionLab is a retirement and financial-planning app. This project connects it to an AI assistant (like Claude, or any assistant that supports the "MCP" standard — more on that below) so you can ask questions in plain English and get real answers based on *your* actual plan:
+ProjectionLab is a retirement and financial-planning app. This project connects it to an AI assistant (like Claude, or any assistant that supports the "MCP" standard; more on that below) so you can ask questions in plain English and get real answers based on *your* actual plan:
 
 - *"Am I on track to retire at 60?"*
 - *"What happens to my plan if the market returns 2% less than I assumed?"*
 - *"Bump my planned travel spending to $12,000 a year and show me the effect."*
 
-The assistant can look at your plan, walk through the tradeoffs with you, and — only when you say so — make changes for you. Every change is previewed before it happens and can be undone.
+The assistant can look at your plan, walk through the tradeoffs with you, and, only when you say so, make changes for you. Every change is previewed before it happens and can be undone.
 
 ---
 
@@ -19,23 +19,23 @@ You'll get value from this if:
 - You already use (or want to use) **ProjectionLab** for retirement planning, and
 - You use an **AI assistant that supports MCP** (see below).
 
-You do **not** need to be a programmer. The recommended path is to let your assistant do the technical setup for you — you'll mostly be answering a few questions and clicking a couple of buttons in your browser.
+You do **not** need to be a programmer. The recommended path is to let your assistant do the technical setup for you. You'll mostly be answering a few questions and clicking a couple of buttons in your browser.
 
 > **A note on trust and safety:** This tool can *change* your financial plan, so it's built to be careful. It starts in **read-only mode** (it can look but not touch). Nothing is changed without showing you a preview first, and every change is backed up so it can be reversed. Your ProjectionLab API key stays on your own computer and is never sent anywhere.
 
 ### What's "MCP"? Which assistants work?
 
-**MCP** (Model Context Protocol) is an open standard that lets AI assistants safely connect to outside tools. This project is an MCP "server," so it works with **any** assistant or app that supports MCP — you are not locked into one company. Popular options include **Claude Desktop** and **Claude Code**, and a growing list of other MCP-compatible assistants and editors. If your assistant can "add an MCP server," it can use this.
+**MCP** (Model Context Protocol) is an open standard that lets AI assistants safely connect to outside tools. This project is an MCP "server," so it works with **any** assistant or app that supports MCP, so you are not locked into one company. Popular options include **Claude Desktop** and **Claude Code**, and a growing list of other MCP-compatible assistants and editors. If your assistant can "add an MCP server," it can use this.
 
-*(The author uses Claude Code, but that's just a preference — pick whatever you like.)*
+*(The author uses Claude Code, but that's just a preference. Pick whatever you like.)*
 
 ---
 
 ## What you'll need
 
-1. A **ProjectionLab account** with **Plugins enabled**. In ProjectionLab, go to **Account Settings → Plugins**, turn plugins on, and copy your **Plugin API Key** (a long code — keep it handy, you'll give it to your assistant).
+1. A **ProjectionLab account** with **Plugins enabled**. In ProjectionLab, go to **Account Settings → Plugins**, turn plugins on, and copy your **Plugin API Key** (a long code; keep it handy, since you'll give it to your assistant).
 2. An **AI assistant that supports MCP** (see above).
-3. A **web browser** you already use — Chrome, Edge, Brave, or Firefox (version 128 or newer).
+3. A **web browser** you already use: Chrome, Edge, Brave, or Firefox (version 128 or newer).
 4. **Node.js** installed on your computer (version 20 or newer). If you don't have it, your assistant can help you install it, or download it from [nodejs.org](https://nodejs.org).
 
 ---
@@ -47,19 +47,19 @@ Open your AI assistant and give it this instruction (copy-paste it as-is):
 > Please set up the ProjectionLab MCP server for me from
 > `https://github.com/Backroads4Me/projectionlab-mcp`.
 > Follow the "For your AI assistant" section of its README. I'm not technical, so
-> walk me through anything you need from me — like my ProjectionLab Plugin API key
-> and loading the browser extension — one step at a time. Keep it in read-only
+> walk me through anything you need from me (like my ProjectionLab Plugin API key
+> and loading the browser extension) one step at a time. Keep it in read-only
 > mode until I say otherwise.
 
 Your assistant will download the project, install it, and hand you a couple of short, click-by-click steps in your browser (loading a small helper extension and pasting in a code). When it's done, just start asking questions about your plan.
 
-If anything gets stuck, tell your assistant what you see on screen — it can troubleshoot from there.
+If anything gets stuck, tell your assistant what you see on screen; it can troubleshoot from there.
 
 ---
 
 ## For your AI assistant
 
-*(This section is written for the AI agent doing the install. If you're a person reading this, you can skip it — your assistant follows these steps.)*
+*(This section is written for the AI agent doing the install. If you're a person reading this, you can skip it. Your assistant follows these steps.)*
 
 You are setting this up for a **non-technical user**. Explain each thing you need from them in plain language, one step at a time, and never ask them to do something you can do yourself. Read `AGENTS.md` (conventions + safety model) and `HOW-IT-WORKS.md` (architecture) before starting.
 
@@ -82,12 +82,12 @@ The config location varies by host; see [Adding the server to your MCP host](#ad
 
 **4. Connect the browser.** The server reaches ProjectionLab through the user's own browser. Pick the path that fits:
 
-- **Recommended - browser extension** (persists across restarts). Download the zip for the user's browser from the [latest release](https://github.com/Backroads4Me/projectionlab-mcp/releases/latest) and unzip it. Then walk the user through loading it (this is a click-by-click browser task; describe exactly what they'll see):
+- **Recommended: the browser extension** (persists across restarts). Download the zip for the user's browser from the [latest release](https://github.com/Backroads4Me/projectionlab-mcp/releases/latest) and unzip it. Then walk the user through loading it (this is a click-by-click browser task; describe exactly what they'll see):
   - **Chrome / Edge / Brave:** open `chrome://extensions`, turn on "Developer mode" (top-right), click "Load unpacked", and choose the unzipped Chromium folder.
   - **Firefox (128+):** open `about:debugging` → "This Firefox" → "Load Temporary Add-on", and choose `manifest.json` in the unzipped Firefox folder. Firefox removes temporary add-ons when it restarts.
   Then have them open the extension's **options page** and enter the WebSocket **port** (default `8788`) and the **shared token** from `~/.projectionlab-mcp/ws-token`.
 
-- **Quick alternative — no install.** Call the `projectionlab_get_bootstrap` tool, then have the user paste the returned snippet into their ProjectionLab tab's developer console (F12 → Console). It works the same way but must be re-pasted if they reload the page. Good for a first test drive.
+- **Quick alternative: no install.** Call the `projectionlab_get_bootstrap` tool, then have the user paste the returned snippet into their ProjectionLab tab's developer console (F12 → Console). It works the same way but must be re-pasted if they reload the page. Good for a first test drive.
 
 **5. Verify.** Have the user open [ProjectionLab](https://app.projectionlab.com), log in, and confirm plugins are enabled. Then call `projectionlab_check_connection`; it should report all checks passing. Do this before any other tool call.
 
@@ -101,7 +101,7 @@ The rest of this document is for developers or advanced users. Everyday use need
 
 ### How it works
 
-ProjectionLab has no REST API, so the server reaches its browser-side `window.projectionlabPluginAPI` over a localhost WebSocket that a browser-side executor — the **extension** (normal use) or a pasted **bootstrap snippet** (zero-install) — connects out to. See **[HOW-IT-WORKS.md](HOW-IT-WORKS.md)** for the full architecture: the bridge design, wire protocol, extension internals, and safety model.
+ProjectionLab has no REST API, so the server reaches its browser-side `window.projectionlabPluginAPI` over a localhost WebSocket that a browser-side executor connects out to: the **extension** for normal use, or a pasted **bootstrap snippet** for a zero-install test. See **[HOW-IT-WORKS.md](HOW-IT-WORKS.md)** for the full architecture: the bridge design, wire protocol, extension internals, and safety model.
 
 ### Adding the server to your MCP host
 
@@ -196,6 +196,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `projectionlab_update_plan_event` | Patch one event by top-level fields or nested dot paths | Yes |
 | `projectionlab_update_plan_settings` | Patch existing assumptions, Monte Carlo, or withdrawal settings by path | Yes |
 | `projectionlab_update_plan_section` | Replace a whole section of a plan (dry-run by default) | Yes |
+| `projectionlab_clone_plan` | Copy a plan to a new, named plan for what-if scenarios | Yes |
 | `projectionlab_list_snapshots` | List saved pre-mutation snapshots | No |
 | `projectionlab_restore_current_finances` | Restore Current Finances from snapshot | Yes |
 | `projectionlab_restore_plans` | Restore Plans from snapshot | Yes |
@@ -223,7 +224,9 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 
 ### Safety model
 
-Write operations (`update_*`, `restore_*`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Writes are disabled entirely unless `PL_READ_ONLY=false`.
+Write operations (`update_*`, `restore_*`, `clone_plan`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Writes are disabled entirely unless `PL_READ_ONLY=false`.
+
+Every write that replaces the plans array re-reads the plans just before writing and refuses with `PLAN_CONFLICT` if any plan was added, removed, or saved in ProjectionLab since the tool read them, so an edit made in the ProjectionLab UI is never silently overwritten. `projectionlab_update_plan_section` also returns a `planVersion` in its dry run; pass it back as `expectedPlanVersion` when confirming to refuse the write if the plan was saved after the preview.
 
 For a small assumptions or strategy change, first call
 `projectionlab_get_plan_settings` with the plan name. It returns the current

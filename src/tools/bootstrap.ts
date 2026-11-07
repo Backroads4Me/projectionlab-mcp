@@ -9,7 +9,7 @@ export function registerBootstrapTool(server: McpServer, bridge: ExtensionBridge
       title: "Get Bootstrap Snippet",
       description:
         "Returns a JavaScript snippet the user pastes into the ProjectionLab tab's devtools " +
-        "console to connect that tab to this server — a zero-install alternative to the browser " +
+        "console to connect that tab to this server - a zero-install alternative to the browser " +
         "extension. Use when check_connection reports no executor connected and the user has not " +
         "installed the extension. The snippet lasts until the tab reloads.",
       annotations: {

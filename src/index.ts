@@ -21,6 +21,7 @@ import { registerGetCurrentFinancesTool } from "./tools/getCurrentFinances.js";
 import { registerUpdateAccountTool } from "./tools/updateAccount.js";
 import { registerUpdatePlanSectionTool } from "./tools/updatePlanSection.js";
 import { registerUpdatePlanEventTool } from "./tools/updatePlanEvent.js";
+import { registerClonePlanTool } from "./tools/clonePlan.js";
 import { registerUpdatePlanSettingsTool } from "./tools/updatePlanSettings.js";
 import { registerRestoreTools } from "./tools/restore.js";
 import { registerSnapshotTools } from "./tools/snapshots.js";
@@ -69,6 +70,7 @@ async function main() {
   registerUpdatePlanSectionTool(server, bridge, snapshots);
   registerUpdatePlanEventTool(server, bridge, snapshots);
   registerUpdatePlanSettingsTool(server, bridge, snapshots);
+  registerClonePlanTool(server, bridge, snapshots);
   registerRestoreTools(server, bridge, snapshots);
 
   // Register snapshot/rollback tools

@@ -153,7 +153,7 @@ function containsSubset(expected: unknown, actual: unknown): boolean {
 
 /**
  * Verify a section write actually took effect by comparing what we submitted
- * against a fresh read — not just event counts. For event-based sections it
+ * against a fresh read - not just event counts. For event-based sections it
  * checks the count, that every submitted event (by name/id) is present, and
  * that each submitted event's values survived. For non-event sections
  * (variables, montecarlo, …) it compares the whole submitted object, so a

@@ -9,6 +9,7 @@ export type ErrorCode =
   | "INVALID_INPUT"
   | "READ_ONLY_MODE"
   | "SNAPSHOT_NOT_FOUND"
+  | "PLAN_CONFLICT"
   | "UNKNOWN";
 
 export interface PlError {

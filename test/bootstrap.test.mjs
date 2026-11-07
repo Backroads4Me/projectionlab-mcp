@@ -65,7 +65,7 @@ test("bootstrap snippet acts as a full executor", async () => {
   assert.equal(status.browser, true);
   assert.equal(status.apiAvailable, true);
   // validateApiKey is absent from the fake API object; the snippet reports
-  // "method unavailable" and the bridge records a key error — matching how
+  // "method unavailable" and the bridge records a key error - matching how
   // older PL builds behave. Not asserting apiKeyValid here.
 
   const described = await bridge.describePluginApi();

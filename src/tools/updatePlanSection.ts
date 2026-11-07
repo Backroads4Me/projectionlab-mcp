@@ -4,6 +4,11 @@ import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
+import {
+  assertPlanVersion,
+  assertPlansUnchanged,
+  planVersion,
+} from "../planVersion.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
@@ -138,9 +143,10 @@ export function registerUpdatePlanSectionTool(
         "with field-level changes) showing what would change. " +
         "When confirm is true, auto-snapshots all plans, rebuilds with the updated section, " +
         "and calls restorePlans. " +
-        "Prefer projectionlab_update_plan_event when changing a single event — it is smaller and safer. " +
+        "Prefer projectionlab_update_plan_event when changing a single event - it is smaller and safer. " +
         "IMPORTANT: Always fetch fresh section data via projectionlab_get_plan_section before " +
-        "constructing sectionData — never mutate from stale data.",
+        "constructing sectionData - never mutate from stale data. Pass the dry-run's planVersion " +
+        "as expectedPlanVersion when confirming so a plan saved in the meantime is not overwritten.",
       inputSchema: {
         planIdentifier: z
           .string()
@@ -161,6 +167,12 @@ export function registerUpdatePlanSectionTool(
           .describe(
             "Set to true to execute. Default false returns a dry-run diff preview.",
           ),
+        expectedPlanVersion: z
+          .string()
+          .optional()
+          .describe(
+            "planVersion from the dry-run. When set, the confirmed write is refused if the plan was saved in ProjectionLab after the preview.",
+          ),
       },
       annotations: {
         readOnlyHint: false,
@@ -169,7 +181,13 @@ export function registerUpdatePlanSectionTool(
         openWorldHint: true,
       },
     },
-    async ({ planIdentifier, section, sectionData, confirm }) => {
+    async ({
+      planIdentifier,
+      section,
+      sectionData,
+      confirm,
+      expectedPlanVersion,
+    }) => {
       try {
         if (config.readOnly) {
           throw new ProjectionLabError(
@@ -199,6 +217,7 @@ export function registerUpdatePlanSectionTool(
                   operation: "updatePlanSection",
                   planName: plan.name,
                   planId: plan.id,
+                  planVersion: planVersion(plan),
                   section,
                   diff: renderDiff(diff),
                   warning: `This will replace the "${section}" section of plan "${plan.name}". Set confirm=true to proceed.`,
@@ -207,6 +226,8 @@ export function registerUpdatePlanSectionTool(
             ],
           };
         }
+
+        assertPlanVersion(plan, expectedPlanVersion);
 
         // Snapshot all plans before mutation
         await snapshots.create("updatePlanSection", ["plans"], {
@@ -218,6 +239,7 @@ export function registerUpdatePlanSectionTool(
         const updatedPlans = [...plans];
         updatedPlans[planIndex] = updatedPlan;
 
+        await assertPlansUnchanged(bridge, plans);
         log.info(
           "updatePlanSection",
           `Updating "${section}" of plan "${plan.name}" (${diff.currentCount} → ${diff.newCount} items)`,
@@ -250,7 +272,7 @@ export function registerUpdatePlanSectionTool(
                 verified: check.ok,
                 message: check.ok
                   ? "Section updated and verified. Snapshot saved automatically."
-                  : `Section update sent but could not be verified (${check.reason}) — check with projectionlab_get_plan_section. A snapshot was saved; roll back with projectionlab_rollback if needed.`,
+                  : `Section update sent but could not be verified (${check.reason}) - check with projectionlab_get_plan_section. A snapshot was saved; roll back with projectionlab_rollback if needed.`,
               }),
             },
           ],

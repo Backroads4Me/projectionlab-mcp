@@ -4,6 +4,7 @@ import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
+import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
@@ -217,7 +218,7 @@ export function registerUpdatePlanEventTool(
                   changes: renderedChanges,
                   warning:
                     Object.keys(changes).length === 0
-                      ? "Patch matches the current event — nothing would change."
+                      ? "Patch matches the current event - nothing would change."
                       : `This will patch event "${eventLabel(event)}" in "${section}" of plan "${plan.name}". Set confirm=true to proceed.`,
                 }),
               },
@@ -254,6 +255,7 @@ export function registerUpdatePlanEventTool(
         const updatedPlans = [...plans];
         updatedPlans[planIndex] = updatedPlan;
 
+        await assertPlansUnchanged(bridge, plans);
         log.info(
           "updatePlanEvent",
           `Patching event "${eventLabel(event)}" in "${section}" of plan "${plan.name}" (${Object.keys(changes).length} fields)`,
@@ -308,7 +310,7 @@ export function registerUpdatePlanEventTool(
                 verified,
                 message: verified
                   ? "Event patched and verified. Snapshot saved automatically."
-                  : "Patch sent but verification did not confirm all fields — check with projectionlab_get_plan_section.",
+                  : "Patch sent but verification did not confirm all fields - check with projectionlab_get_plan_section.",
               }),
             },
           ],

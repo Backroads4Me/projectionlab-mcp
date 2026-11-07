@@ -248,7 +248,7 @@ export class ExtensionBridge implements Bridge {
         return new ProjectionLabError(
           "TIMEOUT",
           message,
-          "The ProjectionLab page did not respond in time — check the tab and try again",
+          "The ProjectionLab page did not respond in time - check the tab and try again",
         );
       default:
         return new ProjectionLabError(
@@ -276,7 +276,7 @@ export class ExtensionBridge implements Bridge {
   }
 
   private dropConnection(reason: string): void {
-    // Close the socket if it's still live — wss.close() waits for all
+    // Close the socket if it's still live - wss.close() waits for all
     // clients, so leaving it open would hang shutdown.
     try {
       this.conn?.terminate();
@@ -357,7 +357,7 @@ export class ExtensionBridge implements Bridge {
           new ProjectionLabError(
             "TIMEOUT",
             `${method} timed out after ${timeoutMs}ms`,
-            "The browser did not respond — check that the ProjectionLab tab is open and responsive",
+            "The browser did not respond - check that the ProjectionLab tab is open and responsive",
           ),
         );
       }, timeoutMs);

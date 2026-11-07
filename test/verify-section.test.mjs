@@ -1,4 +1,4 @@
-// Unit tests for verifySectionApplied — the write-verification logic that
+// Unit tests for verifySectionApplied - the write-verification logic that
 // replaced the count-only check (reviewer P1).
 //
 // Run: node --test test/verify-section.test.mjs

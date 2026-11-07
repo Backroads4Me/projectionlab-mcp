@@ -12,13 +12,13 @@ Because an MCP host runs outside that page, it cannot directly call a JavaScript
 
 The server speaks the Model Context Protocol (MCP) over `stdio` to its host and exposes tools (`projectionlab_update_account`, `projectionlab_export_data`, …), resources, and prompts. Everything above the browser transport depends only on the `Bridge` interface (`src/bridge.ts`), which `ExtensionBridge` implements.
 
-The server opens a WebSocket listener on `127.0.0.1:<PL_WS_PORT>`. A browser-side **executor** — either the packaged browser extension or a pasted bootstrap snippet — connects *out* to it, receives command frames, calls `window.projectionlabPluginAPI` in the real, already-logged-in ProjectionLab tab, and returns results. No second browser, no second login.
+The server opens a WebSocket listener on `127.0.0.1:<PL_WS_PORT>`. A browser-side **executor** (either the packaged browser extension or a pasted bootstrap snippet) connects *out* to it, receives command frames, calls `window.projectionlabPluginAPI` in the real, already-logged-in ProjectionLab tab, and returns results. No second browser, no second login.
 
 ### The wire protocol
 
 `src/types/wire.ts` is the contract shared by the server and every executor:
 
-- The executor connects and sends a `hello` frame with a shared token and protocol version. The server validates the `Origin` header (extension or app origin only), checks the token, and replies `helloAck` — or closes with code `4001` (auth), `4002` (version), or `4003` (a newer executor replaced this one).
+- The executor connects and sends a `hello` frame with a shared token and protocol version. The server validates the `Origin` header (extension or app origin only), checks the token, and replies `helloAck`, or closes with code `4001` (auth), `4002` (version), or `4003` (a newer executor replaced this one).
 - Requests are `{ id, method, params }`; responses are `{ id, ok, result | error }`. Methods map directly to Plugin API calls plus `describeApi`/`waitForApi`.
 - A ~20 s `ping`/`pong` heartbeat keeps the connection healthy (and keeps a Manifest V3 service worker from being suspended).
 
@@ -28,7 +28,7 @@ Manifest V3, in `extension/`. A background service worker owns the WebSocket, re
 
 ### The bootstrap snippet
 
-`src/bootstrap.ts` generates a self-contained snippet (returned by the `projectionlab_get_bootstrap` tool) that plays the same executor role from the page's console — same protocol, same methods. It's the zero-install path and a handy debugging harness, but it lives only until the tab reloads.
+`src/bootstrap.ts` generates a self-contained snippet (returned by the `projectionlab_get_bootstrap` tool) that plays the same executor role from the page's console, with the same protocol and methods. It's the zero-install path and a handy debugging harness, but it lives only until the tab reloads.
 
 ## 3. Step-by-Step Execution Lifecycle
 

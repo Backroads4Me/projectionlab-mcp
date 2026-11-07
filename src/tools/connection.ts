@@ -15,7 +15,8 @@ export function registerConnectionTool(
       description:
         "Verify connectivity to ProjectionLab. Checks that the browser is running, " +
         "the ProjectionLab page is loaded, the Plugin API is accessible, and the API key is valid. " +
-        "Call this before any other ProjectionLab tool to diagnose issues.",
+        "Call this first in every session, before any other ProjectionLab tool. If any check " +
+        "fails, read the projectionlab://guide resource and walk the user through the fix.",
       outputSchema: {
         browser: z.boolean(),
         pageLoaded: z.boolean(),

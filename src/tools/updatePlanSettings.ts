@@ -67,8 +67,8 @@ export function registerUpdatePlanSettingsTool(
         if (config.readOnly) {
           throw new ProjectionLabError(
             "READ_ONLY_MODE",
-            "Write operations are disabled (PL_READ_ONLY=true)",
-            "Set PL_READ_ONLY=false to enable writes",
+            "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
+            "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
           );
         }
 

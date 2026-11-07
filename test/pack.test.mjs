@@ -38,6 +38,8 @@ test("tarball ships the expected entrypoints", () => {
     "dist/index.js",
     "dist/extensionBridge.js",
     "dist/bridge.js",
+    "dist/instructions.js",
+    "skills/projectionlab/SKILL.md",
     "README.md",
     "HOW-IT-WORKS.md",
   ]) {

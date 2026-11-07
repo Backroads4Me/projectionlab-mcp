@@ -1,18 +1,18 @@
 import { config as loadDotenv } from "dotenv";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-loadDotenv({ path: resolve(__dirname, "../.env") });
 
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
-}
+/** Per-user config file shared by every MCP host on the machine. */
+export const USER_ENV_FILE = join(homedir(), ".projectionlab-mcp", ".env");
+
+// Precedence: the MCP host's `env` block, then the per-user file, then a
+// `.env` at the package root (a development checkout). dotenv never
+// overrides a variable that is already set, so load order is precedence.
+loadDotenv({ path: USER_ENV_FILE });
+loadDotenv({ path: resolve(__dirname, "../.env") });
 
 function optional(name: string, fallback: string): string {
   return process.env[name] || fallback;
@@ -42,7 +42,9 @@ function expandHome(p: string): string {
 }
 
 export const config = {
-  apiKey: required("PL_API_KEY"),
+  // Optional at startup so the server always connects and can tell the agent
+  // what is missing; operations that need the key reject without it.
+  apiKey: process.env.PL_API_KEY || undefined,
   // Localhost WebSocket the browser extension (or bootstrap snippet) connects
   // to. The token is a shared secret the executor must present; if unset,
   // ExtensionBridge generates one and persists it under the snapshot dir.
@@ -55,7 +57,8 @@ export const config = {
   exportCacheMs: optionalInt("PL_EXPORT_CACHE_MS", 90000),
   // Pretty-print JSON tool output (costs ~25-40% more tokens; off by default).
   prettyJson: optionalBoolean("PL_PRETTY_JSON") ?? false,
-  readOnly: optional("PL_READ_ONLY", "false").toLowerCase() === "true",
+  // Writes stay disabled unless PL_READ_ONLY is exactly "false".
+  readOnly: (process.env.PL_READ_ONLY ?? "").trim().toLowerCase() !== "false",
   snapshotDir: expandHome(optional("PL_SNAPSHOT_DIR", "~/.projectionlab-mcp/snapshots")),
   logLevel: optional("LOG_LEVEL", "info") as "error" | "warn" | "info" | "debug",
 } as const;

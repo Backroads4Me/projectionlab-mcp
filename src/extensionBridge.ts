@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { buildBootstrapSnippet } from "./bootstrap.js";
 import type { Bridge, ConnectionStatus } from "./bridge.js";
-import { config } from "./config.js";
+import { config, USER_ENV_FILE } from "./config.js";
 import { ProjectionLabError } from "./errors.js";
 import { log } from "./logger.js";
 import type { ExportedData } from "./types/projectionlab.js";
@@ -33,6 +33,13 @@ function originAllowed(origin: string | undefined): boolean {
 }
 
 const HELLO_TIMEOUT_MS = 5_000;
+/** How often to retry the WebSocket port while another instance holds it. */
+const PORT_RETRY_MS = 3_000;
+const EXTENSION_HELP =
+  "Install the ProjectionLab MCP Bridge extension (zips on the GitHub Releases page of " +
+  "https://github.com/Backroads4Me/projectionlab-mcp), enter the token from " +
+  "~/.projectionlab-mcp/ws-token on its options page, and open https://app.projectionlab.com. " +
+  "Or call projectionlab_get_bootstrap and paste the snippet into the ProjectionLab tab's console.";
 const REQUEST_TIMEOUT_MS = 60_000;
 
 interface Pending {
@@ -50,6 +57,9 @@ export class ExtensionBridge implements Bridge {
   private heartbeat: NodeJS.Timeout | null = null;
   private awaitingPong = false;
   private readonly token: string;
+  private portBusy = false;
+  private retryTimer: NodeJS.Timeout | null = null;
+  private closed = false;
 
   // Serialize all operations and cache the last full export until a write
   // invalidates it.
@@ -76,24 +86,45 @@ export class ExtensionBridge implements Bridge {
     return token;
   }
 
+  /** Binds the WebSocket port. While another instance (another agent on
+   * this machine) holds it, retries every PORT_RETRY_MS and takes over once
+   * that instance exits; the extension reconnects on its own schedule. */
   private listen(): void {
-    this.wss = new WebSocketServer({
+    if (this.closed) return;
+    const wss = new WebSocketServer({
       host: "127.0.0.1",
       port: config.wsPort,
     });
-    this.wss.on("listening", () => {
+    this.wss = wss;
+    wss.on("listening", () => {
+      if (this.portBusy) {
+        log.info("extension", `Port ${config.wsPort} is free; took over the listener`);
+      }
+      this.portBusy = false;
       log.info("extension", `Listening on ws://127.0.0.1:${config.wsPort}`);
     });
-    this.wss.on("error", (err) => {
-      log.error(
-        "extension",
-        `WebSocket server error: ${err.message}. ` +
-          (err.message.includes("EADDRINUSE")
-            ? `Port ${config.wsPort} is taken — set PL_WS_PORT to a free port.`
-            : ""),
-      );
+    wss.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") {
+        if (!this.portBusy) {
+          log.warn(
+            "extension",
+            `Port ${config.wsPort} is held by another process (usually another agent's ` +
+              `projectionlab-mcp). Retrying every ${PORT_RETRY_MS / 1000}s until it is free.`,
+          );
+        }
+        this.portBusy = true;
+        if (this.wss === wss) this.wss = null;
+        wss.close();
+        this.retryTimer = setTimeout(() => {
+          this.retryTimer = null;
+          this.listen();
+        }, PORT_RETRY_MS);
+        this.retryTimer.unref();
+        return;
+      }
+      log.error("extension", `WebSocket server error: ${err.message}`);
     });
-    this.wss.on("connection", (ws, req) => {
+    wss.on("connection", (ws, req) => {
       const origin = req.headers.origin;
       if (!originAllowed(origin)) {
         log.warn("extension", `Rejected connection from origin ${origin}`);
@@ -279,6 +310,31 @@ export class ExtensionBridge implements Bridge {
     return next;
   }
 
+  /** Why no executor can be reached, with the fix, for error messages. */
+  private notConnectedReason(): string {
+    if (this.portBusy) {
+      return (
+        `Port ${config.wsPort} is held by another projectionlab-mcp instance (another agent on this ` +
+        "machine is using ProjectionLab), so the browser extension is connected to that one. This " +
+        "server takes over automatically within a minute of that instance exiting. To run both at " +
+        "once, set PL_WS_PORT to a free port here and point the extension at it."
+      );
+    }
+    return `No browser-side executor is connected to ws://127.0.0.1:${config.wsPort}. ${EXTENSION_HELP}`;
+  }
+
+  private requireApiKey(): string {
+    if (!config.apiKey) {
+      throw new ProjectionLabError(
+        "API_KEY_MISSING",
+        "PL_API_KEY is not set",
+        "Copy the Plugin API Key from ProjectionLab Account Settings > Plugins and set PL_API_KEY " +
+          `in this MCP server's env block or in ${USER_ENV_FILE}, then restart the MCP host`,
+      );
+    }
+    return config.apiKey;
+  }
+
   private request(
     method: WireMethod,
     params: unknown[],
@@ -289,7 +345,7 @@ export class ExtensionBridge implements Bridge {
       throw new ProjectionLabError(
         "EXTENSION_NOT_CONNECTED",
         "No browser-side executor is connected",
-        "Open your browser with the ProjectionLab bridge extension enabled (or paste the bootstrap snippet into the ProjectionLab tab's console)",
+        this.notConnectedReason(),
       );
     }
     const id = String(this.nextId++);
@@ -328,11 +384,16 @@ export class ExtensionBridge implements Bridge {
       errors: [],
     };
     return this.serialize(async () => {
+      if (!config.apiKey) {
+        try {
+          this.requireApiKey();
+        } catch (err) {
+          const e = err as ProjectionLabError;
+          result.errors.push(`${e.code}: ${e.message}. ${e.suggestion}`);
+        }
+      }
       if (!this.conn) {
-        result.errors.push(
-          `EXTENSION_NOT_CONNECTED: No browser-side executor is connected to ws://127.0.0.1:${config.wsPort}. ` +
-            "Open your browser with the ProjectionLab bridge extension enabled.",
-        );
+        result.errors.push(`EXTENSION_NOT_CONNECTED: ${this.notConnectedReason()}`);
         return result;
       }
       result.browser = true;
@@ -351,6 +412,7 @@ export class ExtensionBridge implements Bridge {
         );
         return result;
       }
+      if (!config.apiKey) return result;
       try {
         await this.request("validateApiKey", [{ key: config.apiKey }]);
         result.apiKeyValid = true;
@@ -382,7 +444,7 @@ export class ExtensionBridge implements Bridge {
       log.info("extension", "Calling exportData");
       const start = Date.now();
       const data = (await this.request("exportData", [
-        { key: config.apiKey },
+        { key: this.requireApiKey() },
       ])) as ExportedData;
       log.info("extension", `exportData completed in ${Date.now() - start}ms`);
       this.exportCache = { data, at: Date.now() };
@@ -400,7 +462,7 @@ export class ExtensionBridge implements Bridge {
         "extension",
         `Calling updateAccount for ${accountId}${force ? " (force)" : ""}`,
       );
-      const opts: { key: string; force?: string } = { key: config.apiKey };
+      const opts: { key: string; force?: string } = { key: this.requireApiKey() };
       if (force) opts.force = "true";
       await this.request("updateAccount", [accountId, data, opts]);
     });
@@ -410,7 +472,7 @@ export class ExtensionBridge implements Bridge {
   private async restoreCall(method: WireMethod, payload: unknown): Promise<void> {
     await this.serialize(async () => {
       log.info("extension", `Calling ${method}`);
-      await this.request(method, [payload, { key: config.apiKey }]);
+      await this.request(method, [payload, { key: this.requireApiKey() }]);
     });
     this.invalidateCache();
   }
@@ -432,6 +494,11 @@ export class ExtensionBridge implements Bridge {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     this.dropConnection("server shutting down");
     if (this.wss) {
       log.info("extension", "Closing WebSocket server");

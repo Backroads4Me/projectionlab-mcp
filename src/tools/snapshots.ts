@@ -5,6 +5,9 @@ import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
+import { log } from "../logger.js";
+import { assertPlansUnchanged } from "../planVersion.js";
+import { restoredSectionMatches } from "./restore.js";
 
 function getExportSection(
   data: Record<string, unknown>,
@@ -116,7 +119,21 @@ export function registerSnapshotTools(
           sectionsToBackup,
         );
 
+        // restorePlans replaces every plan, so refuse when a plan was saved
+        // in ProjectionLab since the read above.
+        if (
+          snapshot.sections.includes("plans") &&
+          snapshot.data.plans !== undefined
+        ) {
+          const currentPlans = (currentData as Record<string, unknown>).plans;
+          await assertPlansUnchanged(
+            bridge,
+            Array.isArray(currentPlans) ? currentPlans : [],
+          );
+        }
+
         // Apply the rollback
+        const restoredSections: string[] = [];
         for (const section of snapshot.sections) {
           const sectionData = snapshot.data[section];
           if (sectionData === undefined) continue;
@@ -134,8 +151,32 @@ export function registerSnapshotTools(
             case "settings":
               await bridge.restoreSettings(sectionData);
               break;
+            default:
+              continue;
           }
+          restoredSections.push(section);
         }
+
+        // Re-read and confirm each restored section landed.
+        let unverifiedSections: string[] = restoredSections;
+        try {
+          await new Promise((r) => setTimeout(r, 1000));
+          const fresh = (await bridge.exportData({ fresh: true })) as Record<
+            string,
+            unknown
+          >;
+          unverifiedSections = restoredSections.filter(
+            (section) =>
+              !restoredSectionMatches(
+                section,
+                snapshot.data[section],
+                getExportSection(fresh, section),
+              ),
+          );
+        } catch (err) {
+          log.warn("rollback", `Post-write verification failed: ${err}`);
+        }
+        const verified = unverifiedSections.length === 0;
 
         return {
           content: [
@@ -143,11 +184,14 @@ export function registerSnapshotTools(
               type: "text",
               text: toJson(
                 {
-                  success: true,
-                  restoredSections: snapshot.sections,
+                  success: verified,
+                  verified,
+                  restoredSections,
+                  ...(verified ? {} : { unverifiedSections }),
                   fromSnapshot: snapshot.id,
-                  message:
-                    "Rollback complete. A pre-rollback snapshot was also saved. Use projectionlab_export_data to verify.",
+                  message: verified
+                    ? "Rollback complete and verified. A pre-rollback snapshot was also saved."
+                    : "Rollback was written but the re-read did not match the snapshot for the sections in unverifiedSections. A pre-rollback snapshot was saved; check the data in ProjectionLab.",
                 },
               ),
             },

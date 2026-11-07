@@ -8,6 +8,7 @@ import type {
   PlanSummary,
   SchemaDescription,
 } from "../types/projectionlab.js";
+import { planEventCounts } from "../plans.js";
 
 function extractAccounts(data: ExportedData): AccountSummary[] {
   const finances = data.today;
@@ -55,13 +56,6 @@ function extractPlans(data: ExportedData): PlanSummary[] {
   });
 }
 
-function countItems(data: ExportedData, section: string): number {
-  const today = data.today as Record<string, unknown> | undefined;
-  if (!today) return 0;
-  const items = today[section];
-  return Array.isArray(items) ? items.length : 0;
-}
-
 export function registerSchemaTool(server: McpServer, bridge: Bridge) {
   server.registerTool(
     "projectionlab_describe_schema",
@@ -69,8 +63,8 @@ export function registerSchemaTool(server: McpServer, bridge: Bridge) {
       title: "Describe Schema",
       description:
         "Returns a lightweight summary of the ProjectionLab data structure without the full payload. " +
-        "Includes top-level keys, account list (IDs, names, types, balances), plan names, " +
-        "and counts of income sources, expenses, milestones, and progress entries. " +
+        "Includes top-level keys, account list (IDs, names, types, balances), plans (IDs, names, and each plan's income, expense, and milestone event counts), " +
+        "and the progress entry count. " +
         "Use this to understand the data model before crafting queries or mutations.",
       annotations: {
         readOnlyHint: true,
@@ -96,13 +90,11 @@ export function registerSchemaTool(server: McpServer, bridge: Bridge) {
         const schema: SchemaDescription = {
           topLevelKeys: topLevelKeysWithTypes,
           accounts: extractAccounts(data),
-          plans: extractPlans(data).map(({ id, name }) => ({
-            id,
-            name,
+          plans: extractPlans(data).map((plan) => ({
+            id: plan.id,
+            name: plan.name,
+            ...planEventCounts(plan),
           })) as PlanSummary[],
-          incomeCount: countItems(data, "incomes"),
-          expenseCount: countItems(data, "expenses"),
-          milestoneCount: countItems(data, "milestones"),
           progressEntryCount: Array.isArray(data.progress)
             ? data.progress.length
             : 0,

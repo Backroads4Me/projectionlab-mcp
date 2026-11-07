@@ -90,6 +90,8 @@ export function registerUpdatePlanEventTool(
       inputSchema: {
         planIdentifier: z
           .string()
+          .trim()
+          .min(1)
           .describe(
             "Plan name (case-insensitive, partial match) or exact plan ID",
           ),
@@ -98,6 +100,8 @@ export function registerUpdatePlanEventTool(
           .describe("Which event-based section of the plan the event lives in"),
         eventIdentifier: z
           .string()
+          .trim()
+          .min(1)
           .describe(
             "Event name (case-insensitive, exact match preferred over partial) or exact event ID",
           ),

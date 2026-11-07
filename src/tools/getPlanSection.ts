@@ -55,6 +55,8 @@ export function registerGetPlanSectionTool(
       inputSchema: {
         planIdentifier: z
           .string()
+          .trim()
+          .min(1)
           .describe(
             "Plan name (case-insensitive, partial match) or exact plan ID",
           ),
@@ -63,6 +65,8 @@ export function registerGetPlanSectionTool(
           .describe("Which section of the plan to return"),
         eventIdentifier: z
           .string()
+          .trim()
+          .min(1)
           .optional()
           .describe(
             "Return only the event whose name (case-insensitive, partial match) or ID matches. " +

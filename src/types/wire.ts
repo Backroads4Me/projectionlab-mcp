@@ -23,8 +23,10 @@ export const HEARTBEAT_INTERVAL_MS = 20_000;
  * Plugin API operations the executor must support. `params` for each is an
  * ordered argument list matching window.projectionlabPluginAPI signatures,
  * except the meta-operations `describeApi` (no args; enumerates own +
- * prototype properties of the API object) and `waitForApi` (no args; resolves
- * once the API is attached to the page).
+ * prototype properties of the API object) and `waitForApi` (optional
+ * `[timeoutMs]`; resolves once the API is attached to the page, waiting up to
+ * `timeoutMs`, or 15 seconds when omitted). Other operations wait up to 15
+ * seconds for the API before running.
  */
 export type WireMethod =
   | "exportData" // params: [{ key }]
@@ -35,7 +37,7 @@ export type WireMethod =
   | "restoreSettings" // params: [settings, { key }]
   | "validateApiKey" // params: [{ key }]
   | "describeApi" // params: []
-  | "waitForApi"; // params: []
+  | "waitForApi"; // params: [timeoutMs?]
 
 /** First frame the executor sends after the socket opens. */
 export interface HelloFrame {
@@ -43,7 +45,7 @@ export interface HelloFrame {
   /** Shared secret; server closes the socket with code 4001 on mismatch. */
   token: string;
   protocolVersion: number;
-  /** e.g. "extension/0.1.0" or "bootstrap/0.1.0" */
+  /** "extension/<version>" or "bootstrap/<version>", the release version from package.json */
   executor: string;
 }
 

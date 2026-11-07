@@ -1,7 +1,7 @@
 {
   "name": "projectionlab-mcp",
   "version": "1.0.0",
-  "description": "MCP server bridging Claude Code to ProjectionLab Plugin API",
+  "description": "MCP server for ProjectionLab: read and safely edit your retirement plan from any MCP-compatible AI assistant",
   "type": "module",
   "license": "MIT",
   "author": "Ted Lanham",
@@ -40,7 +40,7 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc",
     "start": "node dist/index.js",
-    "test": "npm run build && node --test \"test/**/*.test.mjs\"",
+    "test": "npm run build && node --test test/*.test.mjs",
     "dev": "tsx src/index.ts",
     "prepublishOnly": "npm run build"
   },

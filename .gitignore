@@ -1,4 +1,4 @@
-# Environment variables (contains secrets)
+# Secrets
 .env
 .ws-token
 
@@ -8,17 +8,8 @@ node_modules/
 # Build output
 dist/
 
-# Logs
-*.log
-logs/
-
 # OS
 .DS_Store
 
-# Snapshots (local data, not for repo)
-snapshots/
-~/.projectionlab-mcp/
-
-# Local agent instructions (AGENTS.md is the shared, tracked one)
-CLAUDE.md
+# Local working notes
 docs/

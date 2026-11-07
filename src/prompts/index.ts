@@ -196,10 +196,10 @@ Perform a deep tax optimization review of plan "${planName}". Focus on:
 6. **Recommendations**: Present optimized conversion schedule in a year-by-year table: [Year | Current Conversion | Recommended | Estimated Bracket | MAGI Impact].
 
 Start by calling projectionlab_check_connection, then fetch the accounts and variables sections:
-- projectionlab_get_plan_section "${planName}" "accounts"
-- projectionlab_get_plan_section "${planName}" "variables"
-- projectionlab_get_plan_section "${planName}" "income"
-- projectionlab_get_plan_section "${planName}" "milestones"`,
+- projectionlab_get_plan_section {"planIdentifier": ${JSON.stringify(planName)}, "section": "accounts"}
+- projectionlab_get_plan_section {"planIdentifier": ${JSON.stringify(planName)}, "section": "variables"}
+- projectionlab_get_plan_section {"planIdentifier": ${JSON.stringify(planName)}, "section": "income"}
+- projectionlab_get_plan_section {"planIdentifier": ${JSON.stringify(planName)}, "section": "milestones"}`,
           },
         },
       ],
@@ -246,10 +246,10 @@ Present findings in a table: [Assumption | Plan Value | Historical/Realistic Ran
 Recommend what-if scenarios the user should test in ProjectionLab's Compare Mode.
 
 Start by calling projectionlab_check_connection, then:
-- projectionlab_get_plan_section "${planName}" "variables"
-- projectionlab_get_plan_section "${planName}" "montecarlo"
-- projectionlab_get_plan_section "${planName}" "expenses"
-- projectionlab_get_plan_section "${planName}" "milestones"`,
+- projectionlab_get_plan_section {"planIdentifier": ${JSON.stringify(planName)}, "section": "variables"}
+- projectionlab_get_plan_section {"planIdentifier": ${JSON.stringify(planName)}, "section": "montecarlo"}
+- projectionlab_get_plan_section {"planIdentifier": ${JSON.stringify(planName)}, "section": "expenses"}
+- projectionlab_get_plan_section {"planIdentifier": ${JSON.stringify(planName)}, "section": "milestones"}`,
           },
         },
       ],

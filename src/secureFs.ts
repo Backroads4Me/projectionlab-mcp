@@ -20,10 +20,18 @@ export async function secureMkdir(dir: string): Promise<void> {
   }
 }
 
-/** Write a file owner-only (0600). */
+/**
+ * Write a file owner-only (0600). The `mode` option applies only when the
+ * file is created, so also chmod to correct a pre-existing looser file.
+ */
 export async function secureWriteFile(
   filePath: string,
   data: string,
 ): Promise<void> {
   await writeFile(filePath, data, { mode: FILE_MODE });
+  try {
+    await chmod(filePath, FILE_MODE);
+  } catch {
+    // Best effort (e.g. not the owner).
+  }
 }

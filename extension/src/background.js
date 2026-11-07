@@ -13,7 +13,33 @@ let generation = 0;
 let authBlocked = false;
 const inFlight = new Map();
 
-const setStatus = (connectionStatus, lastError = "") => browser.storage.local.set({ connectionStatus, lastError });
+const EXTENSION_NAME = "ProjectionLab MCP Bridge";
+// Toolbar label per connection status: authed = token accepted by the server,
+// connected = socket open and awaiting the server's helloAck. Only authed
+// shows a badge: the server runs only while an MCP host does, so being
+// disconnected is the normal idle state.
+const STATUS_LABELS = { authed: "connected", connected: "connecting", disconnected: "not connected" };
+
+async function showBadge(connectionStatus, lastError) {
+  const authed = connectionStatus === "authed";
+  const label = STATUS_LABELS[connectionStatus] ?? STATUS_LABELS.disconnected;
+  const title = `${EXTENSION_NAME}: ${label}${lastError ? ` - ${lastError}` : ""}`;
+  try {
+    await browser.action.setBadgeText({ text: authed ? "✓" : "" });
+    if (authed) {
+      await browser.action.setBadgeBackgroundColor({ color: "#188038" });
+      await browser.action.setBadgeTextColor?.({ color: "#ffffff" });
+    }
+    await browser.action.setTitle({ title });
+  } catch {
+    // The badge is cosmetic; a failure here must not interrupt the connection.
+  }
+}
+
+const setStatus = (connectionStatus, lastError = "") => {
+  void showBadge(connectionStatus, lastError);
+  return browser.storage.local.set({ connectionStatus, lastError });
+};
 const codedError = (code, message) => Object.assign(new Error(message), { code });
 
 function scheduleReconnect(myGeneration) {
@@ -41,7 +67,7 @@ async function connect(force = false) {
   ws.onopen = () => {
     if (myGeneration !== generation) return;
     void setStatus("connected");
-    ws.send(JSON.stringify({ type: "hello", token: config.token, protocolVersion: PROTOCOL_VERSION, executor: "extension/0.1.0" }));
+    ws.send(JSON.stringify({ type: "hello", token: config.token, protocolVersion: PROTOCOL_VERSION, executor: `extension/${browser.runtime.getManifest().version}` }));
   };
   ws.onmessage = (event) => {
     if (myGeneration !== generation) return;
@@ -116,6 +142,7 @@ async function handleRequest(request, ws) {
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.port || changes.token)) void connect(true);
 });
+browser.action.onClicked.addListener(() => void browser.runtime.openOptionsPage());
 browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RECONNECT_ALARM && !authBlocked && !socket) void connect();
 });

@@ -43,15 +43,16 @@ The server starts listening immediately. Tool calls made before an executor conn
 3. The browser serializes your financial state to JSON and returns it.
 4. The server selects or summarizes the requested data, redacts secrets where appropriate, and returns it to the MCP host. Results above the inline size limit are written to a protected local export file and returned as a file pointer. A short-lived export cache avoids re-serializing the complete state on every read; every write invalidates it.
 
-### C. Write Operations & Safety Flow (`update_*`, `restore_*`)
+### C. Write Operations & Safety Flow (`update_*`, `restore_*`, `clone_plan`)
 
-The Plugin API provides a targeted `updateAccount` operation for Current Finances and full-section restore operations for broader plan state. The server builds safe patches on top of those primitives and enforces a multi-layered safety net:
+The Plugin API provides a targeted `updateAccount` operation for Current Finances and whole-area restore operations (`restorePlans` and the others) for everything else. Plan edits, including `clone_plan`, are built as a complete new plans array and written with `restorePlans`. The server builds safe patches on top of those primitives and enforces a multi-layered safety net:
 
 1. **Dry-Run by Default:** without `confirm: true`, the tool returns a structured diff preview instead of mutating anything.
 2. **Fresh State:** the tool requests an uncached export and validates the requested change against the current data.
 3. **Auto-Snapshotting:** on `confirm: true`, the tool passes the affected current section to `SnapshotManager`, which writes a restore-safe local JSON snapshot with an ID and timestamp.
-4. **Execution:** only then does the bridge call `updateAccount()` or the appropriate `restore*()` method.
-5. **Verification:** the tool performs a fresh re-read and checks that the requested change landed. A verification failure is reported with the snapshot retained for recovery.
+4. **Conflict Check:** because `restorePlans` replaces every plan, a plan write re-reads the plans just before writing and refuses with `PLAN_CONFLICT` if any plan was added, removed, or saved in ProjectionLab since the tool read them (`assertPlansUnchanged` in `src/planVersion.ts`). `projectionlab_update_plan_section` also accepts the dry run's `planVersion` as `expectedPlanVersion` and refuses if the plan was saved after the preview.
+5. **Execution:** only then does the bridge call `updateAccount()` or the appropriate `restore*()` method.
+6. **Verification:** the tool performs a fresh re-read and checks that the requested change landed. A verification failure is reported with the snapshot retained for recovery.
 
 ### D. Rollbacks & Recovery
 
@@ -59,19 +60,8 @@ The Plugin API provides a targeted `updateAccount` operation for Current Finance
 
 ## 4. Security
 
-- The WebSocket binds to `127.0.0.1` only, accepts only the ProjectionLab app and browser-extension origins, and requires a shared token stored with owner-only permissions by default. Native clients without an `Origin` header still need the token.
-- The Plugin API key stays in the server process and is passed to the page only as an argument to Plugin API calls; the extension does not persist it.
-- Snapshots scrub the literal Plugin API key while preserving restore data. Read-only exports additionally redact secret-named fields before they are returned or written to disk.
+- The Plugin API key is read only from the MCP host's `env` block, `~/.projectionlab-mcp/.env`, or a development `.env` (gitignored). It is never logged. It stays in the server process and is passed to the page only as an argument to Plugin API calls; the extension does not persist it.
+- The WebSocket binds to `127.0.0.1` only, accepts only the ProjectionLab app and browser-extension origins, and requires a shared token (`PL_WS_TOKEN`, or auto-generated at `~/.projectionlab-mcp/ws-token` with owner-only permissions), so neither other local processes nor arbitrary web pages can drive your data. Native clients without an `Origin` header still need the token.
+- Snapshots scrub the literal Plugin API key while preserving restore data. Exports, plan reads, and the `plan-data` resource additionally redact secret-named fields before they are returned or written to disk.
 - Read-only mode (the default; any `PL_READ_ONLY` other than `false`) rejects mutation tools before they read, snapshot, or write plan data.
-
-## Local Restart Workflow
-
-This server runs over stdio, so the host process keeps the compiled `dist/` code in memory after startup. Rebuilding with `npm run build` updates files on disk but does not hot-reload the running server.
-
-After source changes:
-
-1. Run `npm run build`.
-2. Restart the MCP host so it launches a fresh `dist/index.js`.
-3. Re-run `projectionlab_check_connection` before any other tool.
-
-For the extension transport, the browser side reconnects automatically; you do not need to reload the extension after a server restart.
+- The published npm package ships only `dist/`, the agent skill, and docs (the `files` allowlist in `package.json`), so source and `.env` files are never distributed.

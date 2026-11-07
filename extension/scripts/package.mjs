@@ -8,7 +8,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
+// The release version shared with the server (root package.json).
+const version = JSON.parse(readFileSync(join(root, "..", "package.json"), "utf8")).version;
 
 for (const browser of ["chromium", "firefox"]) {
   const src = join(root, "dist", browser);

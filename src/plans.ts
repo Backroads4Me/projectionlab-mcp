@@ -22,6 +22,7 @@ export type PlanSection = (typeof PLAN_SECTIONS)[number];
  * plans with shared name prefixes can't be silently confused on write paths.
  */
 export function findPlanIndex(plans: unknown[], identifier: string): number {
+  if (!identifier.trim()) return -1;
   const lower = identifier.toLowerCase();
   let exactName = -1;
   let partial = -1;
@@ -88,6 +89,20 @@ export function getEvents(sectionData: unknown): unknown[] {
   return [];
 }
 
+/** Income, expense and milestone event counts for one plan. */
+export function planEventCounts(plan: unknown): {
+  incomeCount: number;
+  expenseCount: number;
+  milestoneCount: number;
+} {
+  const obj = plan && typeof plan === "object" ? (plan as PlanObj) : {};
+  return {
+    incomeCount: getEvents(obj.income).length,
+    expenseCount: getEvents(obj.expenses).length,
+    milestoneCount: getEvents(obj.milestones).length,
+  };
+}
+
 /** Stable identifier for an event, when it carries one. */
 function eventId(event: unknown): string | undefined {
   if (event && typeof event === "object") {
@@ -99,6 +114,7 @@ function eventId(event: unknown): string | undefined {
 
 /** Index of the event matching `identifier`: exact id, then exact name (case-insensitive), then name substring. -1 if none. */
 export function findEventIndex(events: unknown[], identifier: string): number {
+  if (!identifier.trim()) return -1;
   const lower = identifier.toLowerCase();
   let exactName = -1;
   let partial = -1;
@@ -136,7 +152,11 @@ function sectionIsEventBased(section: unknown): boolean {
  * Tolerates fields ProjectionLab adds on its own (e.g. generated IDs) but
  * catches dropped or changed values. Arrays must match in length and order.
  */
-function containsSubset(expected: unknown, actual: unknown): boolean {
+/**
+ * True when every value in `expected` is present and equal in `actual`.
+ * Objects may carry extra keys; arrays must match in length and order.
+ */
+export function containsSubset(expected: unknown, actual: unknown): boolean {
   if (expected === null || typeof expected !== "object") {
     return JSON.stringify(expected) === JSON.stringify(actual);
   }

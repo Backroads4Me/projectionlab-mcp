@@ -1,12 +1,12 @@
 // Execute one wire request directly in the page's MAIN world. Returning the
 // structured response through executeScript avoids a fragile postMessage hop.
 export async function executePageRequest(request) {
-  function waitForApi() {
+  function waitForApi(timeoutMs) {
     return new Promise((resolve, reject) => {
-      const deadline = Date.now() + 15_000;
+      const deadline = Date.now() + timeoutMs;
       const poll = () => {
         if (window.projectionlabPluginAPI) return resolve(window.projectionlabPluginAPI);
-        if (Date.now() >= deadline) return reject(Object.assign(new Error("ProjectionLab Plugin API did not appear within 15 seconds"), { code: "API_NOT_AVAILABLE" }));
+        if (Date.now() >= deadline) return reject(Object.assign(new Error(`ProjectionLab Plugin API did not appear within ${Math.round(timeoutMs / 1000)} seconds`), { code: "API_NOT_AVAILABLE" }));
         setTimeout(poll, 500);
       };
       poll();
@@ -20,7 +20,8 @@ export async function executePageRequest(request) {
   }
 
   try {
-    const api = await waitForApi();
+    const requested = request.method === "waitForApi" ? Number(request.params?.[0]) : NaN;
+    const api = await waitForApi(Number.isFinite(requested) && requested > 0 ? requested : 15_000);
     let result;
     if (request.method === "waitForApi") result = true;
     else if (request.method === "describeApi") {

@@ -1,4 +1,5 @@
 import { PROTOCOL_VERSION } from "./types/wire.js";
+import { VERSION } from "./version.js";
 
 /**
  * Tier 0 transport: a self-contained snippet the user pastes into the
@@ -9,19 +10,24 @@ import { PROTOCOL_VERSION } from "./types/wire.js";
  * extension/src/page-main.js.
  */
 export function buildBootstrapSnippet(port: number, token: string): string {
-  const cfg = JSON.stringify({ port, token, protocolVersion: PROTOCOL_VERSION });
+  const cfg = JSON.stringify({
+    port,
+    token,
+    protocolVersion: PROTOCOL_VERSION,
+    executor: `bootstrap/${VERSION}`,
+  });
   return `(() => {
   const cfg = ${cfg};
   if (window.__plmcpBootstrap) { console.log("[plmcp] bootstrap already running"); return; }
   window.__plmcpBootstrap = true;
   let stopped = false;
   const log = (m) => console.log("[plmcp]", m);
-  function waitForApi() {
+  function waitForApi(timeoutMs) {
     return new Promise((resolve, reject) => {
-      const deadline = Date.now() + 15000;
+      const deadline = Date.now() + timeoutMs;
       (function poll() {
         if (window.projectionlabPluginAPI) return resolve(window.projectionlabPluginAPI);
-        if (Date.now() >= deadline) { const e = new Error("Plugin API did not appear within 15s - log in and enable plugins"); e.code = "API_NOT_AVAILABLE"; return reject(e); }
+        if (Date.now() >= deadline) { const e = new Error("Plugin API did not appear within " + Math.round(timeoutMs / 1000) + "s - log in and enable plugins"); e.code = "API_NOT_AVAILABLE"; return reject(e); }
         setTimeout(poll, 500);
       })();
     });
@@ -41,7 +47,8 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   }
   async function handle(frame, ws) {
     try {
-      const api = await waitForApi();
+      const requested = frame.method === "waitForApi" ? Number((frame.params || [])[0]) : NaN;
+      const api = await waitForApi(Number.isFinite(requested) && requested > 0 ? requested : 15000);
       let result;
       if (frame.method === "waitForApi") result = true;
       else if (frame.method === "describeApi") result = describeApi(api);
@@ -61,7 +68,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   function connect() {
     if (stopped) return;
     const ws = new WebSocket("ws://127.0.0.1:" + cfg.port);
-    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", token: cfg.token, protocolVersion: cfg.protocolVersion, executor: "bootstrap/0.1.0" }));
+    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", token: cfg.token, protocolVersion: cfg.protocolVersion, executor: cfg.executor }));
     ws.onmessage = (ev) => {
       let frame;
       try { frame = JSON.parse(ev.data); } catch { return; }

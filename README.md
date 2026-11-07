@@ -44,9 +44,9 @@ You do **not** need to be a programmer. The recommended path is to let your assi
 
 Open your AI assistant and give it this instruction (copy-paste it as-is):
 
-> Please set up the ProjectionLab MCP server for me from
-> `https://github.com/Backroads4Me/projectionlab-mcp`.
-> Follow the "For your AI assistant" section of its README. I'm not technical, so
+> Please set up the ProjectionLab MCP server (the `projectionlab-mcp` npm
+> package) for me. Follow the "For your AI assistant" section of its README at
+> `https://github.com/Backroads4Me/projectionlab-mcp`. I'm not technical, so
 > walk me through anything you need from me (like my ProjectionLab Plugin API key
 > and loading the browser extension) one step at a time. Keep it in read-only
 > mode until I say otherwise.
@@ -61,7 +61,7 @@ If anything gets stuck, tell your assistant what you see on screen; it can troub
 
 *(This section is written for the AI agent doing the install. If you're a person reading this, you can skip it. Your assistant follows these steps.)*
 
-You are setting this up for a **non-technical user**. Explain each thing you need from them in plain language, one step at a time, and never ask them to do something you can do yourself. Read `AGENTS.md` (conventions + safety model) and `HOW-IT-WORKS.md` (architecture) before starting.
+You are setting this up for a **non-technical user**. Explain each thing you need from them in plain language, one step at a time, and never ask them to do something you can do yourself.
 
 **1. Get the user's Plugin API key.** Ask them to open ProjectionLab → Account Settings → Plugins, enable plugins, and copy their **Plugin API Key**. Do **not** invent one, and never print, log, or commit it.
 
@@ -281,7 +281,7 @@ drawing a conclusion.
 
 ### Secret handling
 
-The Plugin API key lives only in `~/.projectionlab-mcp/.env`, a development `.env` (gitignored), or the MCP host config; it is never logged, and it stays server-side (sent to the browser per request; the browser side never stores it). The WebSocket binds to `127.0.0.1` only, checks the connection's `Origin`, and requires a shared token (`PL_WS_TOKEN`, or auto-generated at `~/.projectionlab-mcp/ws-token` with `600` perms) so neither other local processes nor arbitrary web pages can drive your data. Any data written to disk (snapshots) or emitted as a full export is passed through a redactor first: snapshots use value-only redaction (restore-safe), while exports and the `plan-data` resource also redact secret-named fields. The published npm package ships only `dist/`, the agent skill, and docs (see the `files` allowlist), so source and `.env` are never distributed.
+The Plugin API key stays on your computer: it is never logged, and the browser side never stores it. The WebSocket accepts only local connections that present a shared token. See [Security in HOW-IT-WORKS.md](HOW-IT-WORKS.md#4-security) for the details.
 
 ### After code changes
 

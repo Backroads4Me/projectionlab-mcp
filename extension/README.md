@@ -12,9 +12,11 @@ npm install
 npm run build
 ```
 
-In Chrome, Edge, or Brave, open the extensions page, enable Developer mode, choose **Load unpacked**, and select `extension/dist/chromium`. Open the extension's options page and enter the WebSocket port (8788 by default) and the shared token shown by the MCP server. Status advances from `disconnected` to `connected` to `authed` after the server accepts the token.
+In Chrome, Edge, or Brave, open the extensions page, enable Developer mode, choose **Load unpacked**, and select `extension/dist/chromium`. Click the extension's toolbar icon to open its options page, and enter the WebSocket port (8788 by default) and the shared token from `~/.projectionlab-mcp/ws-token`. The status advances from **Not connected** to **Connecting…** to **Connected** once the server accepts the token. While connected, the toolbar icon shows a green check; it shows no badge otherwise, since the server runs only while an MCP host does. Hover the icon for the current status.
 
 Do not put the ProjectionLab Plugin API key in extension options. The MCP server owns it and sends it only as an in-memory request parameter.
+
+The extension has no version of its own: the build writes the version from the repository's root `package.json` into each built manifest, so a release's server and extension share one number.
 
 ## Loopback test
 

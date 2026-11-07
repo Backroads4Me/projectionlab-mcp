@@ -103,10 +103,18 @@ Change the plan only when the user explicitly asks for that change.
    individual paths and keep siblings intact. Discover valid paths first with
    `listPaths: true`. Use `projectionlab_update_plan_section` and the
    `projectionlab_restore_*` tools only for deliberate wholesale replacement.
-4. **Every confirmed change is snapshotted first.** `projectionlab_list_snapshots`
+4. **Copy a plan to explore a what-if.** `projectionlab_clone_plan` adds a
+   copy of a plan under a new name and leaves the original untouched; patch
+   the copy with the targeted tools above.
+5. **Handle `PLAN_CONFLICT`.** A plan write refuses with `PLAN_CONFLICT` when
+   a plan was saved in ProjectionLab after the tool read it. Re-run the dry
+   run to pick up the latest data and confirm again. When confirming
+   `projectionlab_update_plan_section`, pass the dry run's `planVersion` as
+   `expectedPlanVersion`.
+6. **Every confirmed change is snapshotted first.** `projectionlab_list_snapshots`
    lists them and `projectionlab_rollback` restores one. Tell the user before
    the first change that it can be undone this way.
-5. After a confirmed change, re-read the field to verify it.
+7. After a confirmed change, re-read the field to verify it.
 
 ## Privacy and advice
 

@@ -13,7 +13,7 @@ const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).ver
 for (const browser of ["chromium", "firefox"]) {
   const src = join(root, "dist", browser);
   if (!existsSync(src)) {
-    console.error(`Missing ${src} — run "npm run build" first.`);
+    console.error(`Missing ${src} - run "npm run build" first.`);
     process.exit(1);
   }
   const zip = join(root, "dist", `projectionlab-mcp-${browser}-${version}.zip`);

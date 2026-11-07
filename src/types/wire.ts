@@ -1,6 +1,6 @@
 /**
  * Wire protocol between the MCP server (WebSocket listener) and a browser-side
- * executor — the extension's service worker or a pasted Tier-0 bootstrap
+ * executor - the extension's service worker or a pasted Tier-0 bootstrap
  * snippet. This file is the contract both sides build against; changes here
  * require agreement from both the server and extension implementations
  * (src/extensionBridge.ts, src/bootstrap.ts, extension/src/).

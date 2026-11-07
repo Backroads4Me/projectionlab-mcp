@@ -3,8 +3,8 @@ import { PROTOCOL_VERSION } from "./types/wire.js";
 /**
  * Tier 0 transport: a self-contained snippet the user pastes into the
  * ProjectionLab tab's devtools console. It plays the same executor role as
- * the browser extension — connects to the local WebSocket server, answers
- * ping and request frames against window.projectionlabPluginAPI — but lives
+ * the browser extension - connects to the local WebSocket server, answers
+ * ping and request frames against window.projectionlabPluginAPI - but lives
  * only until the tab reloads. Keep the executor logic in sync with
  * extension/src/page-main.js.
  */
@@ -21,7 +21,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
       const deadline = Date.now() + 15000;
       (function poll() {
         if (window.projectionlabPluginAPI) return resolve(window.projectionlabPluginAPI);
-        if (Date.now() >= deadline) { const e = new Error("Plugin API did not appear within 15s — log in and enable plugins"); e.code = "API_NOT_AVAILABLE"; return reject(e); }
+        if (Date.now() >= deadline) { const e = new Error("Plugin API did not appear within 15s - log in and enable plugins"); e.code = "API_NOT_AVAILABLE"; return reject(e); }
         setTimeout(poll, 500);
       })();
     });
@@ -72,12 +72,12 @@ export function buildBootstrapSnippet(port: number, token: string): string {
     ws.onclose = (ev) => {
       if (stopped) return;
       if (ev.code === 4001 || ev.code === 4002) { stopped = true; window.__plmcpBootstrap = false; log("stopped: " + (ev.reason || ev.code)); return; }
-      if (ev.code === 4003) { stopped = true; window.__plmcpBootstrap = false; log("replaced by another executor (probably the extension) — bootstrap no longer needed"); return; }
+      if (ev.code === 4003) { stopped = true; window.__plmcpBootstrap = false; log("replaced by another executor (probably the extension) - bootstrap no longer needed"); return; }
       log("disconnected; retrying in 3s");
       setTimeout(connect, 3000);
     };
   }
   connect();
-  log("bootstrap installed — keep this tab open; re-paste after a page reload");
+  log("bootstrap installed - keep this tab open; re-paste after a page reload");
 })();`;
 }

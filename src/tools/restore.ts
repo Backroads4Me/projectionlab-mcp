@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
@@ -156,7 +157,7 @@ export function registerRestoreTools(
       title: "Restore Current Finances",
       description:
         "REPLACES the entire Current Finances state with the provided data. " +
-        "This is a FULL REPLACEMENT, not a patch — the entire current finances object is overwritten. " +
+        "This is a FULL REPLACEMENT, not a patch - the entire current finances object is overwritten. " +
         "When confirm is false (default), returns a dry-run preview WITHOUT modifying anything. " +
         "When confirm is true, auto-snapshots current state then applies the replacement. " +
         "IMPORTANT: Always call projectionlab_export_data first to have a backup.",
@@ -225,7 +226,7 @@ export function registerRestoreTools(
                   ...(detail ? { verificationDetail: detail } : {}),
                   message: verified
                     ? "Current Finances replaced and verified. Snapshot saved."
-                    : "Current Finances replaced. Snapshot saved. Verification inconclusive — check with projectionlab_get_current_finances.",
+                    : "Current Finances replaced. Snapshot saved. Verification inconclusive - check with projectionlab_get_current_finances.",
                 },
               ),
             },
@@ -244,7 +245,7 @@ export function registerRestoreTools(
       title: "Restore Plans",
       description:
         "REPLACES ALL plans with the provided array. " +
-        "This is a FULL REPLACEMENT — every existing plan is overwritten. " +
+        "This is a FULL REPLACEMENT - every existing plan is overwritten. " +
         "When confirm is false (default), returns a detailed dry-run diff showing plans " +
         "added/removed/modified with per-section event count changes. " +
         "When confirm is true, auto-snapshots current plans then applies the replacement. " +
@@ -299,6 +300,7 @@ export function registerRestoreTools(
           plans: exportData.plans,
         });
 
+        await assertPlansUnchanged(bridge, currentPlans);
         await bridge.restorePlans(plans);
 
         const { verified, detail } = await verify(bridge, "plans", plans);
@@ -315,7 +317,7 @@ export function registerRestoreTools(
                   planDiff: diff,
                   message: verified
                     ? "All plans replaced and verified. Snapshot saved."
-                    : "All plans replaced. Snapshot saved. Verification inconclusive — check with projectionlab_describe_schema.",
+                    : "All plans replaced. Snapshot saved. Verification inconclusive - check with projectionlab_describe_schema.",
                 },
               ),
             },

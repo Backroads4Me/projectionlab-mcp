@@ -233,7 +233,7 @@ export function registerUpdateAccountTool(
                   changes: renderedChanges,
                   warning:
                     Object.keys(result.changes).length === 0
-                      ? "All supplied values already match the account — nothing would change."
+                      ? "All supplied values already match the account - nothing would change."
                       : `This will patch ${Object.keys(result.changes).length} field(s). Set confirm=true to proceed.`,
                 }),
               },

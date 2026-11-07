@@ -3,7 +3,7 @@ import { config } from "./config.js";
 const REDACTED = "[REDACTED]";
 
 // Field names whose values are secrets regardless of content. Used only for
-// read-only artifacts (exports, resources) — NOT for snapshots, since redacting
+// read-only artifacts (exports, resources) - NOT for snapshots, since redacting
 // by name could corrupt a later restore.
 const SECRET_KEY_PATTERN =
   /^(.*[-_])?(api[-_]?key|plugin[-_]?api[-_]?key|token|auth[-_]?token|authorization|password|passwd|secret|client[-_]?secret)([-_].*)?$/i;

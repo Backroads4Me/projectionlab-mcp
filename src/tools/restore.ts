@@ -7,6 +7,7 @@ import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { log } from "../logger.js";
+import { containsSubset } from "../plans.js";
 
 type Obj = Record<string, unknown>;
 
@@ -27,6 +28,33 @@ function getExportSection(
   return section === "currentFinances" ? data.today : data[section];
 }
 
+/** Strip the `lastUpdated` stamp ProjectionLab sets when it saves a plan. */
+function withoutPlanStamps(plans: unknown): unknown {
+  if (!Array.isArray(plans)) return plans;
+  return plans.map((p) => {
+    if (!p || typeof p !== "object" || Array.isArray(p)) return p;
+    const { lastUpdated: _stamp, ...rest } = p as Obj;
+    return rest;
+  });
+}
+
+/**
+ * True when a fresh export shows the restored `expected` data for `section`.
+ * The app may add fields of its own and re-stamps each saved plan's
+ * `lastUpdated`, so this checks that every restored value is present rather
+ * than requiring byte-for-byte equality.
+ */
+export function restoredSectionMatches(
+  section: string,
+  expected: unknown,
+  actual: unknown,
+): boolean {
+  if (section === "plans") {
+    return containsSubset(withoutPlanStamps(expected), actual);
+  }
+  return containsSubset(expected, actual);
+}
+
 async function verify(
   bridge: Bridge,
   section: string,
@@ -45,7 +73,7 @@ async function verify(
         detail: `Section "${section}" not found after restore`,
       };
     }
-    if (JSON.stringify(actual) === JSON.stringify(expected)) {
+    if (restoredSectionMatches(section, expected, actual)) {
       return { verified: true };
     }
     return {
@@ -160,7 +188,7 @@ export function registerRestoreTools(
         "This is a FULL REPLACEMENT, not a patch - the entire current finances object is overwritten. " +
         "When confirm is false (default), returns a dry-run preview WITHOUT modifying anything. " +
         "When confirm is true, auto-snapshots current state then applies the replacement. " +
-        "IMPORTANT: Always call projectionlab_export_data first to have a backup.",
+        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
       inputSchema: {
         currentFinances: z
           .record(z.string(), z.unknown())
@@ -249,7 +277,7 @@ export function registerRestoreTools(
         "When confirm is false (default), returns a detailed dry-run diff showing plans " +
         "added/removed/modified with per-section event count changes. " +
         "When confirm is true, auto-snapshots current plans then applies the replacement. " +
-        "IMPORTANT: Always call projectionlab_export_data first to have a backup.",
+        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
       inputSchema: {
         plans: z
           .array(z.record(z.string(), z.unknown()))
@@ -339,7 +367,7 @@ export function registerRestoreTools(
         "This is a FULL REPLACEMENT, not a patch. " +
         "When confirm is false (default), returns a dry-run preview. " +
         "When confirm is true, auto-snapshots then applies the replacement. " +
-        "IMPORTANT: Always call projectionlab_export_data first.",
+        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
       inputSchema: {
         progress: z
           .unknown()
@@ -421,7 +449,7 @@ export function registerRestoreTools(
         "This is a FULL REPLACEMENT, not a patch. " +
         "When confirm is false (default), returns a dry-run preview. " +
         "When confirm is true, auto-snapshots then applies the replacement. " +
-        "IMPORTANT: Always call projectionlab_export_data first.",
+        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
       inputSchema: {
         settings: z
           .record(z.string(), z.unknown())

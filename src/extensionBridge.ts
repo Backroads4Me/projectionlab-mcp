@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { buildBootstrapSnippet } from "./bootstrap.js";
@@ -51,6 +51,15 @@ interface Pending {
   timer: NodeJS.Timeout;
 }
 
+/** Best-effort chmod; a file the process does not own keeps its mode. */
+function restrictMode(path: string, mode: number): void {
+  try {
+    chmodSync(path, mode);
+  } catch {
+    // Not the owner, or a filesystem without POSIX modes.
+  }
+}
+
 export class ExtensionBridge implements Bridge {
   private wss: WebSocketServer | null = null;
   private conn: WebSocket | null = null;
@@ -74,17 +83,25 @@ export class ExtensionBridge implements Bridge {
     this.listen();
   }
 
+  /** Reads or creates `~/.projectionlab-mcp/ws-token`, keeping the folder
+   * 0700 and the file 0600 even when they already existed with looser modes. */
   private loadOrCreateToken(): string {
-    const file = join(dirname(config.snapshotDir), "ws-token");
+    const dir = dirname(USER_ENV_FILE);
+    const file = join(dir, "ws-token");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    restrictMode(dir, 0o700);
     try {
       const existing = readFileSync(file, "utf8").trim();
-      if (existing) return existing;
+      if (existing) {
+        restrictMode(file, 0o600);
+        return existing;
+      }
     } catch {
       // No token yet.
     }
     const token = randomBytes(24).toString("base64url");
-    mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, token + "\n", { mode: 0o600 });
+    restrictMode(file, 0o600);
     log.info("extension", `Generated WebSocket token at ${file}`);
     return token;
   }
@@ -401,7 +418,11 @@ export class ExtensionBridge implements Bridge {
       }
       result.browser = true;
       try {
-        await this.request("waitForApi", [], config.apiReadyTimeoutMs + 5_000);
+        await this.request(
+          "waitForApi",
+          [config.apiReadyTimeoutMs],
+          config.apiReadyTimeoutMs + 5_000,
+        );
         result.pageLoaded = true;
         result.apiAvailable = true;
       } catch (err) {
@@ -435,15 +456,23 @@ export class ExtensionBridge implements Bridge {
   }
 
   async exportData(opts?: { fresh?: boolean }): Promise<ExportedData> {
-    if (
-      !opts?.fresh &&
-      this.exportCache &&
-      Date.now() - this.exportCache.at < config.exportCacheMs
-    ) {
-      log.debug("extension", "exportData served from cache");
-      return this.exportCache.data;
-    }
+    const cached = (): ExportedData | undefined => {
+      if (
+        !opts?.fresh &&
+        this.exportCache &&
+        Date.now() - this.exportCache.at < config.exportCacheMs
+      ) {
+        log.debug("extension", "exportData served from cache");
+        return this.exportCache.data;
+      }
+      return undefined;
+    };
+    const hit = cached();
+    if (hit) return hit;
     return this.serialize(async () => {
+      // A read queued behind another export reuses the result it just cached.
+      const queuedHit = cached();
+      if (queuedHit) return queuedHit;
       log.info("extension", "Calling exportData");
       const start = Date.now();
       const data = (await this.request("exportData", [

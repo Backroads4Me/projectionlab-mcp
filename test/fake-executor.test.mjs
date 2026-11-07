@@ -188,6 +188,38 @@ test("disconnect mid-request rejects pending calls", async () => {
   await exec.done;
 });
 
+test("concurrent cold reads share one exportData round trip", async () => {
+  let exportCalls = 0;
+  const exec = connectExecutor({
+    handler(frame) {
+      if (frame.method !== "exportData") return healthyHandler(frame);
+      exportCalls++;
+      // Answer slowly so the second read queues behind the first.
+      setTimeout(() => {
+        exec.ws.send(JSON.stringify({
+          type: "response",
+          id: frame.id,
+          ok: true,
+          result: { plans: [], today: {}, exportedAt: exportCalls },
+        }));
+      }, 100);
+      return undefined;
+    },
+  });
+  await exec.ready;
+  await bridge.restorePlans([]); // a write clears the export cache
+
+  const [a, b] = await Promise.all([bridge.exportData(), bridge.exportData()]);
+  assert.equal(exportCalls, 1);
+  assert.equal(a, b);
+
+  // A fresh read still goes to the tab.
+  await bridge.exportData({ fresh: true });
+  assert.equal(exportCalls, 2);
+  exec.ws.close();
+  await exec.done;
+});
+
 test("close() shuts down cleanly and further calls fail fast", async () => {
   await bridge.close();
   await assert.rejects(bridge.describePluginApi(), (err) => {

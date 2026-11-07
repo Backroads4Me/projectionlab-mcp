@@ -23,9 +23,6 @@ export interface SchemaDescription {
   topLevelKeys: Record<string, string>;
   accounts: AccountSummary[];
   plans: PlanSummary[];
-  incomeCount: number;
-  expenseCount: number;
-  milestoneCount: number;
   progressEntryCount: number;
 }
 
@@ -36,9 +33,6 @@ export interface FinancialSummary {
   accountsByType: Record<string, { count: number; total: number }>;
   planCount: number;
   plans: PlanSummary[];
-  incomeCount: number;
-  expenseCount: number;
-  milestoneCount: number;
 }
 
 export interface Snapshot {

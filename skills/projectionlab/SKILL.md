@@ -137,7 +137,7 @@ user decide; do not enable writes on your own.
 | Assumption, Monte Carlo or withdrawal setting | `projectionlab_update_plan_settings` | `section`, `changes` (path -> value) |
 | One income, expense, account, asset, milestone or priority event in a plan | `projectionlab_update_plan_event` | `section`, `eventIdentifier`, `pathChanges` |
 | One Current Finances account, debt or real asset | `projectionlab_update_account` | `accountId`, `pathChanges` |
-| A what-if copy of a plan | `projectionlab_clone_plan` | `newName` |
+| A what-if copy of a plan | `projectionlab_clone_plan` | `planIdentifier`, `newName` |
 | A whole plan section, rebuilt deliberately | `projectionlab_update_plan_section` | `section`, complete `sectionData` |
 | Undo a confirmed change | `projectionlab_rollback` | `snapshotId` |
 

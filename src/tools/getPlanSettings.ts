@@ -34,6 +34,8 @@ export function registerGetPlanSettingsTool(
       inputSchema: {
         planIdentifier: z
           .string()
+          .trim()
+          .min(1)
           .describe(
             "Plan name (case-insensitive, partial match) or exact plan ID",
           ),

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ProjectionLabError } from "./errors.js";
-import type { PlanObj } from "./plans.js";
-import { planVersion } from "./planVersion.js";
+import { containsSubset, type PlanObj } from "./plans.js";
 
 function maxNumber(values: unknown[]): number | undefined {
   const nums = values.filter((v): v is number => typeof v === "number");
@@ -89,6 +88,16 @@ export function buildPlanClone(
  * is still present and unsaved, and the clone exists exactly once under its
  * name. Returns the problems found; empty means verified.
  */
+/**
+ * True when `after` still holds every value of `before`. The `lastUpdated`
+ * stamp is left out: restorePlans saves every plan, so ProjectionLab may
+ * re-stamp originals that were not otherwise changed.
+ */
+function samePlanContent(before: PlanObj, after: PlanObj): boolean {
+  const { lastUpdated: _stamp, ...content } = before;
+  return containsSubset(content, after);
+}
+
 export function verifyPlanClone(
   before: unknown[],
   after: unknown[],
@@ -106,7 +115,7 @@ export function verifyPlanClone(
     const id = String((p as PlanObj).id ?? "");
     const post = afterById.get(id);
     if (!post) problems.push(`original plan ${id} is missing`);
-    else if (planVersion(post) !== planVersion(p)) {
+    else if (!samePlanContent(p as PlanObj, post)) {
       problems.push(`original plan ${id} was modified`);
     }
   }

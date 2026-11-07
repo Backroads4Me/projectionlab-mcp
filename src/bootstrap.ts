@@ -22,12 +22,12 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   window.__plmcpBootstrap = true;
   let stopped = false;
   const log = (m) => console.log("[plmcp]", m);
-  function waitForApi() {
+  function waitForApi(timeoutMs) {
     return new Promise((resolve, reject) => {
-      const deadline = Date.now() + 15000;
+      const deadline = Date.now() + timeoutMs;
       (function poll() {
         if (window.projectionlabPluginAPI) return resolve(window.projectionlabPluginAPI);
-        if (Date.now() >= deadline) { const e = new Error("Plugin API did not appear within 15s - log in and enable plugins"); e.code = "API_NOT_AVAILABLE"; return reject(e); }
+        if (Date.now() >= deadline) { const e = new Error("Plugin API did not appear within " + Math.round(timeoutMs / 1000) + "s - log in and enable plugins"); e.code = "API_NOT_AVAILABLE"; return reject(e); }
         setTimeout(poll, 500);
       })();
     });
@@ -47,7 +47,8 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   }
   async function handle(frame, ws) {
     try {
-      const api = await waitForApi();
+      const requested = frame.method === "waitForApi" ? Number((frame.params || [])[0]) : NaN;
+      const api = await waitForApi(Number.isFinite(requested) && requested > 0 ? requested : 15000);
       let result;
       if (frame.method === "waitForApi") result = true;
       else if (frame.method === "describeApi") result = describeApi(api);

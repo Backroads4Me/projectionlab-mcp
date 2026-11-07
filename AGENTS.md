@@ -50,6 +50,8 @@ checks on Node 20 for every pull request and push to `main`.
 - `src/instructions.ts`: server instructions sent at initialize, and the
   loader for the agent guide.
 - `src/plans.ts`: plan, section, and event lookup helpers shared by the tools.
+- `src/summary.ts`: the Current Finances summary shared by `get_summary` and
+  `projectionlab://summary`.
 - `src/planVersion.ts`: plan version tokens and the `PLAN_CONFLICT` checks.
 - `src/pathPatch.ts`: path-addressed value listing and patching for updates.
 - `src/redact.ts`: secret scrubbing for anything persisted or exported.

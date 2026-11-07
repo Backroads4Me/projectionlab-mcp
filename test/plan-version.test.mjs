@@ -79,7 +79,14 @@ test("verifyPlanClone checks originals are untouched and the copy exists once", 
   const clone = plan("c", 2);
   assert.deepEqual(verifyPlanClone(before, [...before, clone], clone), []);
 
-  const problems = verifyPlanClone(before, [plan("a", 1), plan("b", 9), clone, clone], clone);
+  // A re-stamped but otherwise unchanged original still verifies.
+  assert.deepEqual(verifyPlanClone(before, [plan("a", 5), plan("b", 6), clone], clone), []);
+
+  const problems = verifyPlanClone(
+    before,
+    [plan("a", 1), plan("b", 9, { name: "Changed" }), clone, clone],
+    clone,
+  );
   assert.ok(problems.includes("original plan b was modified"));
   assert.ok(problems.some((p) => p.includes("found it 2 times")));
 

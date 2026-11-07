@@ -44,9 +44,9 @@ You do **not** need to be a programmer. The recommended path is to let your assi
 
 Open your AI assistant and give it this instruction (copy-paste it as-is):
 
-> Please set up the ProjectionLab MCP server for me from
-> `https://github.com/Backroads4Me/projectionlab-mcp`.
-> Follow the "For your AI assistant" section of its README. I'm not technical, so
+> Please set up the ProjectionLab MCP server (the `projectionlab-mcp` npm
+> package) for me. Follow the "For your AI assistant" section of its README at
+> `https://github.com/Backroads4Me/projectionlab-mcp`. I'm not technical, so
 > walk me through anything you need from me (like my ProjectionLab Plugin API key
 > and loading the browser extension) one step at a time. Keep it in read-only
 > mode until I say otherwise.

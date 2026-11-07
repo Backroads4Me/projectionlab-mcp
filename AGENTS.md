@@ -80,7 +80,14 @@ npm run build   # then restart Claude Code / your MCP host
 
 ## Releasing
 
+One version, the `version` field of the root `package.json`, names a release
+of both the server and the extension. The server reports it to MCP hosts, the
+extension build writes it into both manifests and the zip names, and both
+executors send it in `hello`. Compatibility between the two is the wire
+`PROTOCOL_VERSION` (`src/types/wire.ts`), not the release version.
+
 Publishing is gated to CI on a GitHub Release: `.github/workflows/publish.yml`
 publishes to npm with provenance, and `.github/workflows/extension-release.yml`
-attaches the extension zips to the release. Do not publish, tag, or bump the version as part of routine
-work. That's an explicit, human-initiated step.
+attaches the extension zips to the release. Both fail unless the release tag is
+`v` followed by the `package.json` version. Do not publish, tag, or bump the
+version as part of routine work. That's an explicit, human-initiated step.

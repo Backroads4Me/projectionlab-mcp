@@ -1,4 +1,5 @@
 import { PROTOCOL_VERSION } from "./types/wire.js";
+import { VERSION } from "./version.js";
 
 /**
  * Tier 0 transport: a self-contained snippet the user pastes into the
@@ -9,7 +10,12 @@ import { PROTOCOL_VERSION } from "./types/wire.js";
  * extension/src/page-main.js.
  */
 export function buildBootstrapSnippet(port: number, token: string): string {
-  const cfg = JSON.stringify({ port, token, protocolVersion: PROTOCOL_VERSION });
+  const cfg = JSON.stringify({
+    port,
+    token,
+    protocolVersion: PROTOCOL_VERSION,
+    executor: `bootstrap/${VERSION}`,
+  });
   return `(() => {
   const cfg = ${cfg};
   if (window.__plmcpBootstrap) { console.log("[plmcp] bootstrap already running"); return; }
@@ -61,7 +67,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   function connect() {
     if (stopped) return;
     const ws = new WebSocket("ws://127.0.0.1:" + cfg.port);
-    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", token: cfg.token, protocolVersion: cfg.protocolVersion, executor: "bootstrap/0.1.0" }));
+    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", token: cfg.token, protocolVersion: cfg.protocolVersion, executor: cfg.executor }));
     ws.onmessage = (ev) => {
       let frame;
       try { frame = JSON.parse(ev.data); } catch { return; }

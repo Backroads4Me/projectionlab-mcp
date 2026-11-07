@@ -8,6 +8,7 @@ import { registerBootstrapTool } from "./tools/bootstrap.js";
 import { SnapshotManager } from "./snapshot.js";
 import { log } from "./logger.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
+import { VERSION } from "./version.js";
 
 // Tools
 import { registerConnectionTool } from "./tools/connection.js";
@@ -39,7 +40,7 @@ async function main() {
   const server = new McpServer(
     {
       name: "projectionlab",
-      version: "1.0.0",
+      version: VERSION,
     },
     {
       capabilities: {

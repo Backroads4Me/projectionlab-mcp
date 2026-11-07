@@ -16,6 +16,8 @@ In Chrome, Edge, or Brave, open the extensions page, enable Developer mode, choo
 
 Do not put the ProjectionLab Plugin API key in extension options. The MCP server owns it and sends it only as an in-memory request parameter.
 
+The extension has no version of its own: the build writes the version from the repository's root `package.json` into each built manifest, so a release's server and extension share one number.
+
 ## Loopback test
 
 ```sh

@@ -43,7 +43,7 @@ export interface HelloFrame {
   /** Shared secret; server closes the socket with code 4001 on mismatch. */
   token: string;
   protocolVersion: number;
-  /** e.g. "extension/0.1.0" or "bootstrap/0.1.0" */
+  /** "extension/<version>" or "bootstrap/<version>", the release version from package.json */
   executor: string;
 }
 

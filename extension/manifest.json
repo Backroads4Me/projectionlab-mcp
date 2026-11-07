@@ -1,7 +1,6 @@
 {
   "manifest_version": 3,
   "name": "ProjectionLab MCP Bridge",
-  "version": "0.1.0",
   "description": "Connects ProjectionLab's Plugin API to a local projectionlab-mcp server.",
   "homepage_url": "https://github.com/Backroads4Me/projectionlab-mcp",
   "permissions": ["tabs", "scripting", "storage", "alarms"],

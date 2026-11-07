@@ -67,7 +67,7 @@ async function connect(force = false) {
   ws.onopen = () => {
     if (myGeneration !== generation) return;
     void setStatus("connected");
-    ws.send(JSON.stringify({ type: "hello", token: config.token, protocolVersion: PROTOCOL_VERSION, executor: "extension/0.1.0" }));
+    ws.send(JSON.stringify({ type: "hello", token: config.token, protocolVersion: PROTOCOL_VERSION, executor: `extension/${browser.runtime.getManifest().version}` }));
   };
   ws.onmessage = (event) => {
     if (myGeneration !== generation) return;

@@ -24,7 +24,7 @@ the user, one step at a time, then check again.
 |---|---|---|
 | `API_KEY_MISSING` in `errors` | The server has no Plugin API key | See "Setting the API key" |
 | `browser: false`, port held by another instance | Another agent on this machine runs the server and has the extension | Wait for that agent to exit (this server takes over within about a minute), or give this one its own `PL_WS_PORT` and point the extension at it |
-| `browser: false` otherwise | No extension or snippet is connected | See "Connecting the browser" |
+| `browser: false` otherwise | No extension or snippet is connected | See "Connecting the browser"; on Firefox after a restart, only reload the add-on |
 | `pageLoaded: false` | No ProjectionLab tab is open | Ask the user to open https://app.projectionlab.com and log in |
 | `apiAvailable: false` | Plugins are off, or the user is logged out | ProjectionLab -> Account Settings -> Plugins -> enable plugins |
 | `apiKeyValid: false` | The key does not match the account | Ask the user to copy the key again from Account Settings -> Plugins |
@@ -54,10 +54,17 @@ Recommended, persistent: the **ProjectionLab MCP Bridge** browser extension.
    choose **Load unpacked**, and select the unzipped folder. Firefox 128+: open
    `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**,
    and select `manifest.json` (Firefox removes temporary add-ons on restart).
-3. Open the extension's options page. Enter the port (`8788` unless
-   `PL_WS_PORT` is set) and the token from `~/.projectionlab-mcp/ws-token`,
-   which the server creates on first start. Status advances to `authed`.
+3. Open the extension's options page (click its toolbar icon). Enter the port
+   (`8788` unless `PL_WS_PORT` is set) and the token from
+   `~/.projectionlab-mcp/ws-token`, which the server creates on first start.
+   The status changes to **Connected** and the toolbar icon shows a green
+   check.
 4. Open https://app.projectionlab.com and log in.
+
+A Firefox user whose setup worked before only needs step 2 again after
+restarting Firefox: load `manifest.json` from the same folder, and re-enter
+the port and token if the options page is empty. Do not repeat the rest of
+the setup.
 
 Quick, no install: call `projectionlab_get_bootstrap` and have the user paste
 the returned snippet into the ProjectionLab tab's developer console (F12 ->

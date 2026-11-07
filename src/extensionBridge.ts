@@ -39,7 +39,10 @@ const EXTENSION_HELP =
   "Install the ProjectionLab MCP Bridge extension (zips on the GitHub Releases page of " +
   "https://github.com/Backroads4Me/projectionlab-mcp), enter the token from " +
   "~/.projectionlab-mcp/ws-token on its options page, and open https://app.projectionlab.com. " +
-  "Or call projectionlab_get_bootstrap and paste the snippet into the ProjectionLab tab's console.";
+  "Or call projectionlab_get_bootstrap and paste the snippet into the ProjectionLab tab's console. " +
+  "If this worked before in Firefox, Firefox removed the temporary add-on when it restarted: load " +
+  "it again from about:debugging (This Firefox > Load Temporary Add-on > manifest.json in the same " +
+  "folder) and re-enter the port and token if its options page is empty.";
 const REQUEST_TIMEOUT_MS = 60_000;
 
 interface Pending {

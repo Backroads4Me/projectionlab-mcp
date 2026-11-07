@@ -24,7 +24,7 @@ The server opens a WebSocket listener on `127.0.0.1:<PL_WS_PORT>`. A browser-sid
 
 ### The browser extension
 
-Manifest V3, in `extension/`. A background service worker owns the WebSocket, reconnects with exponential backoff, and uses an `alarms` wake after suspension. For each request it locates a ProjectionLab tab (opening one in the background when configured to do so) and uses `scripting.executeScript` to run the operation directly in the page's **MAIN world**, where `window.projectionlabPluginAPI` is visible. The structured result returns through the scripting API without a content-script relay. Chrome/Edge/Brave use the service-worker manifest; Firefox 128 or newer uses an event-page manifest with MAIN-world scripting support.
+Manifest V3, in `extension/`. A background service worker owns the WebSocket, reconnects with exponential backoff, and uses an `alarms` wake after suspension. For each request it locates a ProjectionLab tab (opening one in the background when configured to do so) and uses `scripting.executeScript` to run the operation directly in the page's **MAIN world**, where `window.projectionlabPluginAPI` is visible. The structured result returns through the scripting API without a content-script relay. Chrome/Edge/Brave use the service-worker manifest; Firefox 140 or newer uses an event-page manifest with MAIN-world scripting support.
 
 ### The bootstrap snippet
 

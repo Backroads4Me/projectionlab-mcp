@@ -39,6 +39,33 @@ function isEventish(sectionData: unknown): boolean {
   );
 }
 
+/**
+ * Key events for diffing by label plus occurrence number, so events sharing a
+ * name each keep their own entry. Ids are not used because a replacement
+ * section may omit them. The display name shows the occurrence only when the
+ * label repeats.
+ */
+function keyEvents(
+  events: unknown[],
+): Map<string, { name: string; event: unknown }> {
+  const labelCounts = new Map<string, number>();
+  for (const e of events) {
+    const label = eventLabel(e);
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  const keyed = new Map<string, { name: string; event: unknown }>();
+  for (const e of events) {
+    const label = eventLabel(e);
+    const n = (seen.get(label) ?? 0) + 1;
+    seen.set(label, n);
+    const key = `${label}#${n}`;
+    const name = (labelCounts.get(label) ?? 0) > 1 ? `${label} #${n}` : label;
+    keyed.set(key, { name, event: e });
+  }
+  return keyed;
+}
+
 function diffSection(current: unknown, incoming: unknown): DiffResult {
   const currentEvents = getEvents(current);
   const newEvents = getEvents(incoming);
@@ -46,18 +73,16 @@ function diffSection(current: unknown, incoming: unknown): DiffResult {
     !isEventish(current) && !isEventish(incoming)
       ? diffFields(current, incoming)
       : undefined;
-  const currentByName = new Map(
-    currentEvents.map((e) => [eventLabel(e), e] as const),
-  );
-  const newByName = new Map(newEvents.map((e) => [eventLabel(e), e] as const));
+  const currentByName = keyEvents(currentEvents);
+  const newByName = keyEvents(newEvents);
 
   const added: string[] = [];
   const removed: string[] = [];
   const modified: { name: string; changes: Record<string, string> }[] = [];
   const unchanged: string[] = [];
 
-  for (const [name, event] of newByName) {
-    const existing = currentByName.get(name);
+  for (const [key, { name, event }] of newByName) {
+    const existing = currentByName.get(key)?.event;
     if (existing === undefined) {
       added.push(name);
       continue;
@@ -69,8 +94,8 @@ function diffSection(current: unknown, incoming: unknown): DiffResult {
       unchanged.push(name);
     }
   }
-  for (const name of currentByName.keys()) {
-    if (!newByName.has(name)) removed.push(name);
+  for (const [key, { name }] of currentByName) {
+    if (!newByName.has(key)) removed.push(name);
   }
 
   return {

@@ -9,6 +9,7 @@ import { redactSecrets } from "../redact.js";
 import {
   PLAN_SECTIONS,
   eventLabel,
+  findEventIndex,
   findPlan,
   getEvents,
   planNotFoundError,
@@ -105,17 +106,8 @@ export function registerGetPlanSectionTool(
 
         if (eventIdentifier !== undefined) {
           const events = getEvents(sectionData);
-          const lower = eventIdentifier.toLowerCase();
-          const match = events.find((e) => {
-            if (!e || typeof e !== "object") return false;
-            const obj = e as PlanObj;
-            return (
-              String(obj.id ?? "") === eventIdentifier ||
-              String(obj.name ?? "")
-                .toLowerCase()
-                .includes(lower)
-            );
-          });
+          const index = findEventIndex(events, eventIdentifier);
+          const match = index === -1 ? undefined : events[index];
           if (!match) {
             throw new ProjectionLabError(
               "INVALID_INPUT",

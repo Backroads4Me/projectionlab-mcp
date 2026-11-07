@@ -15,6 +15,7 @@ import { redactSecrets } from "../redact.js";
 import {
   diffFields,
   eventLabel,
+  findEventIndex,
   findPlanIndex,
   getEvents,
   planNotFoundError,
@@ -47,22 +48,6 @@ function assertMutableEventPath(path: string): void {
       "Use the ID only to select the event",
     );
   }
-}
-
-function findEventIndex(events: unknown[], identifier: string): number {
-  const lower = identifier.toLowerCase();
-  let exactName = -1;
-  let partial = -1;
-  for (let i = 0; i < events.length; i++) {
-    const e = events[i];
-    if (!e || typeof e !== "object") continue;
-    const obj = e as PlanObj;
-    if (String(obj.id ?? "") === identifier) return i;
-    const name = String(obj.name ?? "").toLowerCase();
-    if (name === lower && exactName === -1) exactName = i;
-    else if (name.includes(lower) && partial === -1) partial = i;
-  }
-  return exactName !== -1 ? exactName : partial;
 }
 
 /** Rebuild a section with one event replaced, preserving its container shape. */

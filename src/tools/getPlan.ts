@@ -4,6 +4,7 @@ import type { Bridge } from "../bridge.js";
 import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
+import { redactSecrets } from "../redact.js";
 import {
   findPlan,
   getEvents,
@@ -52,7 +53,7 @@ export function registerGetPlanTool(server: McpServer, bridge: Bridge) {
           sections: Object.keys(plan).sort(),
         };
 
-        const output = `Plan summary: ${toJson(header)}\n\nFull plan data:\n${toJson(plan)}`;
+        const output = `Plan summary: ${toJson(header)}\n\nFull plan data:\n${toJson(redactSecrets(plan, { byName: true }))}`;
 
         return {
           content: [

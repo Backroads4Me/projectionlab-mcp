@@ -97,6 +97,23 @@ function eventId(event: unknown): string | undefined {
   return undefined;
 }
 
+/** Index of the event matching `identifier`: exact id, then exact name (case-insensitive), then name substring. -1 if none. */
+export function findEventIndex(events: unknown[], identifier: string): number {
+  const lower = identifier.toLowerCase();
+  let exactName = -1;
+  let partial = -1;
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (!e || typeof e !== "object") continue;
+    const obj = e as PlanObj;
+    if (String(obj.id ?? "") === identifier) return i;
+    const name = String(obj.name ?? "").toLowerCase();
+    if (name === lower && exactName === -1) exactName = i;
+    else if (name.includes(lower) && partial === -1) partial = i;
+  }
+  return exactName !== -1 ? exactName : partial;
+}
+
 export function eventLabel(event: unknown): string {
   if (event && typeof event === "object") {
     const obj = event as PlanObj;

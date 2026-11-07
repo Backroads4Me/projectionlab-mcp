@@ -35,9 +35,8 @@ function optionalBoolean(name: string): boolean | undefined {
 }
 
 function expandHome(p: string): string {
-  if (p.startsWith("~")) {
-    return resolve(homedir(), p.slice(2));
-  }
+  if (p === "~") return homedir();
+  if (p.startsWith("~/")) return resolve(homedir(), p.slice(2));
   return resolve(p);
 }
 

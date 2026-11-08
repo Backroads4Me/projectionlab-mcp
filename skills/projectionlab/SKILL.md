@@ -294,8 +294,7 @@ at 60."
 
 1. `projectionlab_describe_schema` gives the plan's exact id, such as
    `plan_abc123`. Deletion accepts only that id, never a name, and refuses the
-   active plan (switch to another plan in ProjectionLab first) and the last
-   remaining plan.
+   last remaining plan.
 2. `projectionlab_delete_plan` with `{"planId": "plan_abc123"}` returns
    `dryRun: true`, the plan name and id, `planCount` such as `2 → 1`, and the
    event counts that go with the plan. Show the preview; wait for the go-ahead.

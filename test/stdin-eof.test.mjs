@@ -13,21 +13,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { freePort } from "./helpers/free-port.mjs";
 
 const SERVER_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "..", "dist", "index.js");
-
-// An OS-assigned free port, not a fixed one: fixed ports collide when test
-// runs overlap on this machine.
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address();
-      probe.close(() => resolve(port));
-    });
-  });
-}
 
 function canBind(port) {
   return new Promise((resolve) => {

@@ -29,9 +29,12 @@ section), and prefer section replacement over restore tools (full replacement).
 
 Do NOT rely on memorized tax figures (brackets, IRMAA tiers, ACA subsidy
 cliffs, 0% LTCG thresholds, standard deductions, contribution limits) - they
-change annually. Look up current-year figures with web search when available,
-state the tax year you are using, and flag any figure you could not verify.
-Account for the user's state of residence rather than assuming one.
+change annually. ProjectionLab models with the current-year figures, and the
+user can read them in the app (Tax Analytics): ask the user what the app shows
+instead of supplying your own. Use web search only to explain a figure the user
+asks about, not to recompute what ProjectionLab already models. State the tax
+year you are using, flag anything you could not verify, and account for the
+user's state of residence rather than assuming one.
 
 ## ProjectionLab Data Model
 

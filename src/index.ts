@@ -93,13 +93,22 @@ async function main() {
   log.info("server", `Snapshot dir: ${config.snapshotDir}`);
 
   // Graceful shutdown
+  let shuttingDown = false;
   const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     log.info("server", "Shutting down...");
     await bridge.close();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+  // stdin EOF means the MCP host is gone; the SDK's stdio transport does not
+  // act on it, so without this the process would linger and keep holding the
+  // WebSocket port. Exiting releases it for the next session's server.
+  process.stdin.on("end", () => {
+    void shutdown();
+  });
 
   // Connect stdio transport
   const transport = new StdioServerTransport();

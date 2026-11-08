@@ -50,9 +50,9 @@ describe the current release, 4.6.0
     remotely). Chance of Success runs many trials over historical market periods
     by default, with randomized (Monte Carlo) sampling as an option
     (https://projectionlab.com/help/plan-vs-chance-of-success).
-  - **priorities.events[]**: savings contribution ordering. A flow set to
-    "Always Fund" is funded even when there is no surplus income, by drawing
-    down other accounts (https://projectionlab.com/help/mandatory-goals).
+  - **priorities.events[]**: savings contribution ordering. An "Always Fund"
+    flow is paid even when income falls short: ProjectionLab sells from other
+    accounts to cover it (https://projectionlab.com/help/mandatory-goals).
 - **today / currentFinances**: actual account balances; \`accountId\` links these
   to plan \`accounts.events[]\`.
 - Chance of Success trials and projection *math* run only in the ProjectionLab
@@ -166,14 +166,12 @@ financial terms: https://projectionlab.com/financial-terms
   Guyton-Klinger) that starts at a chosen year or milestone. While it is on,
   its rule replaces most other plan events, so most plans leave it off.
 - **Flows, the cash flow priorities** [priorities]
-  https://projectionlab.com/help/cash-flow-priorities - Flows decide where
-  income goes: savings goals, contributions, extra debt payments, transfers.
-  They are handled in the order they were added, so earlier flows are funded
-  first. Version 4.6.0 renamed "Priorities" to "Flows".
+  https://projectionlab.com/help/cash-flow-priorities - Flows (called
+  "Priorities" before version 4.6.0) send income to savings goals,
+  contributions, extra debt payments and transfers, earliest-added first.
 - **Mandatory goals ("Always Fund")** [priorities]
-  https://projectionlab.com/help/mandatory-goals - a flow set to Always Fund is
-  funded even when there is no surplus income, by drawing down other accounts.
-  It also outranks the other flows.
+  https://projectionlab.com/help/mandatory-goals - an Always Fund flow is paid
+  ahead of the other flows, selling from other accounts when income falls short.
 - **Milestones** [milestones]
   https://projectionlab.com/help/manage-milestones - lifecycle markers
   triggered by age, date, balance, or a combination of criteria; other events

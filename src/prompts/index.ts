@@ -13,7 +13,7 @@ Use these tools in order of preference (smallest first):
 2. projectionlab_describe_schema - plan names, account IDs (small)
 3. projectionlab_get_summary - Current Finances inventory only; never treat its
    net worth as a projected outcome (small)
-4. projectionlab_get_plan_settings - assumptions, tax, Monte Carlo, and withdrawal configuration as discrete paths (small)
+4. projectionlab_get_plan_settings - assumptions, tax, Chance of Success (montecarlo), and withdrawal configuration as discrete paths (small)
 5. projectionlab_get_plan_section - one section; supports eventIdentifier and dot-path filters for single events/fields (smallest targeted read)
 6. projectionlab_get_current_finances - account balances (medium)
 7. projectionlab_get_plan - full single plan (large)

@@ -1,6 +1,6 @@
-# Privacy Policy: ProjectionLab MCP Bridge
+# Privacy Policy: MCP Bridge for ProjectionLab
 
-This policy covers the **ProjectionLab MCP Bridge** browser extension
+This policy covers the **MCP Bridge for ProjectionLab** browser extension
 (Chrome Web Store and Firefox Add-ons) and the `projectionlab-mcp` server it
 connects to. Both are open source at
 <https://github.com/Backroads4Me/projectionlab-mcp>. The project is

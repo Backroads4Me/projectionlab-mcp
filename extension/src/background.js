@@ -13,7 +13,7 @@ let generation = 0;
 let authBlocked = false;
 const inFlight = new Map();
 
-const EXTENSION_NAME = "ProjectionLab MCP Bridge";
+const EXTENSION_NAME = "MCP Bridge for ProjectionLab";
 // Toolbar label per connection status: authed = token accepted by the server,
 // connected = socket open and awaiting the server's helloAck. Only authed
 // shows a badge: the server runs only while an MCP host does, so being

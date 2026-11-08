@@ -1,4 +1,4 @@
-# ProjectionLab MCP Bridge extension
+# MCP Bridge for ProjectionLab extension
 
 This unpacked Manifest V3 extension connects a normal ProjectionLab browser tab to the localhost WebSocket listener provided by `projectionlab-mcp`. It never stores or logs a ProjectionLab API key or exported financial data.
 

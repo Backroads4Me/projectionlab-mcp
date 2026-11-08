@@ -2,7 +2,7 @@
 name: projectionlab
 description: Reads and edits a user's ProjectionLab retirement and financial plan through the projectionlab MCP server - plans, Current Finances, assumptions, Monte Carlo and withdrawal-strategy settings - with previewed, snapshotted, reversible changes. Use when the user asks about their ProjectionLab plan, retirement readiness, FIRE or decumulation, Roth conversions, comparing scenarios, or changing plan values, or when projectionlab tools fail to connect and the user needs setup help.
 license: MIT
-compatibility: Requires the projectionlab MCP server (npx -y projectionlab-mcp, Node.js 20+) and a ProjectionLab tab open in Chrome, Edge, Brave or Firefox 140+, connected through the ProjectionLab MCP Bridge extension or the bootstrap snippet.
+compatibility: Requires the projectionlab MCP server (npx -y projectionlab-mcp, Node.js 20+) and a ProjectionLab tab open in Chrome, Edge, Brave or Firefox 140+, connected through the MCP Bridge for ProjectionLab extension or the bootstrap snippet.
 ---
 
 # ProjectionLab MCP
@@ -50,7 +50,7 @@ If you write the file for the user, do not repeat the value back.
 
 ### Connecting the browser
 
-Recommended, persistent: the **ProjectionLab MCP Bridge** browser extension.
+Recommended, persistent: the **MCP Bridge for ProjectionLab** browser extension.
 
 1. Download the zip for the user's browser (`chromium` or `firefox`) from
    https://github.com/Backroads4Me/projectionlab-mcp/releases/latest and unzip

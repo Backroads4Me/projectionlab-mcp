@@ -36,7 +36,7 @@ const HELLO_TIMEOUT_MS = 5_000;
 /** How often to retry the WebSocket port while another instance holds it. */
 const PORT_RETRY_MS = 3_000;
 const EXTENSION_HELP =
-  "Install the ProjectionLab MCP Bridge extension (zips on the GitHub Releases page of " +
+  "Install the MCP Bridge for ProjectionLab extension (zips on the GitHub Releases page of " +
   "https://github.com/Backroads4Me/projectionlab-mcp), enter the token from " +
   "~/.projectionlab-mcp/ws-token on its options page, and open https://app.projectionlab.com. " +
   "Or call projectionlab_get_bootstrap and paste the snippet into the ProjectionLab tab's console. " +

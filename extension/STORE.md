@@ -1,4 +1,4 @@
-# Store listing: ProjectionLab MCP Bridge
+# Store listing: MCP Bridge for ProjectionLab
 
 This file is the material for listing the extension on the Chrome Web Store
 (CWS) and Firefox Add-ons (AMO): listing text, permission justifications,
@@ -17,7 +17,7 @@ Policy references, as of November 2026:
 
 ## Listing text
 
-**Name:** ProjectionLab MCP Bridge
+**Name:** MCP Bridge for ProjectionLab
 
 **Short description** (manifest `description`; CWS shows it as the summary,
 132-character limit; AMO summary, 250-character limit):
@@ -28,7 +28,7 @@ Policy references, as of November 2026:
 
 > Let your AI assistant read and safely edit your ProjectionLab retirement plan.
 >
-> ProjectionLab MCP Bridge connects the ProjectionLab tab you are signed in to
+> MCP Bridge for ProjectionLab connects the ProjectionLab tab you are signed in to
 > with projectionlab-mcp, an open-source Model Context Protocol (MCP) server
 > that runs on your own computer. Any MCP-compatible assistant, such as Claude
 > Desktop, Claude Code, or another MCP host, can then use ProjectionLab's

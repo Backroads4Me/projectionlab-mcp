@@ -132,6 +132,22 @@ write's before/after values confirm that an input changed, not what the change
 did to the plan. To judge a change's impact, ask the user to recalculate the
 plan and run Chance of Success in ProjectionLab, and compare those results.
 
+### The data is a backup export, not the app's logic
+
+The tools read the same data ProjectionLab saves for backups. It holds stored
+values; it is not an API, and it does not contain the application logic.
+
+- A field being present does not mean the app uses it. Some fields are left
+  over from older versions; others matter only when another setting is on.
+- Defaults, how settings interact, tax rules, and how milestones resolve live in
+  the app, not in the data. Do not infer what a field does from its name or its
+  value alone.
+- When a write reports that a value was stored, that proves the value was
+  stored. It does not prove the app reads it or acts on it.
+
+When a change's effect matters, the user has to look at the result in the
+ProjectionLab UI. The stored data cannot show it.
+
 ## Changing the plan
 
 Change the plan only when the user explicitly asks for that change.

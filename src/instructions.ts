@@ -29,4 +29,5 @@ export const SERVER_INSTRUCTIONS = `ProjectionLab MCP: reads and edits the user'
 - Change the plan only when the user explicitly asks.
 - Plan figures are private: never send them outside the conversation. Never reveal PL_API_KEY or the WebSocket token.
 - The server reads plan definitions; projections and Chance of Success run only in the ProjectionLab UI.
+- The tools read ProjectionLab's backup export: a field being present does not mean the app uses it, and a write that stored a value does not prove the app acts on it. Check a change's effect in the ProjectionLab UI.
 - Provide information and education, not personalized financial advice.`;

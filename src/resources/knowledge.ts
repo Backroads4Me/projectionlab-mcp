@@ -73,10 +73,10 @@ tax-deferred and taxable.
   far more damage than the same returns later. Common mitigations: a cash/bond
   bridge, and a **rising-equity glidepath** ("bond tent" - most bonds at
   retirement, equity rising after).
-- **Asset location**: which account holds which asset. Bonds fit well in
-  tax-deferred accounts, high-growth equity in tax-free (Roth, HSA) accounts,
-  and tax-efficient equity and cash in taxable. This changes after-tax return
-  without changing the overall allocation.
+- **Asset location**: which account holds which asset. A common convention
+  places bonds in tax-deferred accounts, high-growth equity in tax-free (Roth,
+  HSA) accounts, and tax-efficient equity and cash in taxable. Location changes
+  after-tax return without changing the overall allocation.
 - **Roth conversion**: moving money from a tax-deferred account into a tax-free
   one. The converted amount is taxed as ordinary income in the year of the
   conversion. A "Roth conversion ladder" converts in low-income years (often
@@ -89,7 +89,8 @@ tax-deferred and taxable.
 
 Only the shape of each rule is here. ProjectionLab computes with the
 current-year figures, and the user reads them in Tax Analytics. MAGI means
-modified adjusted gross income: adjusted gross income plus tax-exempt interest.
+modified adjusted gross income; each program (ACA, IRMAA, NIIT) defines it
+slightly differently.
 
 - **Federal income tax brackets**: ordinary income is taxed in bands. Income
   that fills an unused low band is cheap; income pushed into the next band

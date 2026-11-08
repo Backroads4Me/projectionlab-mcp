@@ -118,7 +118,8 @@ question.
   app exposes. Use it before concluding that a capability does not exist.
 
 Resources: `projectionlab://knowledge` (data model, FIRE and decumulation
-concepts, tax landmarks for Roth conversions, an analysis checklist),
+concepts, retirement tax concepts without yearly figures, an analysis
+checklist),
 `projectionlab://summary` and `projectionlab://plan-data` (full export).
 Prompts: `analyze-plan` and `optimize-tax` (`planName`), `compare-plans`
 (`plan1`, `plan2`), `review-assumptions` (`planName`).

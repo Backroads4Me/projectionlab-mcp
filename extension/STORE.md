@@ -51,6 +51,9 @@ Policy references, as of November 2026:
 > - Your ProjectionLab Plugin API key stays in the server's configuration. The
 >   extension never stores it.
 >
+> Quick setup: ask your AI assistant to "install projectionlab-mcp from
+> github.com/Backroads4Me/projectionlab-mcp" and it can walk you through the rest.
+>
 > Requirements: a ProjectionLab account with Plugin API access, Node.js 20 or
 > newer, and an MCP-compatible AI assistant. Setup guide:
 > https://github.com/Backroads4Me/projectionlab-mcp#readme

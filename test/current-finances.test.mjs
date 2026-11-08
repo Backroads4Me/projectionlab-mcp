@@ -18,6 +18,9 @@ const { registerGetCurrentFinancesTool } = await import(
 const { registerUpdateAccountTool } = await import(
   "../dist/tools/updateAccount.js"
 );
+const { currentFinancesProblems } = await import(
+  "../dist/currentFinances.js"
+);
 const { config } = await import("../dist/config.js");
 
 function fakeServer() {
@@ -240,4 +243,111 @@ test("Current Finances updates respect PL_READ_ONLY before reading", async () =>
   } finally {
     config.readOnly = false;
   }
+});
+
+// --- post-write comparison of the two reads ---
+
+const finances = (balance, extra = {}) => ({
+  investmentAccounts: [
+    { id: "i1", name: "Brokerage", balance, costBasis: 90000, ...extra },
+  ],
+  savingsAccounts: [{ id: "s1", name: "Emergency", balance: 25000 }],
+  debts: [{ id: "d1", name: "Car loan", balance: -1200 }],
+  assets: [{ id: "a1", name: "House", amount: 400000 }],
+});
+
+test("currentFinancesProblems verifies an untouched read", () => {
+  assert.deepEqual(currentFinancesProblems(finances(100000), finances(100000)), []);
+});
+
+test("currentFinancesProblems reports a money field that moved", () => {
+  const problems = currentFinancesProblems(
+    finances(100000),
+    finances(100000, { costBasis: 42 }),
+  );
+  assert.deepEqual(problems, [
+    "Current Finances investmentAccounts i1 costBasis changed from 90000 to 42",
+  ]);
+
+  const balance = currentFinancesProblems(finances(100000), {
+    ...finances(100000),
+    savingsAccounts: [{ id: "s1", name: "Emergency", balance: 1 }],
+  });
+  assert.deepEqual(balance, [
+    "Current Finances savingsAccounts s1 balance changed from 25000 to 1",
+  ]);
+});
+
+test("currentFinancesProblems reports accounts the re-read dropped or added", () => {
+  const after = finances(100000);
+  after.debts = [];
+  assert.deepEqual(currentFinancesProblems(finances(100000), after), [
+    "Current Finances debts d1 is missing",
+  ]);
+
+  const added = finances(100000);
+  added.savingsAccounts.push({ id: "s2", name: "Sinking fund", balance: 500 });
+  assert.deepEqual(currentFinancesProblems(finances(100000), added), [
+    "Current Finances savingsAccounts s2 was added",
+  ]);
+});
+
+test("currentFinancesProblems tolerates reordering, extra fields and id-less accounts", () => {
+  const before = {
+    savingsAccounts: [
+      { id: "s1", balance: 1 },
+      { name: "Cash jar no id", balance: 20 },
+    ],
+    debts: [{ id: "d1", balance: -5 }],
+  };
+  const after = {
+    debts: [{ id: "d1", balance: -5, note: "app-added" }],
+    savingsAccounts: [
+      { name: "Cash jar no id", balance: 999 },
+      { id: "s1", balance: 1 },
+    ],
+  };
+  assert.deepEqual(currentFinancesProblems(before, after), []);
+});
+
+test("currentFinancesProblems compares only fields the first read carried", () => {
+  const before = { assets: [{ id: "a1", name: "House" }] };
+  assert.deepEqual(currentFinancesProblems(before, { assets: [{ id: "a1", name: "House", amount: 400000 }] }), []);
+  assert.deepEqual(currentFinancesProblems(before, { assets: [{ id: "a1", name: "House", amount: null }] }), []);
+
+  // A null on either side is the same as the field being absent.
+  assert.deepEqual(
+    currentFinancesProblems(
+      { assets: [{ id: "a1", amount: null }] },
+      { assets: [{ id: "a1" }] },
+    ),
+    [],
+  );
+  const lost = currentFinancesProblems(
+    { assets: [{ id: "a1", amount: 400000 }] },
+    { assets: [{ id: "a1", amount: null }] },
+  );
+  assert.deepEqual(lost, ["Current Finances assets a1 lost its amount"]);
+});
+
+test("currentFinancesProblems has nothing to compare without a baseline", () => {
+  const after = finances(100000);
+  assert.deepEqual(currentFinancesProblems(undefined, after), []);
+  assert.deepEqual(currentFinancesProblems(null, after), []);
+  assert.deepEqual(currentFinancesProblems([], after), []);
+  assert.deepEqual(currentFinancesProblems({}, after), []);
+  // A baseline of accounts without ids is not a baseline.
+  assert.deepEqual(
+    currentFinancesProblems({ savingsAccounts: [{ name: "Cash", balance: 5 }] }, undefined),
+    [],
+  );
+});
+
+test("currentFinancesProblems reports a baseline the re-read lost entirely", () => {
+  assert.deepEqual(currentFinancesProblems(finances(100000), undefined), [
+    "Current Finances is missing from the re-read",
+  ]);
+  assert.deepEqual(currentFinancesProblems(finances(100000), []), [
+    "Current Finances is missing from the re-read",
+  ]);
 });

@@ -93,3 +93,94 @@ test("verifyPlanClone checks originals are untouched and the copy exists once", 
   const dropped = verifyPlanClone(before, [plan("a", 1), clone], clone);
   assert.ok(dropped.includes("original plan b is missing"));
 });
+
+test("verifyPlanClone keeps each original on its own simKey", () => {
+  const before = [plan("a", 1, { simKey: 3 }), plan("b", 1, { simKey: 4 })];
+  const clone = plan("c", 2, { simKey: 5 });
+  const kept = [plan("a", 9, { simKey: 3 }), plan("b", 8, { simKey: 4 })];
+  assert.deepEqual(verifyPlanClone(before, [...kept, clone], clone), []);
+
+  // One cause gives one problem, which names the simKey it moved to.
+  const moved = verifyPlanClone(
+    before,
+    [plan("a", 9, { simKey: 6 }), plan("b", 8, { simKey: 4 }), clone],
+    clone,
+  );
+  assert.deepEqual(moved.filter((p) => p.startsWith("original plan a")), [
+    "original plan a changed simKey from 3 to 6",
+  ]);
+
+  const lost = verifyPlanClone(
+    before,
+    [plan("a", 9), plan("b", 8, { simKey: 4 }), clone],
+    clone,
+  );
+  assert.deepEqual(lost.filter((p) => p.startsWith("original plan a")), [
+    "original plan a lost its simKey",
+  ]);
+
+  // A simKey on a plan that never had one is not compared.
+  const keyless = [plan("a", 1), plan("b", 1)];
+  assert.deepEqual(
+    verifyPlanClone(
+      keyless,
+      [plan("a", 9, { simKey: 3 }), plan("b", 8, { simKey: 4 }), clone],
+      clone,
+    ),
+    [],
+  );
+});
+
+test("verifyPlanClone tolerates a newer stamp and reports a lost or backwards one", () => {
+  const body = () => ({ income: { events: [] } });
+  const before = [plan("a", 500, body())];
+  const clone = plan("c", 900);
+
+  // An unchanged stamp and a newer one both verify: restorePlans saves every
+  // plan, and ProjectionLab may re-stamp what it saved.
+  assert.deepEqual(
+    verifyPlanClone(before, [plan("a", 500, body()), clone], clone),
+    [],
+  );
+  assert.deepEqual(
+    verifyPlanClone(before, [plan("a", 600, body()), clone], clone),
+    [],
+  );
+
+  const backwards = verifyPlanClone(
+    before,
+    [plan("a", 400, body()), clone],
+    clone,
+  );
+  assert.deepEqual(backwards.filter((p) => p.startsWith("original plan a")), [
+    "original plan a lastUpdated moved backwards from 500 to 400",
+  ]);
+
+  // A plan without a stamp cannot be version-checked by a later write.
+  const lostStamp = verifyPlanClone(
+    before,
+    [{ id: "a", name: "a", ...body() }, clone],
+    clone,
+  );
+  assert.deepEqual(lostStamp.filter((p) => p.startsWith("original plan a")), [
+    "original plan a lost its lastUpdated",
+  ]);
+
+  // Nothing to order when the stamp is absent before, or not a number.
+  assert.deepEqual(
+    verifyPlanClone(
+      [{ id: "a", name: "a", ...body() }],
+      [plan("a", 500, body()), clone],
+      clone,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    verifyPlanClone(
+      [plan("a", "500", body())],
+      [plan("a", "400", body()), clone],
+      clone,
+    ),
+    [],
+  );
+});

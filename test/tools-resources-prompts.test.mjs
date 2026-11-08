@@ -86,8 +86,8 @@ function fakeBridge(initial) {
   return bridge;
 }
 
-function setup(register) {
-  const bridge = fakeBridge({ today: {}, plans: samplePlans() });
+function setup(register, initial = { today: {}, plans: samplePlans() }) {
+  const bridge = fakeBridge(initial);
   const snapshots = new SnapshotManager();
   const server = fakeServer();
   register(server, bridge, snapshots);
@@ -253,6 +253,74 @@ test("clone_plan refuses when a plan is saved before the write", async () => {
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /PLAN_CONFLICT/);
   assert.equal(bridge.writes, 0);
+});
+
+const cloneArgs = { planIdentifier: "Retire", newName: "Retire at 57", confirm: true };
+
+test("clone_plan verifies originals the app re-stamped and left otherwise intact", async () => {
+  // The fake bridge re-stamps every plan on restore, as ProjectionLab may.
+  const plans = samplePlans().map((p, i) => ({ ...p, simKey: i + 1 }));
+  const { server } = setup(registerClonePlanTool, {
+    today: { savingsAccounts: [{ id: "s1", name: "Emergency", balance: 25000 }] },
+    plans,
+  });
+  const out = parse(
+    await server.tools.get("projectionlab_clone_plan").handler(cloneArgs),
+  );
+  assert.equal(out.verified, true, JSON.stringify(out.verificationProblems));
+});
+
+test("clone_plan reports a Current Finances balance the write moved", async () => {
+  const { bridge, server } = setup(registerClonePlanTool, {
+    today: { savingsAccounts: [{ id: "s1", name: "Emergency", balance: 25000 }] },
+    plans: samplePlans(),
+  });
+  const restorePlans = bridge.restorePlans;
+  bridge.restorePlans = async (plans) => {
+    await restorePlans(plans);
+    bridge.state.today.savingsAccounts[0].balance = 1;
+  };
+  const out = parse(
+    await server.tools.get("projectionlab_clone_plan").handler(cloneArgs),
+  );
+  assert.equal(out.success, true);
+  assert.equal(out.verified, false);
+  assert.ok(
+    out.verificationProblems.some((p) =>
+      p.includes(
+        "Current Finances savingsAccounts s1 balance changed from 25000 to 1",
+      ),
+    ),
+    JSON.stringify(out.verificationProblems),
+  );
+  // The snapshot holds plans only, so a Current Finances problem must not
+  // point the agent at a rollback that restores nothing.
+  assert.match(out.message, /may be an edit made in ProjectionLab/);
+  assert.doesNotMatch(out.message, /projectionlab_rollback/);
+});
+
+test("clone_plan reports a pre-existing plan the write moved off its simKey", async () => {
+  const plans = samplePlans().map((p, i) => ({ ...p, simKey: i + 1 }));
+  const { bridge, server } = setup(registerClonePlanTool, {
+    today: {},
+    plans,
+  });
+  const restorePlans = bridge.restorePlans;
+  bridge.restorePlans = async (incoming) => {
+    await restorePlans(incoming);
+    bridge.state.plans[0].simKey = 99;
+  };
+  const out = parse(
+    await server.tools.get("projectionlab_clone_plan").handler(cloneArgs),
+  );
+  assert.equal(out.verified, false);
+  assert.ok(
+    out.verificationProblems.some((p) =>
+      p.includes("original plan p1 changed simKey from 1 to 99"),
+    ),
+    JSON.stringify(out.verificationProblems),
+  );
+  assert.match(out.message, /projectionlab_rollback/);
 });
 
 // --- resources ---

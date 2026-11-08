@@ -13,7 +13,7 @@
   "background": { "scripts": ["background.js"] },
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "browser_specific_settings": { "gecko": {
-    "id": "projectionlab-mcp-bridge@localhost",
+    "id": "projectionlab-mcp-bridge@backroads4me.github.io",
     "strict_min_version": "140.0",
     "data_collection_permissions": { "required": ["financialAndPaymentInfo", "websiteContent"] }
   } }

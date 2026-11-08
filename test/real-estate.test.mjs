@@ -56,7 +56,13 @@ function houseAsset() {
 }
 
 function vehicleAsset() {
-  return { id: "car-1", name: "Truck", type: "vehicle", amount: 20000, balance: 8000 };
+  return {
+    id: "car-1",
+    name: "Truck",
+    type: "vehicle",
+    amount: 20000,
+    balance: 8000,
+  };
 }
 
 function baseState(plans) {
@@ -82,110 +88,106 @@ function register(state) {
   return server.handlers.get("projectionlab_get_current_finances");
 }
 
-test("real-estate asset gets a labeled block sourced from the today record", async () => {
+function houseIn(output) {
+  return output.assets.find((a) => a.id === "house-1");
+}
+
+test("real-estate asset gets a labeled block from the Current Finances record", async () => {
   const handler = register(baseState([]));
   const output = resultJson(await handler({}));
-  const house = output.assets.find((a) => a.id === "house-1");
+  const house = houseIn(output);
 
-  assert.equal(house.realEstate.source, "today-record");
-  assert.equal(house.realEstate.marketValue, 500000);
-  assert.equal(house.realEstate.loanBalance, 300000);
-  assert.equal(house.realEstate.netEquity, 200000);
-  assert.equal(house.realEstate.paymentMethod, "financed");
-  assert.equal(house.realEstate.classification, "primaryResidence");
-  assert.deepEqual(house.realEstate.loan, {
-    interestType: "fixed",
-    monthlyPayment: 2500,
-    compounding: "monthly",
-    apr: 6.5,
-  });
-  assert.deepEqual(house.realEstate.propertyTax, {
-    rate: 0.011,
-    rateType: "percentOfValue",
-  });
-  assert.deepEqual(house.realEstate.insurance, { rate: 0.003 });
-  assert.deepEqual(house.realEstate.maintenance, { rate: 0.01 });
-  assert.deepEqual(house.realEstate.monthlyHOA, {
-    amount: 120,
-    type: "fixed",
-  });
-  assert.deepEqual(house.realEstate.appreciation, {
-    rate: 0.03,
-    type: "percent",
+  assert.deepEqual(house.realEstate, {
+    loanBalance: 300000,
+    marketValue: 500000,
+    netEquity: 200000,
+    paymentMethod: "financed",
+    classification: "primaryResidence",
+    loan: {
+      interestType: "fixed",
+      monthlyPayment: 2500,
+      compounding: "monthly",
+      apr: 6.5,
+    },
+    propertyTax: { rate: 0.011, rateType: "percentOfValue" },
+    insurance: { rate: 0.003 },
+    maintenance: { rate: 0.01 },
+    monthlyHOA: { amount: 120, type: "fixed" },
+    appreciation: { rate: 0.03, type: "percent" },
   });
 
-  // Raw stored fields stay alongside the block.
+  // Raw stored fields stay alongside the block, and secrets stay redacted.
   assert.equal(house.balance, 300000);
   assert.equal(house.amount, 500000);
   assert.equal(house.integration.authToken, "[REDACTED]");
 
-  // Non-real-estate assets are untouched.
+  // Non-real-estate assets and other collections are untouched.
   const car = output.assets.find((a) => a.id === "car-1");
   assert.equal("realEstate" in car, false);
   assert.equal(output.debts[0].id, "debt-1");
 });
 
-test("active plan asset event supplies the values and lists overridden fields", async () => {
+test("plan asset events never feed the block", async () => {
   const state = baseState([
-    { id: "plan-a", name: "Baseline" },
     {
-      id: "plan-b",
+      id: "plan-a",
       name: "Active",
       active: true,
       assets: {
         events: [
           {
             assetId: "house-1",
-            amount: 550000,
+            amount: 800000,
             paymentMethod: "financed",
-            _meta: { overriddenFields: { amount: true, monthlyHOA: false } },
+            interestRate: 3.1,
+            _meta: { overriddenFields: { amount: true } },
           },
-          { assetId: "unrelated", amount: 1 },
         ],
       },
     },
   ]);
   const handler = register(state);
-  const output = resultJson(await handler({}));
-  const house = output.assets.find((a) => a.id === "house-1");
+  const block = houseIn(resultJson(await handler({}))).realEstate;
 
-  assert.equal(house.realEstate.source, "active-plan-event");
-  assert.equal(house.realEstate.marketValue, 550000);
-  // Loan balance always comes from the Current Finances master record.
-  assert.equal(house.realEstate.loanBalance, 300000);
-  assert.equal(house.realEstate.netEquity, 250000);
-  assert.deepEqual(house.realEstate.overriddenFields, ["amount"]);
-  // Fields the event does not carry are not invented from the today record.
-  assert.equal("propertyTax" in house.realEstate, false);
+  assert.equal(block.marketValue, 500000);
+  assert.equal(block.netEquity, 200000);
+  assert.equal(block.loan.apr, 6.5);
+  assert.equal("overriddenFields" in block, false);
 });
 
-test("plan lookup falls back to the first plan when none is active", async () => {
-  const state = baseState([
-    {
-      id: "plan-only",
-      name: "Only",
-      assets: { events: [{ assetId: "house-1", amount: 600000 }] },
-    },
-  ]);
+test("absent loan balance reads as zero and equity equals market value", async () => {
+  const state = baseState([]);
+  delete state.today.assets[0].balance;
   const handler = register(state);
-  const output = resultJson(await handler({}));
-  const house = output.assets.find((a) => a.id === "house-1");
+  const block = houseIn(resultJson(await handler({}))).realEstate;
 
-  assert.equal(house.realEstate.source, "active-plan-event");
-  assert.equal(house.realEstate.marketValue, 600000);
-  assert.equal(house.realEstate.netEquity, 300000);
-  assert.equal("overriddenFields" in house.realEstate, false);
+  assert.equal(block.loanBalance, 0);
+  assert.equal(block.netEquity, 500000);
 });
 
-test("net equity is omitted unless both values are numbers", async () => {
+test("a non-numeric balance passes through and net equity is omitted", async () => {
   const state = baseState([]);
   state.today.assets[0].balance = "not-a-number";
   const handler = register(state);
-  const output = resultJson(await handler({}));
-  const house = output.assets.find((a) => a.id === "house-1");
+  const block = houseIn(resultJson(await handler({}))).realEstate;
 
-  assert.equal(house.realEstate.loanBalance, "not-a-number");
-  assert.equal("netEquity" in house.realEstate, false);
+  assert.equal(block.loanBalance, "not-a-number");
+  assert.equal("netEquity" in block, false);
+});
+
+test("loan terms appear only when paymentMethod is financed", async () => {
+  const state = baseState([]);
+  state.today.assets[0].paymentMethod = "ownerPaid";
+  const handler = register(state);
+  const block = houseIn(resultJson(await handler({}))).realEstate;
+
+  assert.equal(block.paymentMethod, "ownerPaid");
+  assert.equal("loan" in block, false);
+  // Labels that stay useful without a loan keep flowing.
+  assert.deepEqual(block.propertyTax, {
+    rate: 0.011,
+    rateType: "percentOfValue",
+  });
 });
 
 test("single-account read carries the block; listPaths stays raw", async () => {
@@ -194,8 +196,7 @@ test("single-account read carries the block; listPaths stays raw", async () => {
 
   const account = resultJson(await handler({ accountId: "house-1" }));
   assert.equal(account.collection, "assets");
-  assert.equal(account.data.realEstate.marketValue, 500000);
-  assert.equal(account.data.realEstate.loanBalance, 300000);
+  assert.deepEqual(account.data.realEstate, houseIn(resultJson(await handler({}))).realEstate);
   assert.equal(account.data.balance, 300000);
   assert.equal(account.data.integration.authToken, "[REDACTED]");
 
@@ -203,7 +204,9 @@ test("single-account read carries the block; listPaths stays raw", async () => {
     await handler({ accountId: "house-1", listPaths: true }),
   );
   assert.equal(
-    paths.data.some((item) => item.path === "realEstate" || item.path.startsWith("realEstate.")),
+    paths.data.some(
+      (item) => item.path === "realEstate" || item.path.startsWith("realEstate."),
+    ),
     false,
   );
   assert.equal(

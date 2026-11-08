@@ -102,9 +102,11 @@ question.
   `listPaths: true` lists that account's editable paths. Real-estate assets
   (`type: "real-estate"` in `assets`) carry a `realEstate` block:
   `marketValue` (stored `amount`), `loanBalance` (the loan's `balance`, not
-  the property's value), `netEquity`, loan terms and carrying costs where
-  present. Answer questions about a property's value or equity from that
-  block, not from the raw `balance`.
+  the property's value; absent reads as 0), `netEquity` (marketValue minus
+  loanBalance, not the app's net-worth figure), loan terms when
+  `paymentMethod: "financed"`, and carrying costs where present. Answer
+  questions about a property's value or equity from that block, not from
+  the raw `balance`.
 - Results over about 100,000 characters are written to
   `~/.projectionlab-mcp/exports/` and returned as a file path. Read the parts
   you need from the file.

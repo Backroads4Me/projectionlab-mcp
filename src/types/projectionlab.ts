@@ -10,7 +10,12 @@ export interface AccountSummary {
   id: string;
   name: string;
   type: string;
-  balance: number;
+  balance?: number;
+  // Real-estate rows (type "real-estate") report marketValue and loanBalance
+  // instead of balance: ProjectionLab stores a property's loan in `balance`
+  // and its market value in `amount`.
+  marketValue?: number;
+  loanBalance?: number;
 }
 
 export interface PlanSummary {

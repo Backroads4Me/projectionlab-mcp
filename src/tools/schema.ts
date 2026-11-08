@@ -30,6 +30,20 @@ function extractAccounts(data: ExportedData): AccountSummary[] {
     for (const item of items) {
       if (item && typeof item === "object") {
         const obj = item as Record<string, unknown>;
+        // A real-estate record holds its loan in `balance` and its market
+        // value in `amount` (observed ProjectionLab storage), so label them
+        // as separate named fields; a single `balance` would read as if the
+        // loan were the property's value.
+        if (section === "assets" && obj.type === "real-estate") {
+          accounts.push({
+            id: String(obj.id ?? ""),
+            name: String(obj.name ?? "unknown"),
+            type: "real-estate",
+            marketValue: Number(obj.amount ?? 0),
+            loanBalance: Number(obj.balance ?? 0),
+          });
+          continue;
+        }
         accounts.push({
           id: String(obj.id ?? ""),
           name: String(obj.name ?? "unknown"),
@@ -63,7 +77,7 @@ export function registerSchemaTool(server: McpServer, bridge: Bridge) {
       title: "Describe Schema",
       description:
         "Returns a lightweight summary of the ProjectionLab data structure without the full payload. " +
-        "Includes top-level keys, account list (IDs, names, types, balances), plans (IDs, names, and each plan's income, expense, and milestone event counts), " +
+        "Includes top-level keys, account list (IDs, names, types, balances; real-estate rows report type \"real-estate\" with marketValue and loanBalance in place of balance), plans (IDs, names, and each plan's income, expense, and milestone event counts), " +
         "and the progress entry count. " +
         "Use this to understand the data model before crafting queries or mutations.",
       annotations: {

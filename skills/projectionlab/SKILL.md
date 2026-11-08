@@ -91,6 +91,10 @@ question.
 | Current Finances, or one account's editable paths | `projectionlab_get_current_finances` |
 | Everything (rarely needed) | `projectionlab_export_data` |
 
+- `projectionlab_describe_schema` lists accounts by type. A real-estate
+  asset appears as `type: "real-estate"` with `marketValue` and `loanBalance`
+  instead of `balance`: ProjectionLab stores a property's loan in `balance`
+  and its market value in `amount`, so the two are never the same number.
 - `projectionlab_get_plan_section` takes a `section` (`income`, `expenses`,
   `accounts`, `assets`, `milestones`, `priorities`, `variables`,
   `withdrawalStrategy`, `montecarlo`), and optionally an `eventIdentifier`

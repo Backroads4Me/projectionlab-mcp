@@ -4,6 +4,7 @@ import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { buildPlanClone, verifyPlanClone } from "../clonePlan.js";
 import { config } from "../config.js";
+import { currentFinancesProblems } from "../currentFinances.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
@@ -30,7 +31,8 @@ export function registerClonePlanTool(
         "plan is left as it is; the copy is appended. Event ids are kept, as ProjectionLab's own " +
         "plan duplication does, so references between events, milestones and accounts stay intact. " +
         "When confirm is false (default), returns a dry-run preview. When confirm is true, " +
-        "auto-snapshots all plans, appends the copy, and verifies the other plans are unchanged. " +
+        "auto-snapshots all plans, appends the copy, and verifies the other plans are " +
+        "unchanged and that no Current Finances balance moved. " +
         "Edit the copy afterwards with projectionlab_update_plan_event or " +
         "projectionlab_update_plan_settings. projectionlab_rollback on the snapshot removes the copy.",
       inputSchema: {
@@ -121,8 +123,22 @@ export function registerClonePlanTool(
 
         const verifyData = await bridge.exportData({ fresh: true });
         const after = Array.isArray(verifyData.plans) ? verifyData.plans : [];
-        const problems = verifyPlanClone(plans, after, clone);
+        const planProblems = verifyPlanClone(plans, after, clone);
+        const financeProblems = currentFinancesProblems(
+          data.today,
+          verifyData.today,
+        );
+        const problems = [...planProblems, ...financeProblems];
         const verified = problems.length === 0;
+
+        let message =
+          "Plan copied and verified. Snapshot saved; projectionlab_rollback with this snapshotId removes the copy.";
+        if (!verified) {
+          message =
+            planProblems.length > 0
+              ? `Copy sent but verification found problems. Check the plans in ProjectionLab; projectionlab_rollback with snapshotId ${snapshot.id} restores the previous plans.`
+              : "Copy landed, but Current Finances changed while the write was in flight. Cloning a plan does not write Current Finances, so this may be an edit made in ProjectionLab. The snapshot holds plans only, so rolling it back removes the copy and restores nothing else.";
+        }
 
         return {
           content: [
@@ -134,9 +150,7 @@ export function registerClonePlanTool(
                 verified,
                 ...(verified ? {} : { verificationProblems: problems }),
                 snapshotId: snapshot.id,
-                message: verified
-                  ? "Plan copied and verified. Snapshot saved; projectionlab_rollback with this snapshotId removes the copy."
-                  : `Copy sent but verification found problems. Check the plans in ProjectionLab; projectionlab_rollback with snapshotId ${snapshot.id} restores the previous plans.`,
+                message,
               }),
             },
           ],

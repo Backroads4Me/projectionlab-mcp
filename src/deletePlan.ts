@@ -35,7 +35,8 @@ export function selectPlanForDeletion(
   plans: unknown[],
   planId: string,
 ): PlanObj {
-  const target = planObjs(plans).find((p) => planIdOf(p) === planId);
+  const objs = planObjs(plans);
+  const target = objs.find((p) => planIdOf(p) === planId);
   if (!target) {
     throw new ProjectionLabError(
       "INVALID_INPUT",
@@ -50,7 +51,9 @@ export function selectPlanForDeletion(
       "Switch to a different plan in ProjectionLab, then delete this one",
     );
   }
-  if (plans.length <= 1) {
+  // Null and malformed array entries are not plans: only the real plan
+  // objects may remain after a delete.
+  if (objs.length <= 1) {
     throw new ProjectionLabError(
       "INVALID_INPUT",
       `Plan "${String(target.name)}" is the only plan; at least one plan must remain`,

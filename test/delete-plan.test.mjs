@@ -24,6 +24,7 @@ const {
   withoutPlan,
 } = await import("../dist/deletePlan.js");
 const { registerDeletePlanTool } = await import("../dist/tools/deletePlan.js");
+const { registerSnapshotTools } = await import("../dist/tools/snapshots.js");
 const { config } = await import("../dist/config.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
 
@@ -137,6 +138,17 @@ test("selectPlanForDeletion refuses the active plan and the last plan", () => {
       return true;
     },
   );
+
+  // Malformed entries are not plans, so "solo" is still the only one.
+  const padded = [null, 42, "junk", { id: "solo", name: "Alone", active: false }];
+  assert.throws(
+    () => selectPlanForDeletion(padded, "solo"),
+    (err) => {
+      assert.equal(err.code, "INVALID_INPUT");
+      assert.match(err.message, /only plan/);
+      return true;
+    },
+  );
 });
 
 test("withoutPlan removes exactly the plan with that id", () => {
@@ -242,10 +254,18 @@ test("delete_plan refuses the active plan and a name match", async () => {
   assert.equal(bridge.writes.length, 0);
 });
 
-test("delete_plan confirmed removes the plan, verifies, and returns the snapshot", async () => {
+test("delete_plan confirmed removes the plan, verifies, and rollback restores it", async () => {
   const bridge = fakeBridge({ plans: samplePlans() });
-  const result = await register(bridge)({ planId: "p2", confirm: true });
-  const out = text(result);
+  const server = fakeServer();
+  const snapshots = new SnapshotManager();
+  registerDeletePlanTool(server, bridge, snapshots);
+  registerSnapshotTools(server, bridge, snapshots);
+
+  const out = text(
+    await server.tools
+      .get("projectionlab_delete_plan")
+      .handler({ planId: "p2", confirm: true }),
+  );
 
   assert.equal(out.success, true);
   assert.equal(out.verified, true);
@@ -257,6 +277,26 @@ test("delete_plan confirmed removes the plan, verifies, and returns the snapshot
     ["p1"],
   );
   assert.equal(bridge.state.plans[0].active, true);
+
+  const rolled = text(
+    await server.tools
+      .get("projectionlab_rollback")
+      .handler({ snapshotId: out.snapshotId, confirm: true }),
+  );
+
+  assert.equal(rolled.verified, true);
+  assert.deepEqual(rolled.restoredSections, ["plans"]);
+  assert.deepEqual(
+    bridge.state.plans.map((p) => p.id),
+    ["p1", "p2"],
+  );
+  const restored = bridge.state.plans.find((p) => p.id === "p2");
+  assert.equal(restored.name, "Work forever");
+  assert.equal(restored.active, false);
+  assert.deepEqual(
+    restored.expenses.events.map((e) => e.id),
+    ["e2", "e3"],
+  );
 });
 
 test("delete_plan refuses with PLAN_CONFLICT when a plan was saved meanwhile", async () => {

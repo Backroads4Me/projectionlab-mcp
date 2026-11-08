@@ -11,6 +11,12 @@ import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
 import { listAddressableValues } from "../pathPatch.js";
 import { redactSecrets } from "../redact.js";
+import {
+  activePlanOf,
+  assetEventFor,
+  buildRealEstateBlock,
+  withRealEstateBlocks,
+} from "../realEstate.js";
 
 export function registerGetCurrentFinancesTool(
   server: McpServer,
@@ -23,7 +29,17 @@ export function registerGetCurrentFinancesTool(
       description:
         "Returns just the Current Finances section (account balances, debts, real estate) " +
         "without plan data. Narrow to one existing account by exact ID, and set listPaths=true " +
-        "to discover typed dot paths for projectionlab_update_account pathChanges.",
+        "to discover typed dot paths for projectionlab_update_account pathChanges. " +
+        "Real-estate assets (assets entries with type \"real-estate\") carry a realEstate block " +
+        "that labels the fields ProjectionLab stores confusingly: marketValue is the stored " +
+        "amount, loanBalance is the remaining loan balance (never the property's value), and " +
+        "netEquity is marketValue minus loanBalance. The block adds loan terms (apr, " +
+        "interestType, monthlyPayment, compounding) and carrying costs (propertyTax, insurance, " +
+        "maintenance, monthlyHOA, appreciation) where present, from the active plan's asset " +
+        "event when one exists (source \"active-plan-event\", plus overriddenFields) and from " +
+        "the Current Finances record otherwise (source \"today-record\"). Only the amount and " +
+        "balance labels are verified; the other labels name stored fields whose UI meaning is " +
+        "not yet confirmed. Raw fields are kept unchanged alongside the block.",
       inputSchema: {
         accountId: z
           .string()
@@ -55,13 +71,20 @@ export function registerGetCurrentFinancesTool(
           );
         }
 
-        let output: unknown = today;
+        let output: unknown = withRealEstateBlocks(today, data.plans);
         let suffix = "all";
         if (accountId !== undefined) {
           const entry = findCurrentFinanceEntry(today, accountId);
           if (!entry) {
             throw currentFinanceAccountNotFoundError(today, accountId);
           }
+          const realEstate =
+            !listPaths && entry.collection === "assets"
+              ? buildRealEstateBlock(
+                  entry.account,
+                  assetEventFor(activePlanOf(data.plans), entry.account.id),
+                )
+              : null;
           output = {
             accountId,
             accountName: entry.account.name,
@@ -69,7 +92,10 @@ export function registerGetCurrentFinancesTool(
             ...(listPaths ? { listPaths: true } : {}),
             data: listPaths
               ? listAddressableValues(entry.account)
-              : entry.account,
+              : {
+                  ...entry.account,
+                  ...(realEstate ? { realEstate } : {}),
+                },
           };
           suffix = accountId;
         }

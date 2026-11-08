@@ -99,7 +99,12 @@ question.
 - `projectionlab_get_plan_settings` returns `variables`, `montecarlo` and
   `withdrawalStrategy` as dot paths with JSON types; pass `section` for one.
 - `projectionlab_get_current_finances` with an exact `accountId` and
-  `listPaths: true` lists that account's editable paths.
+  `listPaths: true` lists that account's editable paths. Real-estate assets
+  (`type: "real-estate"` in `assets`) carry a `realEstate` block:
+  `marketValue` (stored `amount`), `loanBalance` (the loan's `balance`, not
+  the property's value), `netEquity`, loan terms and carrying costs where
+  present. Answer questions about a property's value or equity from that
+  block, not from the raw `balance`.
 - Results over about 100,000 characters are written to
   `~/.projectionlab-mcp/exports/` and returned as a file path. Read the parts
   you need from the file.

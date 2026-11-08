@@ -23,6 +23,7 @@ import { registerUpdateAccountTool } from "./tools/updateAccount.js";
 import { registerUpdatePlanSectionTool } from "./tools/updatePlanSection.js";
 import { registerUpdatePlanEventTool } from "./tools/updatePlanEvent.js";
 import { registerClonePlanTool } from "./tools/clonePlan.js";
+import { registerDeletePlanTool } from "./tools/deletePlan.js";
 import { registerUpdatePlanSettingsTool } from "./tools/updatePlanSettings.js";
 import { registerRestoreTools } from "./tools/restore.js";
 import { registerSnapshotTools } from "./tools/snapshots.js";
@@ -72,6 +73,7 @@ async function main() {
   registerUpdatePlanEventTool(server, bridge, snapshots);
   registerUpdatePlanSettingsTool(server, bridge, snapshots);
   registerClonePlanTool(server, bridge, snapshots);
+  registerDeletePlanTool(server, bridge, snapshots);
   registerRestoreTools(server, bridge, snapshots);
 
   // Register snapshot/rollback tools

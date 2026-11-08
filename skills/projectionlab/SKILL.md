@@ -142,6 +142,7 @@ user decide; do not enable writes on your own.
 | One income, expense, account, asset, milestone or priority event in a plan | `projectionlab_update_plan_event` | `section`, `eventIdentifier`, `pathChanges` |
 | One Current Finances account, debt or real asset | `projectionlab_update_account` | `accountId`, `pathChanges` |
 | A what-if copy of a plan | `projectionlab_clone_plan` | `planIdentifier`, `newName` |
+| Remove a plan the user has decided to discard | `projectionlab_delete_plan` | `planId` (exact ID only) |
 | A whole plan section, rebuilt deliberately | `projectionlab_update_plan_section` | `section`, complete `sectionData` |
 | Undo a confirmed change | `projectionlab_rollback` | `snapshotId` |
 
@@ -154,6 +155,10 @@ only; supply exactly one of the patch inputs.
 
 To explore a what-if without touching the original, clone the plan first and
 patch the copy.
+
+`projectionlab_delete_plan` takes an exact plan ID only, never a name, and
+refuses the active plan and the last remaining plan. Its snapshot lets
+`projectionlab_rollback` restore the deleted plan.
 
 `projectionlab_restore_current_finances`, `projectionlab_restore_plans`,
 `projectionlab_restore_progress` and `projectionlab_restore_settings` replace

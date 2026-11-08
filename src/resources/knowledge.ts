@@ -4,6 +4,10 @@ const KNOWLEDGE = `# ProjectionLab & FIRE Reference
 
 Curated concepts for analyzing retirement plans through this MCP server.
 
+ProjectionLab v5 is in early access; this reference and the tool descriptions
+describe the current release, 4.6.0
+(https://projectionlab.com/help/projectionlab-v5-early-access-guide).
+
 ## How to use this reference
 
 - **Explain, do not recommend.** Say what a term means, what ProjectionLab does
@@ -22,22 +26,38 @@ Curated concepts for analyzing retirement plans through this MCP server.
 - **plans[]**: each plan is a milestone-driven simulation.
   - **milestones[]**: lifecycle events (retirement, Medicare, death) keyed by
     date/year/milestone-relative criteria. Other events reference milestone IDs.
+    Retirement and Life Expectancy always exist in the app and its delete
+    control is disabled for them, so never remove either one
+    (https://projectionlab.com/help/manage-milestones).
   - **income.events[]**: salary, Social Security, pension, inheritance; start/end
     reference milestone IDs.
   - **expenses.events[]**: living, travel, healthcare, LTC; carry a
     \`spendingType\` (essential vs discretionary).
   - **accounts.events[]**: investment accounts with \`rothConversions\`
-    schedules, withdrawal rules, and bond/equity allocation glidepaths.
+    schedules, withdrawal rules, and bond/equity allocation glidepaths. A custom
+    growth or dividend rate on one account covers its stock portion only; the
+    bonds there follow the plan-level bond settings unless that account's bond
+    allocation is 0%
+    (https://projectionlab.com/help/growth-dividend-settings-chance-of-success).
   - **assets.events[]**: real estate, vehicles with appreciation/depreciation.
   - **variables**: tax settings, inflation, returns, drawdown order, IRMAA,
     estate config.
-  - **withdrawalStrategy**: safe-withdrawal-rate settings, spend mode.
-  - **montecarlo**: simulation config (review only; cannot be run remotely).
-  - **priorities.events[]**: savings contribution ordering.
+  - **withdrawalStrategy**: a separate mode, not the plan's normal drawdown
+    policy. From the year or milestone it starts, its rule replaces most other
+    plan events, such as expenses and asset purchases, so most plans leave it
+    off (https://projectionlab.com/help/withdrawal-strategy-mode).
+  - **montecarlo**: Chance of Success settings (review only; cannot be run
+    remotely). Chance of Success runs many trials over historical market periods
+    by default, with randomized (Monte Carlo) sampling as an option
+    (https://projectionlab.com/help/plan-vs-chance-of-success).
+  - **priorities.events[]**: savings contribution ordering. An "Always Fund"
+    flow is paid even when income falls short: ProjectionLab sells from other
+    accounts to cover it (https://projectionlab.com/help/mandatory-goals).
 - **today / currentFinances**: actual account balances; \`accountId\` links these
   to plan \`accounts.events[]\`.
-- Monte Carlo and projection *math* run only in the ProjectionLab UI. This
-  server reads/writes the plan definition; it does not compute projections.
+- Chance of Success trials and projection *math* run only in the ProjectionLab
+  UI. This server reads/writes the plan definition; it does not compute
+  projections.
 
 ## Plan-change outcome metrics
 
@@ -103,7 +123,10 @@ slightly differently.
 - **IRMAA**: an extra charge on Medicare Part B and Part D premiums. It is set
   by the person's MAGI from two years earlier and comes in tiers, so income
   just over a tier boundary pays the whole higher charge. A conversion in one
-  year can raise premiums two years later.
+  year can raise premiums two years later. If the user is already on Medicare
+  when the plan starts, ProjectionLab estimates that lookback income in the
+  first two plan years, and the actual rule applies from year 3
+  (https://projectionlab.com/help/modeling-irmaa-surcharges).
 - **NIIT (net investment income tax)**: a surtax on investment income (gains,
   dividends, interest, rent) once MAGI is above an income threshold. It raises
   the cost of a year that mixes a conversion with investment income.
@@ -129,6 +152,76 @@ slightly differently.
 6. Longevity: does the plan last well past life expectancy?
 7. Inflation: healthcare and long-term care costs rise with inflation and are
    often decades out; check how the plan assumes them.
+
+## ProjectionLab help articles
+
+ProjectionLab's own pages, linked for the user and summarized here for a model
+with no web access. The bracketed tag is the plan section or area this reference
+uses for it. The summaries are ours, not ProjectionLab's wording. Glossary of
+financial terms: https://projectionlab.com/financial-terms
+
+- **Withdrawal Strategy mode** [withdrawalStrategy]
+  https://projectionlab.com/help/withdrawal-strategy-mode - a comparison mode
+  for classic rules (initial percentage, variable percentage withdrawal,
+  Guyton-Klinger) that starts at a chosen year or milestone. While it is on,
+  its rule replaces most other plan events, so most plans leave it off.
+- **Flows, the cash flow priorities** [priorities]
+  https://projectionlab.com/help/cash-flow-priorities - Flows (the
+  \`priorities\` section in the data) send income to savings goals,
+  contributions, extra debt payments and transfers, earliest-added first.
+- **Mandatory goals ("Always Fund")** [priorities]
+  https://projectionlab.com/help/mandatory-goals - an Always Fund flow is paid
+  ahead of the other flows, selling from other accounts when income falls short.
+- **Milestones** [milestones]
+  https://projectionlab.com/help/manage-milestones - lifecycle markers
+  triggered by age, date, balance, or a combination of criteria; other events
+  anchor their start and end to them. Retirement and Life Expectancy cannot be
+  deleted.
+- **Drawdown order** [variables; the chart is app only]
+  https://projectionlab.com/help/drawdown-order-visualization - the order
+  accounts are liquidated in to cover a yearly shortfall. The graph and its red
+  early-withdrawal penalty line are a UI view of that order.
+- **Roth conversions** [accounts; the optimizer is app only]
+  https://projectionlab.com/help/roth-conversion - Optimize searches conversion
+  strategies against brackets, IRMAA and legacy goals with a beam search, then
+  writes the chosen schedule into the plan's accounts. This server can read and
+  edit such a schedule; it cannot run the search.
+- **Bond allocation and location** [accounts, variables]
+  https://projectionlab.com/help/bond-allocation-and-overrides - the bond
+  percentage is set plan-wide and can be overridden per account, and the other
+  accounts adjust to keep the plan-wide target, with a warning when it cannot
+  balance. Bond location chooses which accounts hold bonds first.
+- **Custom growth and dividend rates** [accounts]
+  https://projectionlab.com/help/growth-dividend-settings-chance-of-success - an
+  account's custom growth or dividend rate covers its stock portion; the bond
+  portion follows the plan's bond settings unless the account's bond allocation
+  is overridden to 0%. In Chance of Success such a rate is either held fixed or
+  sampled like the rest of the simulation.
+- **IRMAA surcharges** [variables; the optimizer is app only]
+  https://projectionlab.com/help/modeling-irmaa-surcharges - tiered Medicare
+  Part B and Part D surcharges set by MAGI two years earlier, where crossing a
+  tier by any amount costs the whole surcharge. When the user is already on
+  Medicare at plan start, ProjectionLab estimates the lookback income for the
+  first two plan years.
+- **Plan vs Chance of Success** [montecarlo; results are app only]
+  https://projectionlab.com/help/plan-vs-chance-of-success - the Plan tab is one
+  fixed path at fixed growth; Chance of Success runs many trials over historical
+  or randomized market data. All other tabs follow the Plan tab, not the trial
+  outcomes.
+- **Simulation engine** [app only]
+  https://projectionlab.com/help/simulation-engine - the app simulates a full
+  year at a time (income, withholding, expenses, debt, dividends, prior-year
+  taxes, RMDs) and turns a surplus into savings and a shortfall into
+  withdrawals.
+- **Flexible spending** [expenses; the feature is app only]
+  https://projectionlab.com/help/flex-spending - an optional rule that raises
+  or cuts spending with portfolio performance against earlier all-time highs,
+  scoped either to all spending or to discretionary expenses only.
+- **Plugins and external accounts** [Current Finances; app only]
+  https://projectionlab.com/help/plugins - ProjectionLab does not link to banks;
+  plugins (Lunch Money, YNAB, Monarch, or your own code) write balances into
+  Current Finances through the Plugin API, which has to be enabled in account
+  settings. This server uses that same API.
 `;
 
 export function registerKnowledgeResource(server: McpServer) {
@@ -139,8 +232,9 @@ export function registerKnowledgeResource(server: McpServer) {
       title: "ProjectionLab & FIRE Knowledge",
       description:
         "Curated reference: ProjectionLab data model, FIRE/decumulation concepts, " +
-        "retirement tax concepts without yearly figures, and an analysis checklist. " +
-        "Static; information and education, not personalized financial advice.",
+        "retirement tax concepts without yearly figures, an analysis checklist, and an " +
+        "index of ProjectionLab help articles. Static; information and education, not " +
+        "personalized financial advice.",
       mimeType: "text/markdown",
     },
     async (uri) => ({

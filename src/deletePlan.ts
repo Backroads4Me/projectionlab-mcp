@@ -1,5 +1,9 @@
 import { ProjectionLabError } from "./errors.js";
-import { samePlanContent, type PlanObj } from "./plans.js";
+import {
+  keptPlanIdentityProblems,
+  samePlanContent,
+  type PlanObj,
+} from "./plans.js";
 
 function planObjs(plans: unknown[]): PlanObj[] {
   return plans.filter((p): p is PlanObj => !!p && typeof p === "object");
@@ -56,9 +60,9 @@ export function withoutPlan(plans: unknown[], planId: string): unknown[] {
 
 /**
  * Check a fresh read after removing the plan `deletedId` from `before`: the
- * deleted plan is gone, every other original plan is still present and
- * unsaved, and the count dropped by exactly one. Returns the problems found;
- * empty means verified.
+ * deleted plan is gone, every other original plan is still present with its
+ * input content and passes `keptPlanIdentityProblems`, and the count dropped
+ * by exactly one. Returns the problems found; empty means verified.
  */
 export function verifyPlanDeletion(
   before: unknown[],
@@ -77,10 +81,14 @@ export function verifyPlanDeletion(
     const id = planIdOf(p);
     if (id === deletedId) continue;
     const post = afterById.get(id);
-    if (!post) problems.push(`plan ${id} is missing`);
-    else if (!samePlanContent(p, post)) {
+    if (!post) {
+      problems.push(`plan ${id} is missing`);
+      continue;
+    }
+    if (!samePlanContent(p, post)) {
       problems.push(`plan ${id} was modified`);
     }
+    problems.push(...keptPlanIdentityProblems(`plan ${id}`, p, post));
   }
   if (after.length !== before.length - 1) {
     problems.push(

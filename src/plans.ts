@@ -235,6 +235,44 @@ export function samePlanContent(before: PlanObj, after: PlanObj): boolean {
   return containsSubset(content, after);
 }
 
+/**
+ * Checks on a plan a write did not target, beyond its input content: its
+ * `lastUpdated` stamp may move forward (restorePlans saves every plan) but may
+ * not go backwards or disappear, and a `simKey` it carried may change value
+ * (ProjectionLab re-runs the plan open in the tab) but may not disappear. A
+ * plan that carried no simKey, or a stamp that is not a number on either side,
+ * is not reported, so absent fields never read as a change. `label` names the
+ * plan in each problem, for example `original plan p1`.
+ */
+export function keptPlanIdentityProblems(
+  label: string,
+  before: PlanObj,
+  after: PlanObj,
+): string[] {
+  const problems: string[] = [];
+  const simKey = before.simKey;
+  if (simKey !== undefined && simKey !== null) {
+    const current = after.simKey;
+    if (current === undefined || current === null) {
+      problems.push(`${label} lost its simKey`);
+    }
+  }
+  const was = before.lastUpdated;
+  const now = after.lastUpdated;
+  if (was !== undefined && was !== null) {
+    if (now === undefined || now === null) {
+      problems.push(`${label} lost its lastUpdated`);
+    } else if (
+      typeof was === "number" &&
+      typeof now === "number" &&
+      now < was
+    ) {
+      problems.push(`${label} lastUpdated moved backwards from ${was} to ${now}`);
+    }
+  }
+  return problems;
+}
+
 /** Field-by-field diff of two objects; values rendered as "from → to". */
 export function diffFields(
   current: unknown,

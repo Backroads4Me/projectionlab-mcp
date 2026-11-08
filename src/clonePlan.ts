@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { ProjectionLabError } from "./errors.js";
-import { containsSubset, samePlanContent, type PlanObj } from "./plans.js";
+import {
+  containsSubset,
+  keptPlanIdentityProblems,
+  samePlanContent,
+  type PlanObj,
+} from "./plans.js";
 
 function maxNumber(values: unknown[]): number | undefined {
   const nums = values.filter((v): v is number => typeof v === "number");
@@ -84,46 +89,6 @@ export function buildPlanClone(
 }
 
 /**
- * Checks on an original plan that survived the write, beyond its content:
- * its `lastUpdated` stamp, which may move forward (restorePlans saves every
- * plan) but may not go backwards or disappear, and that its `simKey` did not
- * disappear if it carried one. A changed `simKey` value is accepted:
- * ProjectionLab updates runtime simulation keys when re-saving untouched plans.
- * A plan that carried no simKey, or a stamp that is not a number on either
- * side, is not reported, so absent fields never read as a change.
- */
-function identityProblems(
-  id: string,
-  before: PlanObj,
-  after: PlanObj,
-): string[] {
-  const problems: string[] = [];
-  const simKey = before.simKey;
-  if (simKey !== undefined && simKey !== null) {
-    const current = after.simKey;
-    if (current === undefined || current === null) {
-      problems.push(`original plan ${id} lost its simKey`);
-    }
-  }
-  const was = before.lastUpdated;
-  const now = after.lastUpdated;
-  if (was !== undefined && was !== null) {
-    if (now === undefined || now === null) {
-      problems.push(`original plan ${id} lost its lastUpdated`);
-    } else if (
-      typeof was === "number" &&
-      typeof now === "number" &&
-      now < was
-    ) {
-      problems.push(
-        `original plan ${id} lastUpdated moved backwards from ${was} to ${now}`,
-      );
-    }
-  }
-  return problems;
-}
-
-/**
  * Check a fresh read after appending `clone` to `before`: every original plan
  * is still present with its input content, its `simKey` did not vanish, its
  * `lastUpdated` stamp never went backwards or disappeared, and the clone
@@ -154,7 +119,9 @@ export function verifyPlanClone(
     if (!samePlanContent(p as PlanObj, post)) {
       problems.push(`original plan ${id} was modified`);
     }
-    problems.push(...identityProblems(id, p as PlanObj, post));
+    problems.push(
+      ...keptPlanIdentityProblems(`original plan ${id}`, p as PlanObj, post),
+    );
   }
   const copies = after.filter(
     (p) => !!p && typeof p === "object" && (p as PlanObj).id === clone.id,

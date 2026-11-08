@@ -204,6 +204,27 @@ test("verifyPlanDeletion reports missing, modified, resurrection and count chang
   );
 });
 
+test("verifyPlanDeletion reports a kept plan whose simKey or stamp is lost or goes backwards", () => {
+  const before = samplePlans();
+  before[0].simKey = 7;
+
+  const noKey = structuredClone(before[0]);
+  delete noKey.simKey;
+  assert.deepEqual(verifyPlanDeletion(before, [noKey], "p2"), ["plan p1 lost its simKey"]);
+
+  const older = structuredClone(before[0]);
+  older.lastUpdated = before[0].lastUpdated - 1;
+  assert.deepEqual(verifyPlanDeletion(before, [older], "p2"), [
+    `plan p1 lastUpdated moved backwards from ${before[0].lastUpdated} to ${older.lastUpdated}`,
+  ]);
+
+  const noStamp = structuredClone(before[0]);
+  delete noStamp.lastUpdated;
+  assert.deepEqual(verifyPlanDeletion(before, [noStamp], "p2"), [
+    "plan p1 lost its lastUpdated",
+  ]);
+});
+
 test("the delete tool requires a non-blank planId at the schema", () => {
   const server = fakeServer();
   registerDeletePlanTool(server, fakeBridge({ plans: samplePlans() }), {

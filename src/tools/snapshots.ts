@@ -33,7 +33,43 @@ const SELECTOR_KEYS = ["snapshotId", "nBack", "beforeTime"] as const;
 const SELECTOR_HELP =
   "Supply exactly one of snapshotId (an exact ID from projectionlab_list_snapshots), " +
   "nBack (how many snapshots back, 1 being the most recent) or " +
-  "beforeTime (an ISO 8601 time)";
+  "beforeTime (an ISO 8601 time with an explicit Z or ±HH:MM offset)";
+
+// Snapshot timestamps are UTC instants. Date.parse reads an offset-less
+// date-time in the host's zone and accepts loose text such as "12345" or
+// "November 8 2026", so beforeTime has to carry its own offset to name one
+// unambiguous instant. A bare date is refused for the same reason: it states
+// no time of day.
+const ISO_TIME_WITH_OFFSET =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:\d{2})$/i;
+
+/** The instant a beforeTime names, or NaN when it is not a usable one. */
+function parseBeforeTime(value: string): number {
+  const parts = ISO_TIME_WITH_OFFSET.exec(value);
+  if (!parts) return NaN;
+
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return NaN;
+
+  const offset = parts[8].toUpperCase();
+  const offsetMinutes =
+    offset === "Z"
+      ? 0
+      : (offset[0] === "-" ? -1 : 1) *
+        (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
+
+  // Date.parse rolls 31 February over instead of rejecting it, so the wall
+  // clock the caller wrote has to survive the round trip.
+  const wall = new Date(ms + offsetMinutes * 60_000);
+  const matches =
+    wall.getUTCFullYear() === Number(parts[1]) &&
+    wall.getUTCMonth() === Number(parts[2]) - 1 &&
+    wall.getUTCDate() === Number(parts[3]) &&
+    wall.getUTCHours() === Number(parts[4]) &&
+    wall.getUTCMinutes() === Number(parts[5]);
+
+  return matches ? ms : NaN;
+}
 
 function pickSelector(args: RollbackSelectorArgs): RollbackSelector {
   const supplied = SELECTOR_KEYS.filter(
@@ -101,12 +137,13 @@ async function resolveSnapshot(
     }
 
     case "beforeTime": {
-      const cutoff = Date.parse(selector.value);
+      const cutoff = parseBeforeTime(selector.value);
       if (Number.isNaN(cutoff)) {
         throw new ProjectionLabError(
           "INVALID_INPUT",
-          `beforeTime "${selector.value}" is not a readable time`,
-          "Use an ISO 8601 time such as 2026-11-08T15:30:00Z",
+          `beforeTime "${selector.value}" is not an ISO 8601 time with an explicit Z or ±HH:MM offset`,
+          "Use a time such as 2026-11-08T15:30:00Z or 2026-11-08T15:30:00+02:00. " +
+            "projectionlab_list_snapshots shows snapshot times in that form",
         );
       }
 
@@ -168,7 +205,8 @@ export function registerSnapshotTools(
         "Restores ProjectionLab data from a previously saved snapshot. " +
         "Choose the snapshot with exactly one of snapshotId (an exact ID), " +
         "nBack (how many snapshots back, 1 being the most recent) or " +
-        "beforeTime (the latest snapshot strictly before an ISO 8601 time). " +
+        "beforeTime (the latest snapshot strictly before an ISO 8601 time " +
+        "carrying an explicit Z or ±HH:MM offset). " +
         "nBack and beforeTime rank snapshots newest first, the order " +
         "projectionlab_list_snapshots shows, and count every saved snapshot " +
         "including the pre-rollback snapshot a confirmed rollback writes, so " +
@@ -197,7 +235,9 @@ export function registerSnapshotTools(
           .string()
           .optional()
           .describe(
-            "ISO 8601 time; restores the latest snapshot taken strictly before it. " +
+            "ISO 8601 time carrying an explicit Z or ±HH:MM offset, such as 2026-11-08T15:30:00Z or " +
+              "2026-11-08T15:30:00+02:00; restores the latest snapshot taken strictly before it. " +
+              "Times without an offset and bare dates are refused because their instant is ambiguous. " +
               "Supply exactly one of snapshotId, nBack or beforeTime.",
           ),
         confirm: z

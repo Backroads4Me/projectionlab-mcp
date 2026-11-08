@@ -176,10 +176,13 @@ Change progress:
   snapshots and `projectionlab_rollback` restores one (also a dry run until
   confirmed). Choose the snapshot with exactly one of `snapshotId`, `nBack`
   (how many snapshots back, 1 being the most recent) or `beforeTime` (an ISO
-  8601 time; the latest snapshot strictly before it). `nBack` counts snapshots
-  in the order `projectionlab_list_snapshots` shows them, including the
-  pre-rollback snapshot a confirmed rollback saves, so a rollback is undone by
-  rolling back once more with `nBack: 1`.
+  8601 time carrying an explicit `Z` or `±HH:MM` offset, such as
+  `2026-11-08T15:30:00Z` or `2026-11-08T15:30:00+02:00`; the latest snapshot
+  strictly before it. A time with no offset is refused rather than read as
+  local time). `nBack` counts snapshots in the order
+  `projectionlab_list_snapshots` shows them, including the pre-rollback
+  snapshot a confirmed rollback saves, so a rollback is undone by rolling
+  back once more with `nBack: 1`.
 - **`PLAN_CONFLICT`** means a plan was saved in ProjectionLab after the tool
   read it, so the write was refused to avoid overwriting that edit. Re-run the
   dry run to pick up the latest data, show the user the new preview, and

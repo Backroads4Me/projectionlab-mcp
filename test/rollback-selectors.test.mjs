@@ -21,6 +21,7 @@ process.env.LOG_LEVEL = "error";
 const { registerSnapshotTools } = await import("../dist/tools/snapshots.js");
 const { registerRestoreTools } = await import("../dist/tools/restore.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
+const { config } = await import("../dist/config.js");
 
 const HOUR = 60 * 60 * 1000;
 
@@ -300,15 +301,147 @@ test("rollback beforeTime takes the latest snapshot strictly before the time", a
   assert.equal(noneAtAll.error, "SNAPSHOT_NOT_FOUND");
 });
 
-test("rollback refuses an unparseable beforeTime", async () => {
+test("rollback beforeTime needs an explicit Z or ±HH:MM offset", async () => {
   const snapshots = freshSnapshots();
+  const EARLIEST = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const MIDDLE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const LATEST = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  for (const [id, timestamp, operation] of [
+    [EARLIEST, "2026-01-01T00:00:00.000Z", "update_plan_section"],
+    [MIDDLE, "2026-06-01T12:00:00.000Z", "update_account"],
+    [LATEST, "2026-12-31T18:00:00.000Z", "clone_plan"],
+  ]) {
+    writeSnapshot({ id, timestamp, operation });
+  }
   const rollback = rollbackHandler(snapshots);
-  await createSnapshots(snapshots, ["update_account"]);
 
-  for (const beforeTime of ["not-a-time", "", "2026-13-45T99:99:99Z"]) {
+  // The offset is applied, not dropped: 13:00+02:00 is 11:00Z, which is
+  // earlier than the 12:00Z snapshot. Reading it as host time would select
+  // the middle snapshot instead.
+  const offsetApplied = parse(
+    await rollback({ beforeTime: "2026-06-01T13:00:00+02:00", confirm: false }),
+  );
+  assert.equal(offsetApplied.snapshotId, EARLIEST);
+
+  // 14:00+02:00 is exactly the 12:00Z snapshot, and the boundary is strict.
+  const offsetBoundary = parse(
+    await rollback({ beforeTime: "2026-06-01T14:00:00+02:00", confirm: false }),
+  );
+  assert.equal(offsetBoundary.snapshotId, EARLIEST);
+
+  const justAfter = parse(
+    await rollback({ beforeTime: "2026-06-01T14:00:01+02:00", confirm: false }),
+  );
+  assert.equal(justAfter.snapshotId, MIDDLE);
+
+  const negativeOffset = parse(
+    await rollback({ beforeTime: "2026-12-31T13:00:00-05:00", confirm: false }),
+  );
+  assert.equal(negativeOffset.snapshotId, MIDDLE);
+
+  for (const beforeTime of [
+    "2026-06-01T12:00:00", // host-local meaning
+    "2026-06-01T12:00",
+    "2026-06-01",
+    "2026-06-01 12:00:00Z",
+    "2026-06-01T12:00:00+0200",
+    "12345",
+    "November 8 2026",
+    "2026-02-31T00:00:00Z",
+    "2026-02-29T00:00:00Z",
+    "2026-13-45T99:99:99Z",
+    "not-a-time",
+    "",
+  ]) {
     const err = await errorFor(rollback, { beforeTime, confirm: false });
     assert.equal(err.error, "INVALID_INPUT", beforeTime);
-    assert.match(err.message, /is not a readable time/);
-    assert.match(err.suggestion, /ISO 8601/);
+    assert.match(err.message, /ISO 8601 time with an explicit Z or ±HH:MM offset/);
+    assert.match(err.suggestion, /2026-11-08T15:30:00Z/);
   }
+});
+
+test("rollback lists equal timestamps by id so nBack is stable", async () => {
+  const snapshots = freshSnapshots();
+  const sameInstant = "2026-05-05T05:05:05.000Z";
+  // Written out of id order so the result cannot come from the file system.
+  for (const id of [
+    "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  ]) {
+    writeSnapshot({ id, timestamp: sameInstant, operation: `update_${id.slice(0, 4)}` });
+  }
+
+  const listed = await listTool(snapshots)();
+  assert.deepEqual(
+    listed.map((s) => s.id),
+    [
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    ],
+  );
+  const rollback = rollbackHandler(snapshots);
+  // Equal timestamps take the list order, so nBack 1 is its first entry.
+  for (const [nBack, expected] of [
+    [1, "dddddddd-dddd-4ddd-8ddd-dddddddddddd"],
+    [2, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"],
+    [3, "ffffffff-ffff-4fff-8fff-ffffffffffff"],
+  ]) {
+    const preview = parse(await rollback({ nBack, confirm: false }));
+    assert.equal(preview.snapshotId, expected);
+  }
+});
+
+test("rollback refuses in read-only mode before checking selectors", async () => {
+  const snapshots = freshSnapshots();
+  const touched = [];
+  const guarded = {
+    async list() {
+      touched.push("list");
+      return [];
+    },
+    async get(id) {
+      touched.push(`get:${id}`);
+      throw new Error("must not read a snapshot");
+    },
+    async create() {
+      touched.push("create");
+    },
+  };
+  const server = fakeServer();
+  registerSnapshotTools(server, fakeBridge({ today: {}, plans: [] }), guarded);
+  const rollback = server.tools.get("projectionlab_rollback").handler;
+
+  config.readOnly = true;
+  try {
+    const noSelector = await rollback({ confirm: false });
+    assert.equal(noSelector.isError, true);
+    assert.equal(parse(noSelector).error, "READ_ONLY_MODE");
+
+    const badSelectors = await rollback({
+      snapshotId: "11111111-1111-4111-8111-111111111111",
+      nBack: 0,
+      confirm: true,
+    });
+    assert.equal(badSelectors.isError, true);
+    assert.equal(parse(badSelectors).error, "READ_ONLY_MODE");
+  } finally {
+    config.readOnly = false;
+  }
+
+  assert.deepEqual(touched, []);
+
+  // With writes on, the same two calls fail on the selectors instead, so the
+  // refusal above came from the read-only gate and not from the stub.
+  config.readOnly = false;
+  const noSelectorOpen = await rollback({ confirm: false });
+  assert.equal(parse(noSelectorOpen).error, "INVALID_INPUT");
+  const badSelectorsOpen = await rollback({
+    snapshotId: "11111111-1111-4111-8111-111111111111",
+    nBack: 0,
+    confirm: true,
+  });
+  assert.equal(parse(badSelectorsOpen).error, "INVALID_INPUT");
+  assert.deepEqual(touched, []);
 });

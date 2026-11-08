@@ -1,6 +1,6 @@
 ---
 name: projectionlab
-description: Reads and edits a user's ProjectionLab retirement and financial plan through the projectionlab MCP server - plans, Current Finances, assumptions, Monte Carlo and withdrawal-strategy settings - with previewed, snapshotted, reversible changes. Use when the user asks about their ProjectionLab plan, retirement readiness, FIRE or decumulation, Roth conversions, comparing scenarios, or changing plan values, or when projectionlab tools fail to connect and the user needs setup help.
+description: Reads and edits a user's ProjectionLab retirement and financial plan through the projectionlab MCP server - plans, Current Finances, assumptions, Chance of Success (Monte Carlo) and withdrawal-strategy settings - with previewed, snapshotted, reversible changes. Use when the user asks about their ProjectionLab plan, retirement readiness, FIRE or decumulation, Roth conversions, comparing scenarios, or changing plan values, or when projectionlab tools fail to connect and the user needs setup help.
 license: MIT
 compatibility: Requires the projectionlab MCP server (npx -y projectionlab-mcp, Node.js 20+) and a ProjectionLab tab open in Chrome, Edge, Brave or Firefox 140+, connected through the MCP Bridge for ProjectionLab extension or the bootstrap snippet.
 ---
@@ -87,7 +87,7 @@ question.
 | Today's balances and net worth | `projectionlab_get_summary` |
 | One whole plan | `projectionlab_get_plan` |
 | One section of a plan, one event, or one path in it | `projectionlab_get_plan_section` |
-| Assumptions, Monte Carlo, withdrawal strategy | `projectionlab_get_plan_settings` |
+| Assumptions, Chance of Success, withdrawal strategy | `projectionlab_get_plan_settings` |
 | Current Finances, or one account's editable paths | `projectionlab_get_current_finances` |
 | Everything (rarely needed) | `projectionlab_export_data` |
 
@@ -162,7 +162,7 @@ user decide; do not enable writes on your own.
 
 | Change | Tool | Input |
 |---|---|---|
-| Assumption, Monte Carlo or withdrawal setting | `projectionlab_update_plan_settings` | `section`, `changes` (path -> value) |
+| Assumption, Chance of Success or withdrawal setting | `projectionlab_update_plan_settings` | `section`, `changes` (path -> value) |
 | One income, expense, account, asset, milestone or priority event in a plan | `projectionlab_update_plan_event` | `section`, `eventIdentifier`, `pathChanges` |
 | One Current Finances account, debt or real asset | `projectionlab_update_account` | `accountId`, `pathChanges` |
 | A what-if copy of a plan | `projectionlab_clone_plan` | `planIdentifier`, `newName` |
@@ -176,6 +176,11 @@ the matching read tool (`get_plan_settings`, `get_plan_section` with
 `listPaths: true`, or `get_current_finances` with `listPaths: true`). The
 older `patch` (events) and `data` (accounts) inputs merge top-level fields
 only; supply exactly one of the patch inputs.
+
+Milestones: ProjectionLab always keeps a Retirement and a Life Expectancy
+milestone and disables deleting them in the app, so never remove either one.
+`projectionlab_update_plan_section` replaces the whole `milestones` array, so
+send both of them back in it.
 
 To explore a what-if without touching the original, clone the plan first and
 patch the copy.

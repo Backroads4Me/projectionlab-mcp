@@ -4,6 +4,10 @@ const KNOWLEDGE = `# ProjectionLab & FIRE Reference
 
 Curated concepts for analyzing retirement plans through this MCP server.
 
+ProjectionLab v5 is in early access; this reference and the tool descriptions
+describe the current release, 4.6.0
+(https://projectionlab.com/help/projectionlab-v5-early-access-guide).
+
 ## How to use this reference
 
 - **Explain, do not recommend.** Say what a term means, what ProjectionLab does
@@ -22,22 +26,38 @@ Curated concepts for analyzing retirement plans through this MCP server.
 - **plans[]**: each plan is a milestone-driven simulation.
   - **milestones[]**: lifecycle events (retirement, Medicare, death) keyed by
     date/year/milestone-relative criteria. Other events reference milestone IDs.
+    Retirement and Life Expectancy always exist in the app and its delete
+    control is disabled for them, so never remove either one
+    (https://projectionlab.com/help/manage-milestones).
   - **income.events[]**: salary, Social Security, pension, inheritance; start/end
     reference milestone IDs.
   - **expenses.events[]**: living, travel, healthcare, LTC; carry a
     \`spendingType\` (essential vs discretionary).
   - **accounts.events[]**: investment accounts with \`rothConversions\`
-    schedules, withdrawal rules, and bond/equity allocation glidepaths.
+    schedules, withdrawal rules, and bond/equity allocation glidepaths. A custom
+    growth or dividend rate on one account covers its stock portion only; the
+    bonds there follow the plan-level bond settings unless that account's bond
+    allocation is 0%
+    (https://projectionlab.com/help/growth-dividend-settings-chance-of-success).
   - **assets.events[]**: real estate, vehicles with appreciation/depreciation.
   - **variables**: tax settings, inflation, returns, drawdown order, IRMAA,
     estate config.
-  - **withdrawalStrategy**: safe-withdrawal-rate settings, spend mode.
-  - **montecarlo**: simulation config (review only; cannot be run remotely).
-  - **priorities.events[]**: savings contribution ordering.
+  - **withdrawalStrategy**: a separate mode, not the plan's normal drawdown
+    policy. From the year or milestone it starts, its rule replaces most other
+    plan events, such as expenses and asset purchases, so most plans leave it
+    off (https://projectionlab.com/help/withdrawal-strategy-mode).
+  - **montecarlo**: Chance of Success settings (review only; cannot be run
+    remotely). Chance of Success runs many trials over historical market periods
+    by default, with randomized (Monte Carlo) sampling as an option
+    (https://projectionlab.com/help/plan-vs-chance-of-success).
+  - **priorities.events[]**: savings contribution ordering. A flow set to
+    "Always Fund" is funded even when there is no surplus income, by drawing
+    down other accounts (https://projectionlab.com/help/mandatory-goals).
 - **today / currentFinances**: actual account balances; \`accountId\` links these
   to plan \`accounts.events[]\`.
-- Monte Carlo and projection *math* run only in the ProjectionLab UI. This
-  server reads/writes the plan definition; it does not compute projections.
+- Chance of Success trials and projection *math* run only in the ProjectionLab
+  UI. This server reads/writes the plan definition; it does not compute
+  projections.
 
 ## Plan-change outcome metrics
 
@@ -103,7 +123,10 @@ slightly differently.
 - **IRMAA**: an extra charge on Medicare Part B and Part D premiums. It is set
   by the person's MAGI from two years earlier and comes in tiers, so income
   just over a tier boundary pays the whole higher charge. A conversion in one
-  year can raise premiums two years later.
+  year can raise premiums two years later. If the user is already on Medicare
+  when the plan starts, ProjectionLab estimates that lookback income in the
+  first two plan years, and the actual rule applies from year 3
+  (https://projectionlab.com/help/modeling-irmaa-surcharges).
 - **NIIT (net investment income tax)**: a surtax on investment income (gains,
   dividends, interest, rent) once MAGI is above an income threshold. It raises
   the cost of a year that mixes a conversion with investment income.

@@ -2,7 +2,7 @@
 name: projectionlab
 description: Reads and edits a user's ProjectionLab retirement and financial plan through the projectionlab MCP server - plans, Current Finances, assumptions, Monte Carlo and withdrawal-strategy settings - with previewed, snapshotted, reversible changes. Use when the user asks about their ProjectionLab plan, retirement readiness, FIRE or decumulation, Roth conversions, comparing scenarios, or changing plan values, or when projectionlab tools fail to connect and the user needs setup help.
 license: MIT
-compatibility: Requires the projectionlab MCP server (npx -y projectionlab-mcp, Node.js 20+) and a ProjectionLab tab open in Chrome, Edge, Brave or Firefox 128+, connected through the ProjectionLab MCP Bridge extension or the bootstrap snippet.
+compatibility: Requires the projectionlab MCP server (npx -y projectionlab-mcp, Node.js 20+) and a ProjectionLab tab open in Chrome, Edge, Brave or Firefox 140+, connected through the MCP Bridge for ProjectionLab extension or the bootstrap snippet.
 ---
 
 # ProjectionLab MCP
@@ -50,13 +50,13 @@ If you write the file for the user, do not repeat the value back.
 
 ### Connecting the browser
 
-Recommended, persistent: the **ProjectionLab MCP Bridge** browser extension.
+Recommended, persistent: the **MCP Bridge for ProjectionLab** browser extension.
 
 1. Download the zip for the user's browser (`chromium` or `firefox`) from
    https://github.com/Backroads4Me/projectionlab-mcp/releases/latest and unzip
    it.
 2. Chrome, Edge or Brave: open `chrome://extensions`, enable **Developer mode**,
-   choose **Load unpacked**, and select the unzipped folder. Firefox 128+: open
+   choose **Load unpacked**, and select the unzipped folder. Firefox 140+: open
    `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**,
    and select `manifest.json` (Firefox removes temporary add-ons on restart).
 3. Open the extension's options page (click its toolbar icon). Enter the port

@@ -6,11 +6,12 @@ import test from "node:test";
 import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { freePort } from "./helpers/free-port.mjs";
 
 const home = mkdtempSync(join(tmpdir(), "plmcp-token-home-"));
 process.env.HOME = home;
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_WS_PORT = "18791";
+process.env.PL_WS_PORT = String(await freePort());
 delete process.env.PL_WS_TOKEN;
 process.env.PL_SNAPSHOT_DIR = join(mkdtempSync(join(tmpdir(), "plmcp-elsewhere-")), "snaps");
 process.env.LOG_LEVEL = "error";

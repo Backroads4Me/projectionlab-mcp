@@ -10,8 +10,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
+import { freePort } from "./helpers/free-port.mjs";
 
-const PORT = 18788;
+const PORT = await freePort();
 const TOKEN = "test-token";
 
 process.env.PL_API_KEY = "test-api-key";

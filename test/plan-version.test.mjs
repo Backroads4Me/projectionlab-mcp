@@ -94,22 +94,21 @@ test("verifyPlanClone checks originals are untouched and the copy exists once", 
   assert.ok(dropped.includes("original plan b is missing"));
 });
 
-test("verifyPlanClone keeps each original on its own simKey", () => {
+test("verifyPlanClone accepts a changed simKey value and reports a lost simKey", () => {
   const before = [plan("a", 1, { simKey: 3 }), plan("b", 1, { simKey: 4 })];
   const clone = plan("c", 2, { simKey: 5 });
   const kept = [plan("a", 9, { simKey: 3 }), plan("b", 8, { simKey: 4 })];
   assert.deepEqual(verifyPlanClone(before, [...kept, clone], clone), []);
 
-  // One cause gives one problem, which names the simKey it moved to.
+  // A changed simKey value on an untouched plan is accepted (ProjectionLab re-saves simulation state).
   const moved = verifyPlanClone(
     before,
     [plan("a", 9, { simKey: 6 }), plan("b", 8, { simKey: 4 }), clone],
     clone,
   );
-  assert.deepEqual(moved.filter((p) => p.startsWith("original plan a")), [
-    "original plan a changed simKey from 3 to 6",
-  ]);
+  assert.deepEqual(moved, []);
 
+  // A simKey that completely vanished is reported.
   const lost = verifyPlanClone(
     before,
     [plan("a", 9), plan("b", 8, { simKey: 4 }), clone],
@@ -118,7 +117,6 @@ test("verifyPlanClone keeps each original on its own simKey", () => {
   assert.deepEqual(lost.filter((p) => p.startsWith("original plan a")), [
     "original plan a lost its simKey",
   ]);
-
   // A simKey on a plan that never had one is not compared.
   const keyless = [plan("a", 1), plan("b", 1)];
   assert.deepEqual(
@@ -130,6 +128,40 @@ test("verifyPlanClone keeps each original on its own simKey", () => {
     [],
   );
 });
+test("verifyPlanClone ignores meta changes on untouched plans but catches input field modifications", () => {
+  const before = [
+    plan("a", 1, {
+      simKey: 3,
+      meta: { index: 0, runKey: 10, yearlySummary: { endAge: 85 } },
+      expenses: { events: [{ id: "e1", name: "Rent" }] },
+    }),
+  ];
+  const clone = plan("c", 2);
+
+  // simKey and meta changed on untouched plan 'a', input fields unchanged: passes
+  const runtimeUpdates = [
+    plan("a", 9, {
+      simKey: 99,
+      meta: { index: 0, runKey: 11, yearlySummary: { endAge: 90 } },
+      expenses: { events: [{ id: "e1", name: "Rent" }] },
+    }),
+    clone,
+  ];
+  assert.deepEqual(verifyPlanClone(before, runtimeUpdates, clone), []);
+
+  // input field modified on untouched plan 'a': caught
+  const inputModified = [
+    plan("a", 9, {
+      simKey: 99,
+      meta: { index: 0, runKey: 11 },
+      expenses: { events: [{ id: "e1", name: "Mortgage" }] },
+    }),
+    clone,
+  ];
+  const problems = verifyPlanClone(before, inputModified, clone);
+  assert.ok(problems.includes("original plan a was modified"));
+});
+
 
 test("verifyPlanClone tolerates a newer stamp and reports a lost or backwards one", () => {
   const body = () => ({ income: { events: [] } });

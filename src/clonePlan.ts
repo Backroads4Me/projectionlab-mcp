@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ProjectionLabError } from "./errors.js";
-import { containsSubset, type PlanObj } from "./plans.js";
+import { containsSubset, samePlanContent, type PlanObj } from "./plans.js";
 
 function maxNumber(values: unknown[]): number | undefined {
   const nums = values.filter((v): v is number => typeof v === "number");
@@ -84,22 +84,13 @@ export function buildPlanClone(
 }
 
 /**
- * True when `after` still holds every value of `before`. `lastUpdated` is left
- * out: restorePlans saves every plan, so ProjectionLab may re-stamp originals
- * that were not otherwise changed. `simKey` has its own check, so a plan that
- * moved off its simKey is reported once, as the simKey it moved to.
- */
-function samePlanContent(before: PlanObj, after: PlanObj): boolean {
-  const { lastUpdated: _stamp, simKey: _key, ...content } = before;
-  return containsSubset(content, after);
-}
-
-/**
- * Checks on an original plan that survived the write, beyond its content: the
- * `simKey` it had, and its `lastUpdated` stamp, which may move forward
- * (restorePlans saves every plan) but may not go backwards or disappear. A plan
- * that carried no simKey, or a stamp that is not a number on either side, is
- * not reported, so absent fields never read as a change.
+ * Checks on an original plan that survived the write, beyond its content:
+ * its `lastUpdated` stamp, which may move forward (restorePlans saves every
+ * plan) but may not go backwards or disappear, and that its `simKey` did not
+ * disappear if it carried one. A changed `simKey` value is accepted:
+ * ProjectionLab updates runtime simulation keys when re-saving untouched plans.
+ * A plan that carried no simKey, or a stamp that is not a number on either
+ * side, is not reported, so absent fields never read as a change.
  */
 function identityProblems(
   id: string,
@@ -112,10 +103,6 @@ function identityProblems(
     const current = after.simKey;
     if (current === undefined || current === null) {
       problems.push(`original plan ${id} lost its simKey`);
-    } else if (!containsSubset(simKey, current)) {
-      problems.push(
-        `original plan ${id} changed simKey from ${JSON.stringify(simKey)} to ${JSON.stringify(current)}`,
-      );
     }
   }
   const was = before.lastUpdated;
@@ -138,10 +125,11 @@ function identityProblems(
 
 /**
  * Check a fresh read after appending `clone` to `before`: every original plan
- * is still present with its content and simKey, its `lastUpdated` stamp never
- * went backwards or disappeared, and the clone exists exactly once under its
- * name. Returns the problems found; empty means verified. The Current Finances
- * reads are checked by `currentFinancesProblems`, over the same two exports.
+ * is still present with its input content, its `simKey` did not vanish, its
+ * `lastUpdated` stamp never went backwards or disappeared, and the clone
+ * exists exactly once under its name. Returns the problems found; empty
+ * means verified. The Current Finances reads are checked by
+ * `currentFinancesProblems`, over the same two exports.
  */
 export function verifyPlanClone(
   before: unknown[],

@@ -197,7 +197,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `projectionlab_update_plan_settings` | Patch existing assumptions, Monte Carlo, or withdrawal settings by path | Yes |
 | `projectionlab_update_plan_section` | Replace a whole section of a plan (dry-run by default) | Yes |
 | `projectionlab_clone_plan` | Copy a plan to a new, named plan for what-if scenarios | Yes |
-| `projectionlab_delete_plan` | Delete a plan by exact ID; refuses the active plan and the last plan (dry-run by default) | Yes |
+| `projectionlab_delete_plan` | Delete a plan by exact ID; refuses the last plan (dry-run by default) | Yes |
 | `projectionlab_list_snapshots` | List saved pre-mutation snapshots | No |
 | `projectionlab_restore_current_finances` | Restore Current Finances from snapshot | Yes |
 | `projectionlab_restore_plans` | Restore Plans from snapshot | Yes |

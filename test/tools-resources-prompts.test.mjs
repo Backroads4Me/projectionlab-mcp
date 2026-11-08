@@ -299,7 +299,7 @@ test("clone_plan reports a Current Finances balance the write moved", async () =
   assert.doesNotMatch(out.message, /projectionlab_rollback/);
 });
 
-test("clone_plan reports a pre-existing plan the write moved off its simKey", async () => {
+test("clone_plan reports a pre-existing plan that lost its simKey", async () => {
   const plans = samplePlans().map((p, i) => ({ ...p, simKey: i + 1 }));
   const { bridge, server } = setup(registerClonePlanTool, {
     today: {},
@@ -308,7 +308,7 @@ test("clone_plan reports a pre-existing plan the write moved off its simKey", as
   const restorePlans = bridge.restorePlans;
   bridge.restorePlans = async (incoming) => {
     await restorePlans(incoming);
-    bridge.state.plans[0].simKey = 99;
+    delete bridge.state.plans[0].simKey;
   };
   const out = parse(
     await server.tools.get("projectionlab_clone_plan").handler(cloneArgs),
@@ -316,7 +316,7 @@ test("clone_plan reports a pre-existing plan the write moved off its simKey", as
   assert.equal(out.verified, false);
   assert.ok(
     out.verificationProblems.some((p) =>
-      p.includes("original plan p1 changed simKey from 1 to 99"),
+      p.includes("original plan p1 lost its simKey"),
     ),
     JSON.stringify(out.verificationProblems),
   );

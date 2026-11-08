@@ -55,3 +55,47 @@ test("summary explicitly reports Current Finances scope, not projected outcomes"
   assert.equal("endingNetWorth" in output, false);
   assert.equal("chanceOfSuccess" in output, false);
 });
+
+test("summary net worth accounts for paid-in-full assets, financed assets with loans, and debts", async () => {
+  const server = fakeServer();
+  registerSummaryTool(server, {
+    async exportData() {
+      return {
+        today: {
+          investmentAccounts: [{ balance: 100000 }],
+          savingsAccounts: [{ balance: 20000 }],
+          assets: [
+            // Paid-in-full home: amount = market value, balance = 0
+            { id: "a1", name: "House", type: "real-estate", amount: 400000, balance: 0 },
+            // Financed car: amount = market value, balance = outstanding loan
+            { id: "a2", name: "Car", type: "vehicle", amount: 35000, balance: 15000 },
+            // Fallback to value if amount is absent
+            { id: "a3", name: "Collectibles", value: 5000 },
+          ],
+          debts: [{ id: "d1", name: "Student Loan", balance: 25000 }],
+        },
+        plans: [],
+      };
+    },
+  });
+
+  const tool = server.tools.get("projectionlab_get_summary");
+  const result = await tool.handler({});
+  assert.equal(result.isError, undefined);
+  const output = JSON.parse(result.content[0].text);
+
+  // Assets group total = 400000 + 35000 + 5000 = 440000
+  assert.equal(output.accountsByType.assets.count, 3);
+  assert.equal(output.accountsByType.assets.total, 440000);
+
+  // Total Net Worth =
+  //   100000 (investments)
+  // +  20000 (savings)
+  // + 400000 (house asset amount)
+  // +  35000 (car asset amount)
+  // -  15000 (car loan balance)
+  // +   5000 (collectibles value)
+  // -  25000 (student loan debt)
+  // = 520000
+  assert.equal(output.totalNetWorth, 520000);
+});

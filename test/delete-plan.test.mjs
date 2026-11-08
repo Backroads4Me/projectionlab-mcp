@@ -18,7 +18,6 @@ process.env.PL_SNAPSHOT_DIR = join(
 process.env.LOG_LEVEL = "error";
 
 const {
-  activePlanId,
   selectPlanForDeletion,
   verifyPlanDeletion,
   withoutPlan,
@@ -118,17 +117,22 @@ test("selectPlanForDeletion takes an exact id only", () => {
   assert.throws(() => selectPlanForDeletion(plans, "nope"), { code: "INVALID_INPUT" });
 });
 
-test("selectPlanForDeletion refuses the active plan and the last plan", () => {
+test("selectPlanForDeletion allows deleting a plan carrying active: true", () => {
   const plans = samplePlans();
+  // p1 has active: true; deleting it is allowed
+  assert.equal(selectPlanForDeletion(plans, "p1").name, "Retire at 55");
+});
+
+test("selectPlanForDeletion refuses the last remaining plan", () => {
+  const onlyActive = [{ id: "solo", name: "Alone", active: true }];
   assert.throws(
-    () => selectPlanForDeletion(plans, "p1"),
+    () => selectPlanForDeletion(onlyActive, "solo"),
     (err) => {
       assert.equal(err.code, "INVALID_INPUT");
-      assert.match(err.message, /active plan/);
+      assert.match(err.message, /only plan/);
       return true;
     },
   );
-
   const only = [{ id: "solo", name: "Alone", active: false }];
   assert.throws(
     () => selectPlanForDeletion(only, "solo"),
@@ -160,10 +164,6 @@ test("withoutPlan removes exactly the plan with that id", () => {
   assert.deepEqual(withoutPlan(plans, "missing"), plans);
 });
 
-test("activePlanId reports the plan carrying active", () => {
-  assert.equal(activePlanId(samplePlans()), "p1");
-  assert.equal(activePlanId([{ id: "a" }, { id: "b", active: false }]), undefined);
-});
 
 test("verifyPlanDeletion accepts a clean delete across re-stamping", () => {
   const before = samplePlans();
@@ -172,7 +172,7 @@ test("verifyPlanDeletion accepts a clean delete across re-stamping", () => {
   assert.deepEqual(verifyPlanDeletion(before, after, "p2"), []);
 });
 
-test("verifyPlanDeletion reports missing, modified, resurrection and active changes", () => {
+test("verifyPlanDeletion reports missing, modified, resurrection and count changes", () => {
   const before = samplePlans();
 
   const kept = structuredClone(before);
@@ -190,14 +190,11 @@ test("verifyPlanDeletion reports missing, modified, resurrection and active chan
     verifyPlanDeletion(before, [modified[0]], "p2").some((p) => p.includes("plan p1 was modified")),
   );
 
-  const flipped = structuredClone(before);
-  delete flipped[0].active;
-  flipped[1].active = true;
-  assert.ok(
-    verifyPlanDeletion(before, [flipped[1]], "p2").some((p) =>
-      p.includes("active plan changed (p1 → p2)"),
-    ),
-  );
+  const withSimKeyAndMeta = structuredClone(before);
+  withSimKeyAndMeta[0].simKey = 999;
+  withSimKeyAndMeta[0].meta = { runKey: 123, yearlySummary: { endAge: 90 } };
+  // Changes to simKey and meta on untouched plans are ignored
+  assert.deepEqual(verifyPlanDeletion(before, [withSimKeyAndMeta[0]], "p2"), []);
 
   const duplicated = [structuredClone(before[0]), structuredClone(before[0])];
   assert.ok(
@@ -239,13 +236,13 @@ test("delete_plan previews without writing by default", async () => {
   assert.match(out.warning, /confirm=true/);
 });
 
-test("delete_plan refuses the active plan and a name match", async () => {
+test("delete_plan allows deleting a plan carrying active: true and refuses a name match", async () => {
   const bridge = fakeBridge({ plans: samplePlans() });
   const handler = register(bridge);
 
-  const active = await handler({ planId: "p1", confirm: true });
-  assert.equal(active.isError, true);
-  assert.match(text(active).message, /active plan/);
+  const active = await handler({ planId: "p1", confirm: false });
+  assert.equal(active.isError, undefined);
+  assert.equal(text(active).plan.id, "p1");
 
   const byName = await handler({ planId: "Work forever", confirm: true });
   assert.equal(byName.isError, true);

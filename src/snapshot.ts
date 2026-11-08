@@ -93,9 +93,12 @@ export class SnapshotManager {
       }
     }
 
+    // Newest first, with equal millisecond timestamps ordered by id so a
+    // recency-based rollback selector picks the same snapshot every time.
     return snapshots.sort(
       (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime() ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
     );
   }
 

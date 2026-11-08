@@ -151,7 +151,7 @@ user decide; do not enable writes on your own.
 | A what-if copy of a plan | `projectionlab_clone_plan` | `planIdentifier`, `newName` |
 | Remove a plan the user has decided to discard | `projectionlab_delete_plan` | `planId` (exact ID only) |
 | A whole plan section, rebuilt deliberately | `projectionlab_update_plan_section` | `section`, complete `sectionData` |
-| Undo a confirmed change | `projectionlab_rollback` | `snapshotId` |
+| Undo a confirmed change | `projectionlab_rollback` | one of `snapshotId`, `nBack`, `beforeTime` |
 
 Prefer the targeted tools: they change only the paths given and keep sibling
 values intact. Paths must already exist and keep their JSON type; get them from
@@ -190,7 +190,15 @@ Change progress:
 - **Every confirmed change is snapshotted first.** Tell the user before the
   first change that it can be undone: `projectionlab_list_snapshots` lists the
   snapshots and `projectionlab_rollback` restores one (also a dry run until
-  confirmed).
+  confirmed). Choose the snapshot with exactly one of `snapshotId`, `nBack`
+  (how many snapshots back, 1 being the most recent) or `beforeTime` (an ISO
+  8601 time carrying an explicit `Z` or `±HH:MM` offset, such as
+  `2026-11-08T15:30:00Z` or `2026-11-08T15:30:00+02:00`; the latest snapshot
+  strictly before it. A time with no offset is refused rather than read as
+  local time). `nBack` counts snapshots in the order
+  `projectionlab_list_snapshots` shows them, including the pre-rollback
+  snapshot a confirmed rollback saves, so a rollback is undone by rolling
+  back once more with `nBack: 1`.
 - **`PLAN_CONFLICT`** means a plan was saved in ProjectionLab after the tool
   read it, so the write was refused to avoid overwriting that edit. Re-run the
   dry run to pick up the latest data, show the user the new preview, and

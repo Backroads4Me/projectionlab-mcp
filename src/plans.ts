@@ -222,6 +222,7 @@ export function verifySectionApplied(
   }
   return { ok: true };
 }
+
 /**
  * True when `after` still holds every input value of `before`.
  * `lastUpdated`, `simKey`, and `meta` are left out: ProjectionLab saves every
@@ -233,7 +234,6 @@ export function samePlanContent(before: PlanObj, after: PlanObj): boolean {
   const { lastUpdated: _stamp, simKey: _key, meta: _meta, ...content } = before;
   return containsSubset(content, after);
 }
-
 
 /** Field-by-field diff of two objects; values rendered as "from → to". */
 export function diffFields(

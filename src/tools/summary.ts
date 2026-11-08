@@ -12,8 +12,9 @@ export function registerSummaryTool(server: McpServer, bridge: Bridge) {
       title: "Current Finances Summary",
       description:
         "Returns a compact inventory of CURRENT finances: net worth as of today " +
-        "(sum of current balances, not a projected outcome), account breakdown " +
-        "by type, and each plan's name with its income, expense and milestone event counts. It does not return ending net worth or " +
+        "(account balances plus asset market values, minus debts and asset loans; not a " +
+        "projected outcome), account breakdown by type (assets totaled at market value), " +
+        "and each plan's name with its income, expense and milestone event counts. It does not return ending net worth or " +
         "Chance of Success and must not be used to judge a plan change's impact.",
       outputSchema: {
         scope: z.literal("currentFinances"),

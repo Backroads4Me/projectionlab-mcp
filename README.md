@@ -197,6 +197,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `projectionlab_update_plan_settings` | Patch existing assumptions, Monte Carlo, or withdrawal settings by path | Yes |
 | `projectionlab_update_plan_section` | Replace a whole section of a plan (dry-run by default) | Yes |
 | `projectionlab_clone_plan` | Copy a plan to a new, named plan for what-if scenarios | Yes |
+| `projectionlab_delete_plan` | Delete a plan by exact ID; refuses the active plan and the last plan (dry-run by default) | Yes |
 | `projectionlab_list_snapshots` | List saved pre-mutation snapshots | No |
 | `projectionlab_restore_current_finances` | Restore Current Finances from snapshot | Yes |
 | `projectionlab_restore_plans` | Restore Plans from snapshot | Yes |
@@ -224,7 +225,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 
 ### Safety model
 
-Write operations (`update_*`, `restore_*`, `clone_plan`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Writes are disabled entirely unless `PL_READ_ONLY=false`.
+Write operations (`update_*`, `restore_*`, `clone_plan`, `delete_plan`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Writes are disabled entirely unless `PL_READ_ONLY=false`.
 
 Every write that replaces the plans array re-reads the plans just before writing and refuses with `PLAN_CONFLICT` if any plan was added, removed, or saved in ProjectionLab since the tool read them, so an edit made in the ProjectionLab UI is never silently overwritten. `projectionlab_update_plan_section` also returns a `planVersion` in its dry run; pass it back as `expectedPlanVersion` when confirming to refuse the write if the plan was saved after the preview.
 

@@ -28,7 +28,7 @@ export function registerGetPlanSettingsTool(
         "Covers general assumptions and tax controls (variables), Chance of Success " +
         "configuration (the montecarlo section; trials over historical market periods, " +
         "with randomized sampling as an option), and withdrawal strategy settings (a " +
-        "compare mode that replaces other plan events while it is enabled). " +
+        "compare mode that replaces most other plan events while it is enabled). " +
         "Nested objects are flattened to dot paths while " +
         "ordered arrays remain intact. Advanced rate schedules also expose indexed control-point " +
         "fields so one year or rate can be patched without replacing the schedule. Use the returned " +

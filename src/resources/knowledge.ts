@@ -166,8 +166,8 @@ financial terms: https://projectionlab.com/financial-terms
   Guyton-Klinger) that starts at a chosen year or milestone. While it is on,
   its rule replaces most other plan events, so most plans leave it off.
 - **Flows, the cash flow priorities** [priorities]
-  https://projectionlab.com/help/cash-flow-priorities - Flows (called
-  "Priorities" before version 4.6.0) send income to savings goals,
+  https://projectionlab.com/help/cash-flow-priorities - Flows (the
+  \`priorities\` section in the data) send income to savings goals,
   contributions, extra debt payments and transfers, earliest-added first.
 - **Mandatory goals ("Always Fund")** [priorities]
   https://projectionlab.com/help/mandatory-goals - an Always Fund flow is paid

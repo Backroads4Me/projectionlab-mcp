@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
+import net from "node:net";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { freePort } from "./helpers/free-port.mjs";
@@ -217,6 +218,31 @@ test("concurrent cold reads share one exportData round trip", async () => {
   // A fresh read still goes to the tab.
   await bridge.exportData({ fresh: true });
   assert.equal(exportCalls, 2);
+  exec.ws.close();
+  await exec.done;
+});
+
+test("a malformed frame before hello closes that socket and the server keeps serving", async () => {
+  // A raw client that completes the upgrade, then sends an unmasked text
+  // frame, which RFC 6455 5.1 forbids from a client.
+  const raw = net.connect(PORT, "127.0.0.1");
+  await new Promise((resolve, reject) => {
+    raw.once("connect", resolve);
+    raw.once("error", reject);
+  });
+  raw.write(
+    "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+  );
+  await new Promise((resolve) => raw.once("data", resolve));
+  const closed = new Promise((resolve) => raw.once("close", resolve));
+  raw.on("error", () => {});
+  raw.write(Buffer.from([0x81, 0x02, 0x68, 0x69]));
+  await closed;
+
+  const exec = connectExecutor({ handler: healthyHandler });
+  await exec.ready;
+  assert.ok(await bridge.describePluginApi());
   exec.ws.close();
   await exec.done;
 });

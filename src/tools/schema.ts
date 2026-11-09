@@ -30,16 +30,16 @@ function extractAccounts(data: ExportedData): AccountSummary[] {
     for (const item of items) {
       if (item && typeof item === "object") {
         const obj = item as Record<string, unknown>;
-        // A real-estate record holds its loan in `balance` and its market
-        // value in `amount` (observed ProjectionLab storage), so label them
-        // as separate named fields; a single `balance` would read as if the
-        // loan were the property's value.
-        if (section === "assets" && obj.type === "real-estate") {
+        // An asset record holds its loan in `balance` and its market value in
+        // `amount` (observed ProjectionLab storage, the same reading as
+        // src/summary.ts), so label them as separate named fields; a single
+        // `balance` would read as if the loan were the asset's value.
+        if (section === "assets") {
           accounts.push({
             id: String(obj.id ?? ""),
             name: String(obj.name ?? "unknown"),
-            type: "real-estate",
-            marketValue: Number(obj.amount ?? 0),
+            type: obj.type === "real-estate" ? "real-estate" : section,
+            marketValue: Number(obj.amount ?? obj.value ?? 0),
             loanBalance: Number(obj.balance ?? 0),
           });
           continue;
@@ -55,6 +55,17 @@ function extractAccounts(data: ExportedData): AccountSummary[] {
   }
 
   return accounts;
+}
+
+// ProjectionLab exports progress tracking as `{ data: [...] }` (observed in
+// ProjectionLab 4.6.0 exports); a bare array is counted too.
+function progressEntryCount(progress: unknown): number {
+  if (Array.isArray(progress)) return progress.length;
+  if (progress && typeof progress === "object") {
+    const entries = (progress as Record<string, unknown>).data;
+    if (Array.isArray(entries)) return entries.length;
+  }
+  return 0;
 }
 
 function extractPlans(data: ExportedData): PlanSummary[] {
@@ -77,7 +88,7 @@ export function registerSchemaTool(server: McpServer, bridge: Bridge) {
       title: "Describe Schema",
       description:
         "Returns a lightweight summary of the ProjectionLab data structure without the full payload. " +
-        "Includes top-level keys, account list (IDs, names, types, balances; real-estate rows report type \"real-estate\" with marketValue and loanBalance in place of balance), plans (IDs, names, and each plan's income, expense, and milestone event counts), " +
+        "Includes top-level keys, account list (IDs, names, types, balances; asset rows report marketValue and loanBalance in place of balance, with type \"real-estate\" for real estate), plans (IDs, names, and each plan's income, expense, and milestone event counts), " +
         "and the progress entry count. " +
         "Use this to understand the data model before crafting queries or mutations.",
       annotations: {
@@ -109,9 +120,7 @@ export function registerSchemaTool(server: McpServer, bridge: Bridge) {
             name: plan.name,
             ...planEventCounts(plan),
           })) as PlanSummary[],
-          progressEntryCount: Array.isArray(data.progress)
-            ? data.progress.length
-            : 0,
+          progressEntryCount: progressEntryCount(data.progress),
         };
 
         return {

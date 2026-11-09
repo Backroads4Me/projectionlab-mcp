@@ -145,6 +145,16 @@ export class ExtensionBridge implements Bridge {
       log.error("extension", `WebSocket server error: ${err.message}`);
     });
     wss.on("connection", (ws, req) => {
+      // A socket emits "error" on a malformed frame (RFC 6455 5.1: client
+      // frames must be masked), and an EventEmitter with no "error" listener
+      // throws, which would end the process. Listen from the first moment, so
+      // a peer that never authenticates cannot take the server down; an
+      // adopted executor's errors are logged by adopt().
+      ws.on("error", (err) => {
+        if (this.conn !== ws) {
+          log.warn("extension", `Socket error before authentication: ${err.message}`);
+        }
+      });
       const origin = req.headers.origin;
       if (!originAllowed(origin)) {
         log.warn("extension", `Rejected connection from origin ${origin}`);

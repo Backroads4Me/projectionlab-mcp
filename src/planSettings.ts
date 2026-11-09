@@ -27,7 +27,7 @@ const ADVANCED_RATE_SCHEDULES = new Set([
 const PLAN_SETTING_CONTEXT = {
   label: "plan setting",
   discoveryTool: "projectionlab_get_plan_settings",
-  example: '{ "inflation": 0.03 }',
+  example: '{ "inflation": 3 }',
 } as const;
 
 export function listPlanSettings(

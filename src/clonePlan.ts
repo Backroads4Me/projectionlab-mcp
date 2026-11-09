@@ -92,7 +92,8 @@ export function buildPlanClone(
  * Check a fresh read after appending `clone` to `before`: every original plan
  * is still present with its input content, its `simKey` did not vanish, its
  * `lastUpdated` stamp never went backwards or disappeared, and the clone
- * exists exactly once under its name. Returns the problems found; empty
+ * exists exactly once under its name with the input content that was sent.
+ * Returns the problems found; empty
  * means verified. The Current Finances reads are checked by
  * `currentFinancesProblems`, over the same two exports.
  */
@@ -130,6 +131,8 @@ export function verifyPlanClone(
     problems.push(`expected the new plan once, found it ${copies.length} times`);
   } else if (copies[0].name !== clone.name) {
     problems.push(`new plan is named "${String(copies[0].name)}", expected "${String(clone.name)}"`);
+  } else if (!samePlanContent(clone, copies[0])) {
+    problems.push(`new plan "${String(clone.name)}" differs from the copy that was sent`);
   }
   if (after.length !== before.length + 1) {
     problems.push(`plan count is ${after.length}, expected ${before.length + 1}`);

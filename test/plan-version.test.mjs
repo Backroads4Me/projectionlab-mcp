@@ -94,6 +94,20 @@ test("verifyPlanClone checks originals are untouched and the copy exists once", 
   assert.ok(dropped.includes("original plan b is missing"));
 });
 
+test("verifyPlanClone reports a copy whose content the app did not keep", () => {
+  const before = [plan("a", 1)];
+  const clone = plan("c", 2, { expenses: { events: [{ id: "e1" }, { id: "e2" }] }, simKey: 7 });
+
+  // A re-stamped copy with a new simKey still verifies.
+  const restamped = { ...structuredClone(clone), lastUpdated: 9, simKey: 8 };
+  assert.deepEqual(verifyPlanClone(before, [...before, restamped], clone), []);
+
+  const truncated = structuredClone(clone);
+  truncated.expenses.events.pop();
+  const problems = verifyPlanClone(before, [...before, truncated], clone);
+  assert.deepEqual(problems, ['new plan "c" differs from the copy that was sent']);
+});
+
 test("verifyPlanClone accepts a changed simKey value and reports a lost simKey", () => {
   const before = [plan("a", 1, { simKey: 3 }), plan("b", 1, { simKey: 4 })];
   const clone = plan("c", 2, { simKey: 5 });

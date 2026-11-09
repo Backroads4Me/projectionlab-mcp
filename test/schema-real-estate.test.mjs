@@ -1,6 +1,7 @@
-// Real-estate labeling in projectionlab_describe_schema accounts: the loan
-// and the market value are reported as separate named fields, and every
-// other row keeps the plain balance shape.
+// Asset labeling in projectionlab_describe_schema accounts: an asset's loan
+// and market value are reported as separate named fields, real estate keeps
+// its "real-estate" type, and every non-asset row keeps the plain balance
+// shape.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -55,7 +56,7 @@ test("real-estate assets report market value and loan balance, not balance", asy
     { id: "sav1", name: "Emergency", type: "savingsAccounts", balance: 9000 },
     { id: "d1", name: "Car loan", type: "debts", balance: 8000 },
     { id: "re1", name: "Lake house", type: "real-estate", marketValue: 465000, loanBalance: 210000 },
-    { id: "veh1", name: "Coach", type: "assets", balance: 95000 },
+    { id: "veh1", name: "Coach", type: "assets", marketValue: 0, loanBalance: 95000 },
   ]);
   const re = accounts.find((a) => a.id === "re1");
   assert.equal("balance" in re, false);
@@ -81,14 +82,42 @@ test("the real-estate label applies only to assets rows and only to the stored t
     // row: there the balance is the whole point.
     debts: [{ id: "d1", name: "Heirlooms mortgage", type: "real-estate", balance: 100000, amount: 300000 }],
     assets: [
-      // Only the stored "real-estate" type marks the record; other asset
-      // types keep the plain balance shape.
+      // Only the stored "real-estate" type marks the record as real estate;
+      // other asset types still split market value from the loan.
       { id: "a1", name: "Boat", type: "vehicle", balance: 30000, amount: 40000 },
     ],
   });
 
   assert.deepEqual(accounts, [
     { id: "d1", name: "Heirlooms mortgage", type: "debts", balance: 100000 },
-    { id: "a1", name: "Boat", type: "assets", balance: 30000 },
+    { id: "a1", name: "Boat", type: "assets", marketValue: 40000, loanBalance: 30000 },
   ]);
+});
+
+test("a paid-in-full asset reports its market value and no loan", async () => {
+  const accounts = await schemaAccounts({
+    assets: [
+      { id: "car1", name: "Truck", type: "vehicle", amount: 25000, balance: 0 },
+      { id: "art1", name: "Painting", value: 5000 },
+    ],
+  });
+
+  assert.deepEqual(accounts, [
+    { id: "car1", name: "Truck", type: "assets", marketValue: 25000, loanBalance: 0 },
+    { id: "art1", name: "Painting", type: "assets", marketValue: 5000, loanBalance: 0 },
+  ]);
+  assert.equal(accounts.some((a) => "balance" in a), false);
+});
+
+test("progressEntryCount counts ProjectionLab's progress.data entries", async () => {
+  const count = async (progress) => {
+    const server = fakeServer();
+    registerSchemaTool(server, fakeBridge({ today: {}, plans: [], progress }));
+    const result = await server.tools.get("projectionlab_describe_schema").handler({});
+    return JSON.parse(result.content[0].text).progressEntryCount;
+  };
+  assert.equal(await count({ data: [{ date: 1 }, { date: 2 }, { date: 3 }] }), 3);
+  assert.equal(await count([{ date: 1 }]), 1);
+  assert.equal(await count({}), 0);
+  assert.equal(await count(undefined), 0);
 });

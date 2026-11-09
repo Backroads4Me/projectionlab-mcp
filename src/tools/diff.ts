@@ -238,7 +238,7 @@ export function registerDiffTool(
         ? {}
         : {
             message:
-              "No differences in the fields compared. The plan's own id and name, each event's own id and the computed fields (lastUpdated, simKey, meta) are excluded, and a reference to another event of the same plan is compared by the event it names, so a plan rebuilt by hand reads as unchanged.",
+              "No differences in the fields compared. The plan's own id and name, each event's own id and random key, and the computed fields (lastUpdated, simKey, meta) are excluded, and a reference to another event of the same plan is compared by the event it names, so a plan rebuilt by hand reads as unchanged.",
           }),
       planSettings: pair.settings,
       ...(pair.sections ? { sections: pair.sections } : {}),
@@ -297,7 +297,9 @@ export function registerDiffTool(
         "from is also given; planA and planB cannot be combined with to or planIdentifier. " +
         "Events match by name plus occurrence. The fields that say which plan an object is " +
         "(the plan's id and name, each event's own id) and the computed fields are left " +
-        "out, and a reference from one event to another event of the same plan, such as a " +
+        "out, as is each event's random key, which ProjectionLab assigns when the event is " +
+        "created, so re-entering the same event does not read as a difference. A reference " +
+        "from one event to another event of the same plan, such as a " +
         "milestone id in a start or end condition, is compared by the event it names, so " +
         "the same milestone still compares equal under the unrelated ids two plans store. " +
         "Each section reports onlyInA, onlyInB, different (each with \"path\": \"planA " +

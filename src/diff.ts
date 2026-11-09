@@ -579,20 +579,27 @@ function substituteReferences(
   return value;
 }
 
-/** One event as plan-to-plan comparison sees it: its own `id` dropped, references tokened. */
+/**
+ * One event as plan-to-plan comparison sees it: its own `id` and `key` dropped,
+ * references tokened. ProjectionLab gives each event a random `key` when the
+ * event is created, so two independently built plans never share it.
+ */
 function eventForPair(event: unknown, tokens: Map<string, string>): unknown {
   if (Array.isArray(event) || !isContainer(event)) {
     return substituteReferences(event, tokens);
   }
   const copy: PlanObj = {};
   for (const key of Object.keys(event as PlanObj)) {
-    if (key === "id") continue;
+    if (key === "id" || key === "key") continue;
     copy[key] = substituteReferences((event as PlanObj)[key], tokens);
   }
   return copy;
 }
 
-/** One plan section with each event's own `id` dropped and each reference tokened. */
+/**
+ * One plan section with each event's own `id` and `key` dropped and each
+ * reference tokened.
+ */
 function sectionForPair(section: unknown, tokens: Map<string, string>): unknown {
   if (Array.isArray(section)) {
     return section.map((event) => eventForPair(event, tokens));
@@ -613,9 +620,9 @@ function sectionForPair(section: unknown, tokens: Map<string, string>): unknown 
 
 /**
  * One plan reshaped so it can be compared against a different plan: each
- * event's own `id` is dropped and each reference to another event of the same
- * plan is replaced by that event's token. Those are the only fields two
- * independently built plans of the same content cannot share.
+ * event's own `id` and `key` are dropped and each reference to another event of
+ * the same plan is replaced by that event's token. Those are the only fields
+ * two independently built plans of the same content cannot share.
  */
 function planForPair(plan: PlanObj): PlanObj {
   const tokens = eventReferenceTokens(plan);
@@ -629,7 +636,7 @@ function planForPair(plan: PlanObj): PlanObj {
 /**
  * Compare one event-shaped section of two different plans. `a` is plan A and
  * `b` is plan B, so each change reads `A's value → B's value`. Both sides carry
- * the ids dropped and the references tokened by `planForPair`.
+ * the ids and random keys dropped and the references tokened by `planForPair`.
  */
 export function diffEventPair(
   a: unknown,
@@ -704,9 +711,10 @@ export interface PlanPairDiff {
  * `A → B` pair. Events match by name plus occurrence, the same keying the
  * time diff uses; the fields that say which plan an object is (`id`, `name`),
  * the fields ProjectionLab computes (`lastUpdated`, `simKey`, `meta`) and each
- * event's own `id` are left out, and references between a plan's own events are
- * compared by the event they name. `section` narrows the section comparison;
- * plan settings outside the sections are always compared.
+ * event's own `id` and randomly assigned `key` are left out, and references
+ * between a plan's own events are compared by the event they name. `section`
+ * narrows the section comparison; plan settings outside the sections are always
+ * compared.
  */
 export function diffPlanPair(
   planA: PlanObj,

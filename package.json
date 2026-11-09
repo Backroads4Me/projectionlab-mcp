@@ -48,13 +48,13 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^16.4.7",
     "ws": "^8.21.1",
-    "zod": "^3.24.0"
+    "zod": "^4.6.7"
   },
   "//overrides": "Patched transitive deps of the MCP SDK, kept within each parent's declared range (in-major) for compatibility. All except fast-uri live only in the SDK's HTTP/SSE transport, which this stdio-only server never loads; fast-uri is used by ajv for schema validation.",
   "overrides": {
     "fast-uri": "^3.1.6",
     "hono": "^4.13.4",
-    "@hono/node-server": "^1.19.17",
+    "@hono/node-server": "^2.1.3",
     "path-to-regexp": "^8.4.2",
     "body-parser": "^2.3.0",
     "qs": "^6.15.3",

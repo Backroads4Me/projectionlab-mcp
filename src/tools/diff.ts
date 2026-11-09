@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
-import { resolveSnapshot, type SnapshotManager } from "../snapshot.js";
+import {
+  resolveSnapshot,
+  type SnapshotManager,
+  type SnapshotSelectorArgs,
+} from "../snapshot.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
@@ -9,6 +13,7 @@ import { redactSecrets } from "../redact.js";
 import {
   FIELD_CHANGE_CAP,
   createDiffBudget,
+  diffPlanPair,
   diffSectionData,
   planKey,
 } from "../diff.js";
@@ -16,6 +21,8 @@ import {
   PLAN_SECTIONS,
   findPlanIndex,
   planNotFoundError,
+  type PlanObj,
+  type PlanSection,
 } from "../plans.js";
 import type { Snapshot } from "../types/projectionlab.js";
 
@@ -69,20 +76,206 @@ const selectorSchema = z
   })
   .strict();
 
+/** Everything the tool accepts, before the mode check narrows it. */
+interface DiffArgs {
+  from?: SnapshotSelectorArgs;
+  to?: SnapshotSelectorArgs;
+  planIdentifier?: string;
+  planA?: string;
+  planB?: string;
+  section?: PlanSection;
+  pathsOnly?: boolean;
+}
+
+/**
+ * The tool compares one data set at two points in time (`time`) or two
+ * different plans side by side (`plans`). Which one is asked for decides which
+ * arguments are required, and the two modes share no argument, so a mixed call
+ * is refused with what to drop rather than guessed at.
+ */
+function requireMode(
+  args: DiffArgs,
+): { mode: "time" } | { mode: "plans"; planA: string; planB: string } {
+  if (args.planA === undefined && args.planB === undefined) {
+    if (args.from === undefined) {
+      throw new ProjectionLabError(
+        "INVALID_INPUT",
+        "No from snapshot selector supplied",
+        "Supply from with exactly one of snapshotId, nBack or beforeTime to compare a snapshot against another snapshot or the live data, or supply planA and planB together to compare two plans",
+      );
+    }
+    return { mode: "time" };
+  }
+  if (args.planA === undefined || args.planB === undefined) {
+    const missing = args.planA === undefined ? "planA" : "planB";
+    throw new ProjectionLabError(
+      "INVALID_INPUT",
+      `planA and planB compare two plans together, and ${missing} is missing`,
+      "Name both plans, or drop planA and planB to compare a snapshot against another snapshot or the live data",
+    );
+  }
+  const { planA, planB } = args;
+  for (const name of ["to", "planIdentifier"] as const) {
+    if (args[name] !== undefined) {
+      throw new ProjectionLabError(
+        "INVALID_INPUT",
+        `planA and planB compare two plans, and ${name} belongs to the points-in-time comparison`,
+        `Drop ${name}. planA and planB read both plans from the live app, or from one snapshot with from. Compare points in time with from and to alone`,
+      );
+    }
+  }
+  return { mode: "plans", planA, planB };
+}
+
+/** A missing plan names the side it was asked for, so the fix is unambiguous. */
+function planSideNotFoundError(
+  plans: unknown[],
+  identifier: string,
+  side: "planA" | "planB",
+): ProjectionLabError {
+  const notFound = planNotFoundError(plans, identifier);
+  const position = side === "planA" ? "first" : "second";
+  return new ProjectionLabError(
+    "INVALID_INPUT",
+    `${notFound.message} for ${side}`,
+    `${side}'s values are reported ${position} in each "A → B" pair. ${notFound.suggestion}`,
+  );
+}
+
+/** A plan-to-plan request whose two plan identifiers are present. */
+interface PairRequest {
+  planA: string;
+  planB: string;
+  from?: SnapshotSelectorArgs;
+  section?: PlanSection;
+  pathsOnly?: boolean;
+}
+
+/** How a plan is named to the user: its name, falling back to its id. */
+function planLabel(plan: unknown): string {
+  const obj = (plan ?? {}) as PlanObj;
+  return String(obj.name ?? obj.id ?? "unnamed");
+}
+
 export function registerDiffTool(
   server: McpServer,
   bridge: Bridge,
   snapshots: SnapshotManager,
 ) {
+  /** The plans a plan-to-plan comparison reads, and where they came from. */
+  async function readPlansForPair(from?: SnapshotSelectorArgs): Promise<{
+    plans: unknown[];
+    readFrom: Record<string, unknown>;
+  }> {
+    if (from) {
+      const snapshot = await resolveSnapshot(snapshots, from, "from snapshot");
+      const stored = snapshot.data.plans;
+      if (!Array.isArray(stored)) {
+        throw new ProjectionLabError(
+          "INVALID_INPUT",
+          `The snapshot "${snapshot.id}" holds no plans data`,
+          "Drop from to compare the plans in ProjectionLab now, or pick a snapshot whose sections include plans; projectionlab_list_snapshots shows what each snapshot holds",
+        );
+      }
+      return { plans: stored, readFrom: describeSnapshot(snapshot) };
+    }
+    const live = await bridge.exportData({ fresh: true });
+    const plans = Array.isArray(live.plans) ? live.plans : [];
+    if (plans.length === 0) {
+      throw new ProjectionLabError(
+        "INVALID_INPUT",
+        "No plans found in ProjectionLab",
+        "Create the plans in ProjectionLab first, or name two saved plans with from",
+      );
+    }
+    return {
+      plans,
+      readFrom: {
+        source: "live" as const,
+        readAt: new Date().toISOString(),
+        note: "both plans read from ProjectionLab when this diff ran",
+      },
+    };
+  }
+
+  /** Compare two different plans field by field, planA's values reported first. */
+  async function comparePlans(args: PairRequest) {
+    const budget = createDiffBudget({
+      pathsOnly: args.pathsOnly === true,
+    });
+    const { plans, readFrom } = await readPlansForPair(args.from);
+    const indexA = findPlanIndex(plans, args.planA);
+    if (indexA === -1) {
+      throw planSideNotFoundError(plans, args.planA, "planA");
+    }
+    const indexB = findPlanIndex(plans, args.planB);
+    if (indexB === -1) {
+      throw planSideNotFoundError(plans, args.planB, "planB");
+    }
+    if (indexA === indexB) {
+      throw new ProjectionLabError(
+        "INVALID_INPUT",
+        `planA and planB both name the same plan ("${planLabel(plans[indexA])}")`,
+        "Name two different plans; projectionlab_describe_schema lists them by name and ID",
+      );
+    }
+
+    const pair = diffPlanPair(
+      plans[indexA] as PlanObj,
+      plans[indexB] as PlanObj,
+      budget,
+      args.section,
+    );
+    const result = {
+      mode: "plans" as const,
+      planA: pair.a,
+      planB: pair.b,
+      readFrom,
+      ...(args.section ? { section: args.section } : {}),
+      ...(args.pathsOnly ? { pathsOnly: true } : {}),
+      changed: pair.changed,
+      ...(pair.changed
+        ? {}
+        : {
+            message:
+              "No differences in the fields compared. The plan's own id and name, each event's own id and the computed fields (lastUpdated, simKey, meta) are excluded, and a reference to another event of the same plan is compared by the event it names, so a plan rebuilt by hand reads as unchanged.",
+          }),
+      planSettings: pair.settings,
+      ...(pair.sections ? { sections: pair.sections } : {}),
+      ...(pair.changedSections
+        ? { changedSections: pair.changedSections }
+        : {}),
+      fieldChangeCap: budget.fieldChangeCap,
+      ...(budget.omittedFieldChanges > 0
+        ? { omittedFieldChanges: budget.omittedFieldChanges }
+        : {}),
+      ...(budget.omittedEntries > 0
+        ? { omittedEntries: budget.omittedEntries }
+        : {}),
+    };
+
+    const json = toJson(redactSecrets(result, { byName: true }));
+    // A spilled result keeps the facts that name the comparison; the
+    // sections themselves stay in the file it points at.
+    const { sections: _sections, ...summary } = result;
+    return {
+      content: [
+        { type: "text" as const, text: await textOrFile(json, "diff", summary) },
+      ],
+    };
+  }
+
   server.registerTool(
     "projectionlab_diff",
     {
-      title: "Diff Snapshot Against Snapshot or Live Data",
+      title: "Diff Snapshots Over Time, or Two Plans Against Each Other",
       description:
-        "Reports field-level differences between two points in time, read-only: it never " +
-        "writes and never snapshots, so it works with PL_READ_ONLY=true. " +
-        "from is required and names a saved snapshot with exactly one of snapshotId, nBack or " +
-        "beforeTime, resolved the way projectionlab_rollback resolves them. " +
+        "Reports field-level differences, read-only: it never writes and never " +
+        "snapshots, so it works with PL_READ_ONLY=true. Two modes, told apart by the " +
+        "arguments you supply. " +
+        "Points in time: from is required and names a saved snapshot with exactly " +
+        "one of snapshotId, nBack or beforeTime, resolved the way " +
+        "projectionlab_rollback resolves them. " +
         "to is optional: another snapshot selector, or omitted to compare against the data in " +
         "ProjectionLab right now. " +
         "Only the data sections the from snapshot holds are compared, and when to is a snapshot, " +
@@ -98,6 +291,21 @@ export function registerDiffTool(
         "Use it to confirm a write landed as intended, to explain to the user what changed, or to " +
         "see what projectionlab_rollback would undo before rolling back. " +
         "Narrow the output with planIdentifier (plan name or ID) and section. " +
+        "Two plans: planA and planB name two different plans and compare one against the " +
+        "other, so a plan rebuilt by hand in the ProjectionLab UI can be checked against " +
+        "the original. Both plans are read from the live app, or from one snapshot when " +
+        "from is also given; planA and planB cannot be combined with to or planIdentifier. " +
+        "Events match by name plus occurrence. The fields that say which plan an object is " +
+        "(the plan's id and name, each event's own id) and the computed fields are left " +
+        "out, and a reference from one event to another event of the same plan, such as a " +
+        "milestone id in a start or end condition, is compared by the event it names, so " +
+        "the same milestone still compares equal under the unrelated ids two plans store. " +
+        "Each section reports onlyInA, onlyInB, different (each with \"path\": \"planA " +
+        "value → planB value\") and sameCount; planSettings reports the plan's own fields " +
+        "outside the sections. Use it to answer \"does the plan I rebuilt match the " +
+        "original?\" " +
+        "In either mode pathsOnly: true reports the paths that differ with no values, for " +
+        "a comparison whose values are private. " +
         "Any value whose path names a credential (apiKey, token, password, ...) is reported as " +
         "[REDACTED] rather than shown, and a value longer than 200 characters is truncated with its " +
         "original length. Output is capped at " +
@@ -105,12 +313,12 @@ export function registerDiffTool(
         "omittedChanges counting the rest; a difference past the cap is still counted as changed.",
       inputSchema: {
         from: selectorSchema.describe(
-          "The baseline side, whose values are reported as before: one saved snapshot, selected like projectionlab_rollback does.",
+          "The baseline side, whose values are reported as before: one saved snapshot, selected like projectionlab_rollback does. Required to compare points in time. With planA and planB it is optional and names the one snapshot both plans are read from.",
         ),
         to: selectorSchema
           .optional()
           .describe(
-            "The side whose values are reported as after: another saved snapshot, or omit it to compare against the live data read from ProjectionLab now.",
+            "The side whose values are reported as after: another saved snapshot, or omit it to compare against the live data read from ProjectionLab now. Points-in-time mode only; never combine it with planA or planB.",
           ),
         planIdentifier: z
           .string()
@@ -118,13 +326,35 @@ export function registerDiffTool(
           .min(1)
           .optional()
           .describe(
-            "Report one plan only: plan name (case-insensitive, partial match) or exact plan ID.",
+            "Report one plan only: plan name (case-insensitive, partial match) or exact plan ID. Points-in-time mode only; name the plans with planA and planB instead.",
+          ),
+        planA: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe(
+            "Compare two different plans instead of two points in time: the plan whose values are reported first, by plan name (case-insensitive, partial match) or exact plan ID. Supply planA and planB together, never with to or planIdentifier.",
+          ),
+        planB: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe(
+            "The second plan of a plan-to-plan comparison, whose values are reported second in each \"A → B\" pair. Supply it together with planA.",
           ),
         section: z
           .enum(PLAN_SECTIONS)
           .optional()
           .describe(
             "Compare one plan section only, such as income or expenses. Plan settings outside the sections are still compared.",
+          ),
+        pathsOnly: z
+          .boolean()
+          .optional()
+          .describe(
+            "Report the paths that differ with no values, for a comparison whose values are private. Works in both modes.",
           ),
       },
       annotations: {
@@ -133,8 +363,20 @@ export function registerDiffTool(
         openWorldHint: false,
       },
     },
-    async ({ from, to, planIdentifier, section }) => {
+    async (args) => {
       try {
+        const request = requireMode(args);
+        if (request.mode === "plans") {
+          return await comparePlans({
+            planA: request.planA,
+            planB: request.planB,
+            from: args.from,
+            section: args.section,
+            pathsOnly: args.pathsOnly,
+          });
+        }
+        // The points-in-time mode: one data set read at two moments.
+        const { from = {}, to, planIdentifier, section } = args;
         const fromSnapshot = await resolveSnapshot(
           snapshots,
           from,
@@ -272,7 +514,9 @@ export function registerDiffTool(
           planOnlyKey = planKey(match);
         }
 
-        const budget = createDiffBudget();
+        const budget = createDiffBudget({
+          pathsOnly: args.pathsOnly === true,
+        });
         const sections: Record<string, unknown> = {};
         let changed = false;
         for (const entry of compared) {

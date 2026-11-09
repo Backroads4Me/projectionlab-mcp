@@ -92,6 +92,7 @@ question.
 | Everything (rarely needed) | `projectionlab_export_data` |
 | Snapshots already saved (id, time, operation, sections) | `projectionlab_list_snapshots` |
 | What changed between a snapshot and now, or between two snapshots | `projectionlab_diff` |
+| Does a plan I rebuilt by hand match the original | `projectionlab_diff` with `planA` and `planB` |
 
 - `projectionlab_describe_schema` lists accounts by type. A real-estate
   asset appears as `type: "real-estate"` with `marketValue` and `loanBalance`
@@ -132,6 +133,20 @@ question.
   than dropped, so a difference past the cap still reads as changed. Use it to
   confirm a write landed as intended, to tell the user what changed, or to see
   what a rollback would undo.
+- `projectionlab_diff` compares two different plans when you give it `planA` and
+  `planB` (plan name or exact ID) instead of a snapshot, which answers "does the
+  plan I rebuilt by hand match the original?". Both plans come from the live app,
+  or from one snapshot when `from` is also given, and every value reads
+  `"planA value → planB value"`. Events match by name plus occurrence; the plan's
+  own id and name, each event's own id and the computed fields are excluded; and
+  a reference to another event of the same plan (a milestone id in a start or end
+  condition) is compared by the event it names, so two plans that store different
+  ids for the same milestone still compare equal. Each section reports `onlyInA`,
+  `onlyInB`, `different` and `sameCount`, and `planSettings` reports the plan's
+  own fields outside the sections. `pathsOnly: true` works in either mode and
+  reports the paths that differ with no values at all, which is what to use when
+  the user wants to know whether two plans agree without sending their contents
+  to the model.
 - Results over about 100,000 characters are written to
   `~/.projectionlab-mcp/exports/` and returned as a file path. Read the parts
   you need from the file.

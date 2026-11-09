@@ -260,7 +260,9 @@ export function registerUpdatePlanEventTool(
           };
         }
 
-        await snapshots.create("updatePlanEvent", ["plans"], { plans });
+        const snapshot = await snapshots.create("updatePlanEvent", ["plans"], {
+          plans,
+        });
 
         const updatedPlan = {
           ...plan,
@@ -322,6 +324,7 @@ export function registerUpdatePlanEventTool(
                 event: eventLabel(patched),
                 changes: renderedChanges,
                 verified,
+                snapshotId: snapshot.id,
                 message: verified
                   ? "Event patched and verified. Snapshot saved automatically."
                   : "Patch sent but verification did not confirm all fields - check with projectionlab_get_plan_section.",

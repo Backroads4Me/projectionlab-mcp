@@ -11,6 +11,7 @@ import {
 } from "../planVersion.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
+import { redactSecrets } from "../redact.js";
 import {
   PLAN_SECTIONS,
   diffFields,
@@ -90,15 +91,17 @@ function diffSection(current: unknown, incoming: unknown): DiffResult {
   };
 }
 
+/** The preview of a section change, with secret-named fields and the Plugin
+ * API key scrubbed like every other plan read. */
 function renderDiff(diff: DiffResult) {
-  return {
+  return redactSecrets({
     itemCount: `${diff.currentCount} → ${diff.newCount}`,
     added: diff.added.length > 0 ? diff.added : undefined,
     removed: diff.removed.length > 0 ? diff.removed : undefined,
     modified: diff.modified.length > 0 ? diff.modified : undefined,
     unchanged: diff.unchanged.length > 0 ? diff.unchanged : undefined,
     fieldChanges: diff.fieldChanges,
-  };
+  }, { byName: true });
 }
 
 export function registerUpdatePlanSectionTool(
@@ -206,7 +209,7 @@ export function registerUpdatePlanSectionTool(
         assertPlanVersion(plan, expectedPlanVersion);
 
         // Snapshot all plans before mutation
-        await snapshots.create("updatePlanSection", ["plans"], {
+        const snapshot = await snapshots.create("updatePlanSection", ["plans"], {
           plans,
         });
 
@@ -246,6 +249,7 @@ export function registerUpdatePlanSectionTool(
                 section,
                 diff: renderDiff(diff),
                 verified: check.ok,
+                snapshotId: snapshot.id,
                 message: check.ok
                   ? "Section updated and verified. Snapshot saved automatically."
                   : `Section update sent but could not be verified (${check.reason}) - check with projectionlab_get_plan_section. A snapshot was saved; roll back with projectionlab_rollback if needed.`,

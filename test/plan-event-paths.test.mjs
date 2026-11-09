@@ -109,6 +109,7 @@ test("event path changes preserve nested siblings, snapshot, and verify", async 
         data.plans[0].income.events[0].taxHandling.withholding.rate,
         0.1,
       );
+      return { id: "snap-event" };
     },
   };
   registerUpdatePlanEventTool(server, bridge, snapshots);
@@ -144,6 +145,7 @@ test("event path changes preserve nested siblings, snapshot, and verify", async 
   );
   assert.deepEqual(actions, ["snapshot", "restore"]);
   assert.equal(executed.verified, true);
+  assert.equal(executed.snapshotId, "snap-event");
   assert.deepEqual(
     state.plans[0].income.events[0].taxHandling,
     {

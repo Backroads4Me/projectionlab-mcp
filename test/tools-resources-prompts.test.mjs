@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -136,6 +136,33 @@ test("update_plan_section dry run previews without writing", async () => {
   assert.equal(bridge.writes, 0);
 });
 
+test("update_plan_section previews redact secret-named fields and the API key", async () => {
+  const plans = samplePlans();
+  plans[0].income.events[0].auth_token = "old-secret";
+  plans[0].income.events[0].note = "uses test-api-key";
+  const { server } = setup(registerUpdatePlanSectionTool, { today: {}, plans });
+  const out = parse(
+    await server.tools.get("projectionlab_update_plan_section").handler(
+      sectionArgs({
+        confirm: false,
+        sectionData: {
+          events: [{ id: "i1", name: "Salary", amount: 100000, auth_token: "new-secret", note: "now test-api-key" }],
+        },
+      }),
+    ),
+  );
+  const text = JSON.stringify(out);
+  assert.equal(text.includes("old-secret"), false);
+  assert.equal(text.includes("new-secret"), false);
+  assert.equal(text.includes("test-api-key"), false);
+  assert.deepEqual(out.diff.modified, [
+    {
+      name: "Salary",
+      changes: { auth_token: "[REDACTED]", note: '"uses [REDACTED]" → "now [REDACTED]"' },
+    },
+  ]);
+});
+
 test("update_plan_section confirmed write snapshots, replaces only that section, and verifies", async () => {
   const { bridge, snapshots, server } = setup(registerUpdatePlanSectionTool);
   const out = parse(
@@ -150,7 +177,9 @@ test("update_plan_section confirmed write snapshots, replaces only that section,
   assert.deepEqual(bridge.state.plans[0].expenses, samplePlans()[0].expenses);
   assert.equal(bridge.state.plans[1].name, "Work forever");
   const list = await snapshots.list();
-  assert.ok(list.some((s) => s.operation === "updatePlanSection"));
+  assert.ok(
+    list.some((s) => s.operation === "updatePlanSection" && s.id === out.snapshotId),
+  );
 });
 
 test("update_plan_section refuses a stale expectedPlanVersion", async () => {
@@ -388,14 +417,17 @@ test("knowledge resource is served as text", async () => {
 
 // --- prompts ---
 
-const TOOL_SUFFIXES = new Set([
-  "check_connection", "get_bootstrap", "describe_plugin_api", "export_data",
-  "describe_schema", "get_summary", "get_plan", "get_plan_section",
-  "get_plan_settings", "get_current_finances", "update_account",
-  "update_plan_section", "update_plan_event", "update_plan_settings",
-  "clone_plan", "restore_current_finances", "restore_plans",
-  "restore_progress", "restore_settings", "list_snapshots", "rollback",
-]);
+// Every tool name registered in src/tools, so a prompt can name any real tool
+// and no other.
+const TOOL_SUFFIXES = new Set(
+  readdirSync(new URL("../src/tools/", import.meta.url))
+    .filter((file) => file.endsWith(".ts"))
+    .flatMap((file) => [
+      ...readFileSync(new URL(`../src/tools/${file}`, import.meta.url), "utf8")
+        .matchAll(/registerTool\(\s*"projectionlab_([a-z_]+)"/g),
+    ])
+    .map(([, suffix]) => suffix),
+);
 
 test("all four prompts register and name only real tools", async () => {
   const server = fakeServer();

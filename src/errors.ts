@@ -1,3 +1,5 @@
+import { redactSecrets } from "./redact.js";
+
 export type ErrorCode =
   | "BROWSER_NOT_READY"
   | "EXTENSION_NOT_CONNECTED"
@@ -50,7 +52,9 @@ export function toPlError(err: unknown): PlError {
 }
 
 export function errorResult(err: unknown) {
-  const plErr = toPlError(err);
+  // An error message can echo request data from the browser executor, so the
+  // Plugin API key is scrubbed from it like any other tool output.
+  const plErr = redactSecrets(toPlError(err));
   return {
     content: [{ type: "text" as const, text: JSON.stringify(plErr) }],
     isError: true,

@@ -282,6 +282,7 @@ test("update settings tool dry-runs, snapshots before mutation, and verifies", a
       assert.equal(operation, "updatePlanSettings");
       assert.deepEqual(sections, ["plans"]);
       assert.equal(data.plans[0].variables.inflation, 0.03);
+      return { id: "snap-settings" };
     },
   };
   registerUpdatePlanSettingsTool(server, bridge, snapshots);
@@ -309,6 +310,7 @@ test("update settings tool dry-runs, snapshots before mutation, and verifies", a
   );
   assert.deepEqual(actions, ["snapshot", "restore"]);
   assert.equal(executed.verified, true);
+  assert.equal(executed.snapshotId, "snap-settings");
   assert.deepEqual(state.plans[0].variables, {
     inflation: 0.025,
     estate: { enabled: true, beneficiary: "family" },

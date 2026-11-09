@@ -94,10 +94,11 @@ question.
 | What changed between a snapshot and now, or between two snapshots | `projectionlab_diff` |
 | Does a plan I rebuilt by hand match the original | `projectionlab_diff` with `planA` and `planB` |
 
-- `projectionlab_describe_schema` lists accounts by type. A real-estate
-  asset appears as `type: "real-estate"` with `marketValue` and `loanBalance`
-  instead of `balance`: ProjectionLab stores a property's loan in `balance`
-  and its market value in `amount`, so the two are never the same number.
+- `projectionlab_describe_schema` lists accounts by type. Every asset
+  appears with `marketValue` and `loanBalance` instead of `balance`, and a
+  real-estate asset as `type: "real-estate"`: ProjectionLab stores an asset's
+  loan in `balance` and its market value in `amount`, so the two are never
+  the same number.
 - `projectionlab_get_plan_section` takes a `section` (`income`, `expenses`,
   `accounts`, `assets`, `milestones`, `priorities`, `variables`,
   `withdrawalStrategy`, `montecarlo`), and optionally an `eventIdentifier`

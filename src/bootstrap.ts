@@ -1,5 +1,17 @@
-import { PROTOCOL_VERSION } from "./types/wire.js";
+import { PROTOCOL_VERSION, type WireMethod } from "./types/wire.js";
 import { VERSION } from "./version.js";
+
+/** The Plugin API calls the snippet will run; the meta-operations
+ * `describeApi` and `waitForApi` are handled by the snippet itself. */
+const PLUGIN_METHODS: readonly Exclude<WireMethod, "describeApi" | "waitForApi">[] = [
+  "exportData",
+  "updateAccount",
+  "restoreCurrentFinances",
+  "restorePlans",
+  "restoreProgress",
+  "restoreSettings",
+  "validateApiKey",
+];
 
 /**
  * Tier 0 transport: a self-contained snippet the user pastes into the
@@ -18,6 +30,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   });
   return `(() => {
   const cfg = ${cfg};
+  const PLUGIN_METHODS = ${JSON.stringify(PLUGIN_METHODS)};
   if (window.__plmcpBootstrap) { console.log("[plmcp] bootstrap already running"); return; }
   window.__plmcpBootstrap = true;
   let stopped = false;
@@ -47,6 +60,9 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   }
   async function handle(frame, ws) {
     try {
+      if (frame.method !== "waitForApi" && frame.method !== "describeApi" && !PLUGIN_METHODS.includes(frame.method)) {
+        throw new Error("Not a wire protocol method: " + frame.method);
+      }
       const requested = frame.method === "waitForApi" ? Number((frame.params || [])[0]) : NaN;
       const api = await waitForApi(Number.isFinite(requested) && requested > 0 ? requested : 15000);
       let result;
@@ -61,7 +77,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
     } catch (err) {
       const msg = err && err.message ? err.message : String(err);
       const code = err && err.code === "API_NOT_AVAILABLE" ? "API_NOT_AVAILABLE"
-        : /api.?key|invalid key|unauthori[sz]ed/i.test(msg) ? "API_KEY_INVALID" : "UNKNOWN";
+        : /api.?key|invalid key|unauthori[sz]ed|forbidden|401|403/i.test(msg) ? "API_KEY_INVALID" : "UNKNOWN";
       ws.send(JSON.stringify({ type: "response", id: frame.id, ok: false, error: { code, message: msg } }));
     }
   }

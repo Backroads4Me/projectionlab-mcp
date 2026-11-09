@@ -19,3 +19,21 @@ test("waitForApi resolves once the API is present", async () => {
     result: true,
   });
 });
+
+test("a method outside the wire protocol is refused without touching the API", async () => {
+  let called = false;
+  globalThis.window = { projectionlabPluginAPI: { wipeEverything: () => { called = true; } } };
+  const response = await executePageRequest({ method: "wipeEverything", params: [] });
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "UNKNOWN");
+  assert.match(response.error.message, /Not a wire protocol method: wipeEverything/);
+  assert.equal(called, false);
+});
+
+test("a wire protocol method reaches the API", async () => {
+  globalThis.window = { projectionlabPluginAPI: { exportData: async ({ key }) => ({ key }) } };
+  assert.deepEqual(await executePageRequest({ method: "exportData", params: [{ key: "k" }] }), {
+    ok: true,
+    result: { key: "k" },
+  });
+});

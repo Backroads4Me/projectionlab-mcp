@@ -12,17 +12,22 @@ import {
 import { REDACTED, isSecretFieldName } from "./redact.js";
 
 /**
- * Field-level diff of two copies of the same data, shared by
- * projectionlab_diff. Values render as `before → after` the way
- * `diffFields` renders them, and every path is a dot path in the form
- * `projectionlab_get_plan_section` and the patch tools use (`events.2.amount`),
- * so a reported path can be read back or patched with it.
+ * Field-level diff of two readings of ProjectionLab data, shared by
+ * projectionlab_diff. It compares the same data at two points in time
+ * (`diffSectionData`, `diffPlan`) or two different plans field by field
+ * (`diffPlanPair`), where each event's own id is dropped and each reference to
+ * another event of the same plan is compared by the event it names. Values
+ * render as `before → after` the way `diffFields` renders them, and every path
+ * is a dot path in the form `projectionlab_get_plan_section` and the patch
+ * tools use (`events.2.amount`), so a reported path can be read back or patched
+ * with it.
  *
  * The engine is pure and bounds its own output: `DiffBudget` caps how many
  * field changes and how many list entries one call may report, so the payload
- * stays small enough for a local model to hold in context. Omitted items are
- * counted rather than dropped silently, and whether something counts as
- * changed is decided from the data, never from what was left to report.
+ * stays small enough for a local model to hold in context, and it can ask for
+ * the differing paths with the values withheld. Omitted items are counted
+ * rather than dropped silently, and whether something counts as changed is
+ * decided from the data, never from what was left to report.
  *
  * A change whose path names a credential (`credentials.apiKey`,
  * `access.0.password`) is recorded as `[REDACTED]`, so neither value leaves
@@ -45,22 +50,48 @@ export const MAX_VALUE_CHARS = 200;
  */
 const COMPUTED_PLAN_FIELDS = ["lastUpdated", "simKey", "meta"] as const;
 
+/**
+ * Plan fields that say which plan an object is rather than what it plans. Two
+ * plans never share them, so a plan-to-plan comparison leaves them out of the
+ * field comparison and reports them as the identity of each side.
+ */
+const PLAN_IDENTITY_FIELDS = ["id", "name"] as const;
+
+/**
+ * How much one diff call reports: how many field changes and how many list
+ * entries it may name, and whether it names their values at all. The reporting
+ * policy rides with the caps because every comparison thread already carries
+ * the budget, so no call site can leak a value by forgetting to pass along a
+ * separate flag.
+ */
 export interface DiffBudget {
   readonly fieldChangeCap: number;
   readonly entryCap: number;
+  /** Report only the paths that differ, never their values. */
+  readonly pathsOnly: boolean;
   fieldChangesUsed: number;
   entriesUsed: number;
   omittedFieldChanges: number;
   omittedEntries: number;
 }
 
-export function createDiffBudget(
-  fieldChangeCap = FIELD_CHANGE_CAP,
-  entryCap = ENTRY_CAP,
-): DiffBudget {
+export interface DiffBudgetOptions {
+  fieldChangeCap?: number;
+  entryCap?: number;
+  /** Report only the paths that differ, with no values. */
+  pathsOnly?: boolean;
+}
+
+export function createDiffBudget(options: DiffBudgetOptions = {}): DiffBudget {
+  const {
+    fieldChangeCap = FIELD_CHANGE_CAP,
+    entryCap = ENTRY_CAP,
+    pathsOnly = false,
+  } = options;
   return {
     fieldChangeCap,
     entryCap,
+    pathsOnly,
     fieldChangesUsed: 0,
     entriesUsed: 0,
     omittedFieldChanges: 0,
@@ -142,8 +173,16 @@ function walkLeaves(
 }
 
 export interface LeafDiff {
-  /** The changes the budget had room to record, `path: "before → after"`. */
+  /**
+   * The changes the budget had room to record, `path: "before → after"`.
+   * Empty when the budget reports paths only.
+   */
   changes: Record<string, string>;
+  /**
+   * The paths the budget had room to record, present only when the budget
+   * reports paths only, which is when `changes` stays empty.
+   */
+  paths?: string[];
   /**
    * Differences found, whether or not the budget had room to record them.
    * Callers decide "modified" from this, never from `changes`, so a difference
@@ -163,6 +202,7 @@ export function diffLeafValues(
   budget: DiffBudget,
 ): LeafDiff {
   const changes: Record<string, string> = {};
+  const paths: string[] | undefined = budget.pathsOnly ? [] : undefined;
   let detected = 0;
 
   const record = (path: string, from: unknown, to: unknown): void => {
@@ -173,6 +213,10 @@ export function diffLeafValues(
       return;
     }
     budget.fieldChangesUsed++;
+    if (paths) {
+      paths.push(path);
+      return;
+    }
     changes[path] = pathHoldsSecret(path)
       ? REDACTED
       : `${renderValue(from)} → ${renderValue(to)}`;
@@ -180,34 +224,47 @@ export function diffLeafValues(
 
   if (!isContainer(before) && !isContainer(after)) {
     record("(value)", before, after);
-    return { changes, detected };
+    return { changes, ...(paths ? { paths } : {}), detected };
   }
 
   const beforeLeaves = new Map<string, unknown>();
   const afterLeaves = new Map<string, unknown>();
   walkLeaves(before, "", beforeLeaves);
   walkLeaves(after, "", afterLeaves);
-  const paths = [
+  const allPaths = [
     ...new Set([...beforeLeaves.keys(), ...afterLeaves.keys()]),
   ].sort();
-  for (const path of paths) {
+  for (const path of allPaths) {
     record(path, beforeLeaves.get(path), afterLeaves.get(path));
   }
-  return { changes, detected };
+  return { changes, ...(paths ? { paths } : {}), detected };
 }
 
 /**
  * The change entry for one event or row: its identity, the field changes the
- * budget recorded, and how many more it found than it could record.
+ * budget recorded (or, when values are withheld, just their paths), and how
+ * many more it found than it could record.
  */
 function changeEntry<T extends object>(
   identity: T,
   leaf: LeafDiff,
-): T & { changes?: Record<string, string>; omittedChanges?: number } {
-  const recorded = Object.keys(leaf.changes).length;
+): T & {
+  changes?: Record<string, string>;
+  paths?: string[];
+  omittedChanges?: number;
+} {
+  const recorded = leaf.paths
+    ? leaf.paths.length
+    : Object.keys(leaf.changes).length;
+  const reported =
+    recorded === 0
+      ? {}
+      : leaf.paths
+        ? { paths: leaf.paths }
+        : { changes: leaf.changes };
   return {
     ...identity,
-    ...(recorded > 0 ? { changes: leaf.changes } : {}),
+    ...reported,
     ...(leaf.detected > recorded
       ? { omittedChanges: leaf.detected - recorded }
       : {}),
@@ -223,6 +280,8 @@ export interface ChangeEntry {
   name?: string;
   id?: string;
   changes?: Record<string, string>;
+  /** The differing paths, reported instead of `changes` when values are withheld. */
+  paths?: string[];
   /** Field changes found for this entry that the cap left out. */
   omittedChanges?: number;
 }
@@ -240,10 +299,34 @@ export interface EventSectionDiff {
   unchangedCount: number;
 }
 
+/**
+ * One event-shaped section compared between two different plans. Events match
+ * by name plus occurrence, so `onlyInA` and `onlyInB` name the events only one
+ * of the plans carries, `different` names the shared events whose fields do not
+ * match, and `sameCount` counts the events that match field for field.
+ */
+export interface PairEventDiff {
+  kind: "events";
+  count: string;
+  changed: boolean;
+  onlyInACount: number;
+  onlyInA?: string[];
+  onlyInBCount: number;
+  onlyInB?: string[];
+  differentCount: number;
+  different?: ChangeEntry[];
+  sameCount: number;
+}
+
+/** What comparing one event-shaped section comes back as, in either mode. */
+export type EventCompareDiff = EventSectionDiff | PairEventDiff;
+
 export interface FieldSectionDiff {
   kind: "fields";
   changed: boolean;
   changes?: Record<string, string>;
+  /** The differing paths, reported instead of `changes` when values are withheld. */
+  paths?: string[];
   /** Field changes found that the cap left out of `changes`. */
   omittedChanges?: number;
 }
@@ -334,21 +417,28 @@ export function diffFieldSection(
  * Choose how to compare one plan section. A section that is event-shaped on
  * either side compares as events, including one that exists on only one side,
  * so a section added or dropped reads as events appearing or disappearing
- * rather than as a wall of leaf paths.
+ * rather than as a wall of leaf paths. `compareEvents` decides how two sets of
+ * events are reported: as added/removed/modified over time, or as
+ * onlyInA/onlyInB/different between two plans.
  */
-function diffSectionShape(
+function diffSectionShape<E extends EventCompareDiff>(
   before: unknown,
   after: unknown,
   budget: DiffBudget,
-): EventSectionDiff | FieldSectionDiff {
+  compareEvents: (
+    before: unknown,
+    after: unknown,
+    budget: DiffBudget,
+  ) => E,
+): E | FieldSectionDiff {
   const beforeIsEvent = isEventish(before);
   const afterIsEvent = isEventish(after);
-  if (beforeIsEvent && afterIsEvent) return diffEventSection(before, after, budget);
+  if (beforeIsEvent && afterIsEvent) return compareEvents(before, after, budget);
   if (beforeIsEvent && (after === undefined || after === null)) {
-    return diffEventSection(before, after, budget);
+    return compareEvents(before, after, budget);
   }
   if (afterIsEvent && (before === undefined || before === null)) {
-    return diffEventSection(before, after, budget);
+    return compareEvents(before, after, budget);
   }
   return diffFieldSection(before, after, budget);
 }
@@ -382,6 +472,8 @@ export interface PlanDiff {
   name: string;
   changed: boolean;
   changes?: Record<string, string>;
+  /** The differing paths, reported instead of `changes` when values are withheld. */
+  paths?: string[];
   /** Plan setting changes the cap left out of `changes`. */
   omittedChanges?: number;
   sections?: Record<string, EventSectionDiff | FieldSectionDiff>;
@@ -408,7 +500,12 @@ export function diffPlan(
     : PLAN_SECTIONS.filter((name) => name in before || name in after);
 
   for (const name of sectionNames) {
-    const result = diffSectionShape(before[name], after[name], budget);
+    const result = diffSectionShape(
+      before[name],
+      after[name],
+      budget,
+      diffEventSection,
+    );
     sections[name] = result;
     if (result.changed) changedSections.push(name);
   }
@@ -429,6 +526,228 @@ export function diffPlan(
     ...planIdentity(after ?? before),
     changed: changedSections.length > 0 || planFields.detected > 0,
     ...changeEntry({}, planFields),
+    ...(sectionNames.length > 0 ? { sections } : {}),
+    ...(changedSections.length > 0 ? { changedSections } : {}),
+  };
+}
+
+/**
+ * Tokens that name each event of `plan` by its section and display name, keyed
+ * by the id that plan's own events use to point at it.
+ *
+ * Events refer to other events of the same plan by id (`start: { type:
+ * "milestone", value: "<milestone id>" }`, a priority's `accountId`), and two
+ * plans built independently give the same milestone unrelated ids. Comparing
+ * the raw ids would report a difference at every reference of a hand-rebuilt
+ * plan; comparing tokens makes a reference to the same-named event compare
+ * equal and a reference to a differently named one read as a difference. An id
+ * that is not an event of this plan (a Current Finances `accountId`, which
+ * every plan shares) gets no token and is compared as it is.
+ */
+export function eventReferenceTokens(plan: unknown): Map<string, string> {
+  const tokens = new Map<string, string>();
+  if (!isContainer(plan) || Array.isArray(plan)) return tokens;
+  for (const section of Object.keys(plan as PlanObj)) {
+    const value = (plan as PlanObj)[section];
+    if (!isEventish(value)) continue;
+    for (const { name, event } of keyEvents(getEvents(value)).values()) {
+      const id = (event as PlanObj | null | undefined)?.id;
+      if (id === undefined || id === null || id === "") continue;
+      const token = `@${section}:${name}`;
+      if (!tokens.has(String(id))) tokens.set(String(id), token);
+    }
+  }
+  return tokens;
+}
+
+/** A copy of `value` with each string naming an event of the plan replaced by its token. */
+function substituteReferences(
+  value: unknown,
+  tokens: Map<string, string>,
+): unknown {
+  if (typeof value === "string") return tokens.get(value) ?? value;
+  if (Array.isArray(value)) {
+    return value.map((element) => substituteReferences(element, tokens));
+  }
+  if (isContainer(value)) {
+    const copy: PlanObj = {};
+    for (const key of Object.keys(value as PlanObj)) {
+      copy[key] = substituteReferences((value as PlanObj)[key], tokens);
+    }
+    return copy;
+  }
+  return value;
+}
+
+/** One event as plan-to-plan comparison sees it: its own `id` dropped, references tokened. */
+function eventForPair(event: unknown, tokens: Map<string, string>): unknown {
+  if (Array.isArray(event) || !isContainer(event)) {
+    return substituteReferences(event, tokens);
+  }
+  const copy: PlanObj = {};
+  for (const key of Object.keys(event as PlanObj)) {
+    if (key === "id") continue;
+    copy[key] = substituteReferences((event as PlanObj)[key], tokens);
+  }
+  return copy;
+}
+
+/** One plan section with each event's own `id` dropped and each reference tokened. */
+function sectionForPair(section: unknown, tokens: Map<string, string>): unknown {
+  if (Array.isArray(section)) {
+    return section.map((event) => eventForPair(event, tokens));
+  }
+  const obj = section as PlanObj;
+  if (isContainer(section) && Array.isArray(obj.events)) {
+    const copy: PlanObj = {};
+    for (const key of Object.keys(obj)) {
+      copy[key] =
+        key === "events"
+          ? obj.events.map((event: unknown) => eventForPair(event, tokens))
+          : substituteReferences(obj[key], tokens);
+    }
+    return copy;
+  }
+  return substituteReferences(section, tokens);
+}
+
+/**
+ * One plan reshaped so it can be compared against a different plan: each
+ * event's own `id` is dropped and each reference to another event of the same
+ * plan is replaced by that event's token. Those are the only fields two
+ * independently built plans of the same content cannot share.
+ */
+function planForPair(plan: PlanObj): PlanObj {
+  const tokens = eventReferenceTokens(plan);
+  const prepared: PlanObj = {};
+  for (const key of Object.keys(plan)) {
+    prepared[key] = sectionForPair(plan[key], tokens);
+  }
+  return prepared;
+}
+
+/**
+ * Compare one event-shaped section of two different plans. `a` is plan A and
+ * `b` is plan B, so each change reads `A's value → B's value`. Both sides carry
+ * the ids dropped and the references tokened by `planForPair`.
+ */
+export function diffEventPair(
+  a: unknown,
+  b: unknown,
+  budget: DiffBudget,
+): PairEventDiff {
+  const aEvents = getEvents(a);
+  const bEvents = getEvents(b);
+  const aKeyed = keyEvents(aEvents);
+  const bKeyed = keyEvents(bEvents);
+
+  const onlyInA: string[] = [];
+  const onlyInB: string[] = [];
+  const different: ChangeEntry[] = [];
+  let onlyInACount = 0;
+  let onlyInBCount = 0;
+  let differentCount = 0;
+  let sameCount = 0;
+
+  for (const [key, { name, event }] of bKeyed) {
+    const counterpart = aKeyed.get(key);
+    if (!counterpart) {
+      onlyInBCount++;
+      addEntry(onlyInB, name, budget);
+      continue;
+    }
+    const leaf = diffLeafValues(counterpart.event, event, budget);
+    if (leaf.detected > 0) {
+      differentCount++;
+      addEntry(different, changeEntry({ name }, leaf), budget);
+    } else {
+      sameCount++;
+    }
+  }
+  for (const [key, { name }] of aKeyed) {
+    if (!bKeyed.has(key)) {
+      onlyInACount++;
+      addEntry(onlyInA, name, budget);
+    }
+  }
+
+  onlyInA.sort();
+  onlyInB.sort();
+
+  return {
+    kind: "events",
+    count: `${aEvents.length} → ${bEvents.length}`,
+    changed: onlyInACount > 0 || onlyInBCount > 0 || differentCount > 0,
+    onlyInACount,
+    ...(onlyInA.length > 0 ? { onlyInA } : {}),
+    onlyInBCount,
+    ...(onlyInB.length > 0 ? { onlyInB } : {}),
+    differentCount,
+    ...(different.length > 0 ? { different } : {}),
+    sameCount,
+  };
+}
+
+export interface PlanPairDiff {
+  a: { id: string; name: string };
+  b: { id: string; name: string };
+  changed: boolean;
+  /** The plan's own fields: every field outside the compared sections and outside the computed ones. */
+  settings: FieldSectionDiff;
+  sections?: Record<string, EventCompareDiff | FieldSectionDiff>;
+  changedSections?: string[];
+}
+
+/**
+ * Compare two different plans field by field, so a plan rebuilt by hand can be
+ * checked against the original. Plan A's values are reported first in every
+ * `A → B` pair. Events match by name plus occurrence, the same keying the
+ * time diff uses; the fields that say which plan an object is (`id`, `name`),
+ * the fields ProjectionLab computes (`lastUpdated`, `simKey`, `meta`) and each
+ * event's own `id` are left out, and references between a plan's own events are
+ * compared by the event they name. `section` narrows the section comparison;
+ * plan settings outside the sections are always compared.
+ */
+export function diffPlanPair(
+  planA: PlanObj,
+  planB: PlanObj,
+  budget: DiffBudget,
+  section?: PlanSection,
+): PlanPairDiff {
+  const a = planForPair(planA);
+  const b = planForPair(planB);
+
+  const sections: Record<string, EventCompareDiff | FieldSectionDiff> = {};
+  const changedSections: string[] = [];
+  const sectionNames: string[] = section
+    ? [section]
+    : PLAN_SECTIONS.filter((name) => name in planA || name in planB);
+
+  for (const name of sectionNames) {
+    const result = diffSectionShape(a[name], b[name], budget, diffEventPair);
+    sections[name] = result;
+    if (result.changed) changedSections.push(name);
+  }
+
+  const skip = new Set<string>([
+    ...PLAN_SECTIONS,
+    ...COMPUTED_PLAN_FIELDS,
+    ...PLAN_IDENTITY_FIELDS,
+  ]);
+  const aRest: PlanObj = {};
+  const bRest: PlanObj = {};
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (skip.has(key)) continue;
+    aRest[key] = a[key];
+    bRest[key] = b[key];
+  }
+  const settings = diffFieldSection(aRest, bRest, budget);
+
+  return {
+    a: planIdentity(planA),
+    b: planIdentity(planB),
+    changed: changedSections.length > 0 || settings.changed,
+    settings,
     ...(sectionNames.length > 0 ? { sections } : {}),
     ...(changedSections.length > 0 ? { changedSections } : {}),
   };
@@ -628,6 +947,8 @@ export interface CurrentFinancesDiff {
   collections: Record<string, CollectionDiff>;
   /** Changes to `today` fields outside the account collections. */
   changes?: Record<string, string>;
+  /** The differing paths, reported instead of `changes` when values are withheld. */
+  paths?: string[];
   omittedChanges?: number;
 }
 

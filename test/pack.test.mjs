@@ -42,6 +42,8 @@ test("tarball ships the expected entrypoints", () => {
     "skills/projectionlab/SKILL.md",
     "README.md",
     "HOW-IT-WORKS.md",
+    "SETUP-FOR-AGENTS.md",
+    "REFERENCE.md",
   ]) {
     assert.ok(
       files.includes(required),

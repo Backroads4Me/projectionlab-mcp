@@ -30,6 +30,8 @@
     "skills",
     "README.md",
     "HOW-IT-WORKS.md",
+    "SETUP-FOR-AGENTS.md",
+    "REFERENCE.md",
     "LICENSE"
   ],
   "publishConfig": {

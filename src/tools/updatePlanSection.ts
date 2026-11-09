@@ -17,6 +17,7 @@ import {
   eventLabel,
   findPlanIndex,
   getEvents,
+  keyEvents,
   planNotFoundError,
   requirePlans,
   verifySectionApplied,
@@ -42,33 +43,6 @@ function isEventish(sectionData: unknown): boolean {
     typeof sectionData === "object" &&
     Array.isArray((sectionData as PlanObj).events)
   );
-}
-
-/**
- * Key events for diffing by label plus occurrence number, so events sharing a
- * name each keep their own entry. Ids are not used because a replacement
- * section may omit them. The display name shows the occurrence only when the
- * label repeats.
- */
-function keyEvents(
-  events: unknown[],
-): Map<string, { name: string; event: unknown }> {
-  const labelCounts = new Map<string, number>();
-  for (const e of events) {
-    const label = eventLabel(e);
-    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
-  }
-  const seen = new Map<string, number>();
-  const keyed = new Map<string, { name: string; event: unknown }>();
-  for (const e of events) {
-    const label = eventLabel(e);
-    const n = (seen.get(label) ?? 0) + 1;
-    seen.set(label, n);
-    const key = `${label}#${n}`;
-    const name = (labelCounts.get(label) ?? 0) > 1 ? `${label} #${n}` : label;
-    keyed.set(key, { name, event: e });
-  }
-  return keyed;
 }
 
 function diffSection(current: unknown, incoming: unknown): DiffResult {

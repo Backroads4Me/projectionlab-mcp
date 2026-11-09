@@ -620,7 +620,7 @@ function sectionForPair(section: unknown, tokens: Map<string, string>): unknown 
 
 /**
  * One plan reshaped so it can be compared against a different plan: each
- * event's own `id` and `key` is dropped and each reference to another event of
+ * event's own `id` and `key` are dropped and each reference to another event of
  * the same plan is replaced by that event's token. Those are the only fields
  * two independently built plans of the same content cannot share.
  */

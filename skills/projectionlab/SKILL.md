@@ -90,6 +90,7 @@ question.
 | Assumptions, Chance of Success, withdrawal strategy | `projectionlab_get_plan_settings` |
 | Current Finances, or one account's editable paths | `projectionlab_get_current_finances` |
 | Everything (rarely needed) | `projectionlab_export_data` |
+| Snapshots already saved (id, time, operation, sections) | `projectionlab_list_snapshots` |
 
 - `projectionlab_describe_schema` lists accounts by type. A real-estate
   asset appears as `type: "real-estate"` with `marketValue` and `loanBalance`
@@ -124,6 +125,9 @@ checklist, and an index of ProjectionLab help articles),
 Prompts: `analyze-plan` and `optimize-tax` (`planName`), `compare-plans`
 (`plan1`, `plan2`), `review-assumptions` (`planName`).
 
+Account vocabulary: `projectionlab://knowledge` defines the account types. Say
+`taxable`, `tax-deferred` or `tax-free`; do not say "pre-tax" or "post-tax".
+
 ### What the server cannot tell you
 
 The server reads plan inputs; it does not run projections. Projected ending
@@ -153,6 +157,30 @@ ProjectionLab UI. The stored data cannot show it.
 
 Change the plan only when the user explicitly asks for that change.
 
+### Never do
+
+- Never guess a path. Read it first with `projectionlab_get_plan_settings`,
+  `projectionlab_get_plan_section` or `projectionlab_get_current_finances`,
+  the last two with `listPaths: true`.
+- Never skip the dry run, and never pass `confirm: true` until the user has
+  said yes to the change that exact dry run showed.
+- Never write to a plan the user did not name. If the user named no plan and
+  more than one exists, ask which one before calling any write tool.
+- Never invent an ID. Copy plan, account and event IDs exactly from
+  `projectionlab_describe_schema` or the read tool you just called. Most write
+  tools also accept a plan name; `projectionlab_delete_plan` takes an exact
+  plan ID only.
+- Never remove the Retirement or the Life Expectancy milestone. ProjectionLab
+  always keeps both.
+- Never state a yearly tax figure, bracket, threshold or deduction from
+  memory; they change every year. Use `projectionlab://knowledge` for the
+  concepts and have the user check current figures.
+- Never call a write tool before `projectionlab_check_connection` returns
+  every flag `true`.
+- Never replace a whole section when a targeted tool can make the change.
+  `projectionlab_update_plan_section` overwrites the complete array, so any
+  event missing from what you send is gone.
+
 **Writes are off by default.** Every write tool fails with `READ_ONLY_MODE`
 until the user sets `PL_READ_ONLY=false` (MCP host `env` block or
 `~/.projectionlab-mcp/.env`) and restarts the server. Explain this and let the
@@ -160,15 +188,18 @@ user decide; do not enable writes on your own.
 
 ### Choose the write tool
 
+Every tool below also takes `confirm` (default `false`, a dry run).
+
 | Change | Tool | Input |
 |---|---|---|
-| Assumption, Chance of Success or withdrawal setting | `projectionlab_update_plan_settings` | `section`, `changes` (path -> value) |
-| One income, expense, account, asset, milestone or priority event in a plan | `projectionlab_update_plan_event` | `section`, `eventIdentifier`, `pathChanges` |
-| One Current Finances account, debt or real asset | `projectionlab_update_account` | `accountId`, `pathChanges` |
+| Assumption, Chance of Success or withdrawal setting | `projectionlab_update_plan_settings` | `planIdentifier`, `section`, `changes` (path -> value) |
+| One income, expense, account, asset, milestone or priority event in a plan | `projectionlab_update_plan_event` | `planIdentifier`, `section`, `eventIdentifier`, `pathChanges` |
+| One Current Finances account, debt or real asset | `projectionlab_update_account` | `accountId` (exact), `pathChanges` |
 | A what-if copy of a plan | `projectionlab_clone_plan` | `planIdentifier`, `newName` |
 | Remove a plan the user has decided to discard | `projectionlab_delete_plan` | `planId` (exact ID only) |
-| A whole plan section, rebuilt deliberately | `projectionlab_update_plan_section` | `section`, complete `sectionData` |
-| Undo a confirmed change | `projectionlab_rollback` | one of `snapshotId`, `nBack`, `beforeTime` |
+| A whole plan section, rebuilt deliberately | `projectionlab_update_plan_section` | `planIdentifier`, `section`, complete `sectionData`, plus `expectedPlanVersion` from the dry run |
+| Replace a whole data area (rare) | `projectionlab_restore_plans`, `projectionlab_restore_current_finances`, `projectionlab_restore_progress`, `projectionlab_restore_settings` | `plans`, `currentFinances`, `progress`, `settings`: the complete replacement |
+| Undo a confirmed change | `projectionlab_rollback` | exactly one of `snapshotId`, `nBack`, `beforeTime` |
 
 Prefer the targeted tools: they change only the paths given and keep sibling
 values intact. Paths must already exist and keep their JSON type; get them from
@@ -229,9 +260,12 @@ Change progress:
 - **`INVALID_INPUT`** usually means an unknown path or a changed JSON type.
   List the paths again and correct the call.
 
-## Example
+## Worked examples
 
-User: "Raise my inflation assumption to 3% in my Retire at 55 plan."
+The ids and names below are placeholders; use what the read tools returned.
+
+**Change a setting.** User: "Raise my inflation assumption to 3% in my Retire
+at 55 plan."
 
 1. `projectionlab_get_plan_settings` with `planIdentifier: "Retire at 55"`,
    `section: "variables"` shows the path `inflation` with JSON type `number`
@@ -241,6 +275,47 @@ User: "Raise my inflation assumption to 3% in my Retire at 55 plan."
    returns the dry-run diff. Show it to the user.
 3. After the user approves, repeat the call with `"confirm": true`, then
    re-read the setting and suggest recalculating the plan in ProjectionLab.
+
+**Clone a plan.** User: "Copy my Retire at 55 plan so I can try retiring
+at 60."
+
+1. `projectionlab_describe_schema` gives the source plan's exact id and shows
+   the new name is not already taken.
+2. `projectionlab_clone_plan` with
+   `{"planIdentifier": "plan_abc123", "newName": "Retire at 60 what-if"}`
+   returns `dryRun: true`, the source plan, `planCount` such as `2 → 3`, and
+   the per-section event counts. Its plan id is provisional: the new id is
+   assigned again on confirm. Show the preview to the user.
+3. After the user approves, repeat with `"confirm": true`. The reply gives
+   `verified` and a `snapshotId`; `projectionlab_rollback` to that snapshot
+   removes the copy. Then edit the copy with the targeted write tools.
+
+**Delete a plan.** User: "Delete the Test Scenario plan."
+
+1. `projectionlab_describe_schema` gives the plan's exact id, such as
+   `plan_abc123`. Deletion accepts only that id, never a name, and refuses the
+   last remaining plan.
+2. `projectionlab_delete_plan` with `{"planId": "plan_abc123"}` returns
+   `dryRun: true`, the plan name and id, `planCount` such as `2 → 1`, and the
+   event counts that go with the plan. Show the preview; wait for the go-ahead.
+3. Repeat with `{"planId": "plan_abc123", "confirm": true}`. The reply gives
+   `verified` and a `snapshotId`; `projectionlab_rollback` to that snapshot
+   restores the deleted plan.
+
+**Undo the last change.** User: "Undo that."
+
+1. `projectionlab_list_snapshots` lists snapshots newest first with `id`,
+   `timestamp`, `operation` and `sections`.
+2. `projectionlab_rollback` with `{"nBack": 1}` resolves the selector and
+   returns `dryRun: true`, the `snapshotId` it picked, its `timestamp`,
+   `operation`, and the `sections` it would restore. Show the preview.
+3. After the user approves, repeat with `{"nBack": 1, "confirm": true}`. A
+   confirmed rollback saves the current state first, so another `nBack: 1`
+   right after a rollback undoes that rollback.
+4. `snapshotId` names one id from the list. `beforeTime` takes an ISO 8601
+   time carrying a `Z` or `±HH:MM` offset, such as `2026-11-08T15:30:00Z`,
+   and restores the latest snapshot strictly before it; a time with no
+   offset is refused.
 
 ## Privacy and advice
 

@@ -43,6 +43,7 @@ test("tarball ships the expected entrypoints", () => {
     "README.md",
     "HOW-IT-WORKS.md",
     "SETUP-FOR-AGENTS.md",
+    "MANUAL-SETUP.md",
     "REFERENCE.md",
   ]) {
     assert.ok(

@@ -47,6 +47,25 @@ The server carries its own instructions for the agents that use it, so no per-ho
 - **The `projectionlab://guide` resource**, the full agent guide: setup walkthrough for each failed connection check, which tool answers which question, the change workflow, and privacy rules. `projectionlab_check_connection` points agents to it.
 - **The `projectionlab` skill** at [`skills/projectionlab/SKILL.md`](skills/projectionlab/SKILL.md), the same guide in the Agent Skills format, for hosts that load skills (copy the folder into the host's skills directory).
 
+## Building from source
+
+```bash
+git clone https://github.com/Backroads4Me/projectionlab-mcp.git
+cd projectionlab-mcp
+npm install
+npm run build
+cd extension && npm install && npm run build && cd ..
+```
+
+Save the Plugin API key as `PL_API_KEY=...` in `~/.projectionlab-mcp/.env`
+(see [Manual setup](MANUAL-SETUP.md) for where to find it). Register
+`node /absolute/path/to/projectionlab-mcp/dist/index.js` with your MCP host
+instead of `npx -y projectionlab-mcp`, and restart the host; on first start the
+server creates the token at `~/.projectionlab-mcp/ws-token`. Load the built
+extension from `extension/dist/chromium` or `extension/dist/firefox`, enter
+port `8788` and that token on its options page, then run
+`projectionlab_check_connection`.
+
 ## Configuration
 
 Each setting is read from the first of these that sets it:

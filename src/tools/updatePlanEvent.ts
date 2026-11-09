@@ -9,9 +9,11 @@ import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
   applyExistingPathChanges,
+  listAddressableValues,
   pathChangesApplied,
   type PathValueChange,
 } from "../pathPatch.js";
+import { enumRefusalError } from "../dataModel.js";
 import { redactSecrets } from "../redact.js";
 import {
   diffFields,
@@ -81,6 +83,7 @@ export function registerUpdatePlanEventTool(
         "Patches ONE event (income source, expense, account, asset, milestone, or priority) " +
         "within ONE plan. Use pathChanges for nested fields so nested siblings are preserved; " +
         "get valid paths from projectionlab_get_plan_section with eventIdentifier and listPaths=true. " +
+        "See projectionlab://data-model for field units and allowed values. " +
         "The legacy patch input shallowly merges top-level fields and replaces any nested object " +
         "supplied there. Supply exactly one of patch or pathChanges. All sibling events are preserved. " +
         "This is the PREFERRED write tool for single-event changes: much smaller and " +
@@ -194,6 +197,7 @@ export function registerUpdatePlanEventTool(
             event,
             pathChanges,
             EVENT_FIELD_CONTEXT,
+            section,
           );
           patched = result.updated;
           changes = result.changes;
@@ -201,6 +205,12 @@ export function registerUpdatePlanEventTool(
         } else {
           for (const key of Object.keys(patch ?? {})) {
             assertMutableEventPath(key);
+          }
+          // The merge replaces whole top-level fields, so check every value it
+          // writes against the observed enums, as pathChanges does.
+          for (const { path, value } of listAddressableValues(patch ?? {})) {
+            const refusal = enumRefusalError(section, path, value);
+            if (refusal) throw refusal;
           }
           patched = { ...event, ...patch };
           changes = diffFields(event, patched);

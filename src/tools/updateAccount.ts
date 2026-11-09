@@ -47,6 +47,7 @@ function applyAccountChanges(
   account: PlanObj,
   incoming: Record<string, unknown>,
   force: boolean,
+  scope?: string,
 ): {
   updated: PlanObj;
   changes: Record<string, PathValueChange>;
@@ -65,6 +66,7 @@ function applyAccountChanges(
       account,
       incoming,
       ACCOUNT_FIELD_CONTEXT,
+      scope,
     );
   }
 
@@ -97,6 +99,7 @@ function applyAccountChanges(
       account,
       existing,
       ACCOUNT_FIELD_CONTEXT,
+      scope,
     );
     updated = result.updated;
     changes = result.changes;
@@ -132,7 +135,8 @@ export function registerUpdateAccountTool(
       description:
         "Safely patches one existing account, debt, or real asset in Current Finances. " +
         "Use pathChanges for nested fields so siblings are preserved; discover valid paths with " +
-        "projectionlab_get_current_finances using accountId and listPaths=true. The legacy data " +
+        "projectionlab_get_current_finances using accountId and listPaths=true, and see " +
+        "projectionlab://data-model for field units and allowed values. The legacy data " +
         "input shallowly patches top-level fields. Supply exactly one patch mode. Dry runs validate " +
         "the account and return before/after values as a field-level safety diff, not a plan-impact measure. " +
         "Confirmed changes snapshot Current Finances, " +
@@ -212,9 +216,10 @@ export function registerUpdateAccountTool(
                   entry.account,
                   pathChanges,
                   ACCOUNT_FIELD_CONTEXT,
+                  entry.collection,
                 );
               })()
-            : applyAccountChanges(entry.account, data ?? {}, force);
+            : applyAccountChanges(entry.account, data ?? {}, force, entry.collection);
         const renderedChanges = redactSecrets(result.changes, {
           byName: true,
         });

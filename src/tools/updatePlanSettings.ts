@@ -33,7 +33,8 @@ export function registerUpdatePlanSettingsTool(
         "Safely patches discrete existing settings in ONE configuration section of ONE plan. " +
         "Paths come from projectionlab_get_plan_settings and may address nested fields, such as " +
         '"estate.enabled". Sibling values are preserved server-side. Unknown paths and JSON type ' +
-        "changes are rejected. When confirm is false (default), returns a dry-run diff. When " +
+        "changes are rejected, and values outside an observed field's allowed values are refused; " +
+        "see projectionlab://data-model for units and allowed values. When confirm is false (default), returns a dry-run diff. When " +
         "confirm is true, auto-snapshots all plans, restores the patched plan, and verifies each value.",
       inputSchema: {
         planIdentifier: z
@@ -83,6 +84,7 @@ export function registerUpdatePlanSettingsTool(
         const { updated, changes } = applyPlanSettingChanges(
           plan[section],
           incoming,
+          section,
         );
 
         if (!confirm) {

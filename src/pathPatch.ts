@@ -1,3 +1,4 @@
+import { enumRefusalError } from "./dataModel.js";
 import { ProjectionLabError } from "./errors.js";
 import type { PlanObj } from "./plans.js";
 import { isSecretFieldName } from "./redact.js";
@@ -193,12 +194,16 @@ function replaceAtPath(
 
 /**
  * Apply path-addressed changes immutably. Paths must already exist and values
- * must retain their JSON type.
+ * must retain their JSON type. When `scope` names a group in the data model
+ * registry (a settings section, event section, or Current Finances
+ * collection), a string value outside an observed enum's choices is refused
+ * with INVALID_INPUT.
  */
 export function applyExistingPathChanges(
   data: unknown,
   incoming: Record<string, unknown>,
   context: PathPatchContext,
+  scope?: string,
 ): {
   updated: PlanObj;
   changes: Record<string, PathValueChange>;
@@ -235,6 +240,10 @@ export function applyExistingPathChanges(
   const changes: Record<string, PathValueChange> = {};
   for (const [path, after] of Object.entries(incoming)) {
     const parts = parsePath(path, context);
+    if (scope !== undefined) {
+      const refusal = enumRefusalError(scope, path, after);
+      if (refusal) throw refusal;
+    }
     let before: unknown = data;
     for (const part of parts) {
       if (

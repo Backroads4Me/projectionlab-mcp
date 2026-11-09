@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
+import { annotateAddressableValues } from "../dataModel.js";
 import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
@@ -64,7 +65,10 @@ export function registerGetPlanSettingsTool(
 
         const selected = section ? [section] : PLAN_SETTING_SECTIONS;
         const sections = selected.map((name) => {
-          const settings = listPlanSettings(plan[name], name);
+          const settings = annotateAddressableValues(
+            name,
+            listPlanSettings(plan[name], name),
+          );
           return {
             section: name,
             settingCount: settings.length,

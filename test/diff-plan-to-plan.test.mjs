@@ -1,8 +1,9 @@
 // projectionlab_diff plan-to-plan mode: field-level comparison of two
 // different plans, so a plan rebuilt by hand can be checked against the
-// original. The stored ids of both plans and of their events are ignored, a
-// reference to another event of the same plan compares by the event it names,
-// and pathsOnly reports the differing paths with no values.
+// original. The stored ids of both plans, the stored ids of their events and
+// the random key each event is created with are ignored, a reference to another
+// event of the same plan compares by the event it names, and pathsOnly reports
+// the differing paths with no values.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -108,6 +109,24 @@ function planOf(prefix, name) {
     },
     variables: { inflation: 0.025 },
   };
+}
+
+/**
+ * Stamps every event of the plan with a `key`, the way ProjectionLab's UI does
+ * when an event is created: a random value nothing else derives from. `salt`
+ * makes the keys of two plans share nothing, the way re-entering a plan by hand
+ * gives every event a fresh one.
+ */
+function stampKeys(plan, salt) {
+  let n = 0;
+  for (const section of Object.values(plan)) {
+    const events = Array.isArray(section) ? section : section?.events;
+    if (!Array.isArray(events)) continue;
+    for (const event of events) {
+      event.key = `${salt}-key-${n++}`;
+    }
+  }
+  return plan;
 }
 
 /**
@@ -242,6 +261,44 @@ test("an id that is not an event of the plan is compared as it is", async () => 
 
   assert.deepEqual(out.sections.accounts.different, [
     { name: "Checking", changes: { accountId: '"cf-acc-1" → "cf-acc-2"' } },
+  ]);
+});
+
+test("events whose random keys differ compare as the same", async () => {
+  const [original, rebuilt] = sameContentPlans();
+  stampKeys(original, "ka");
+  stampKeys(rebuilt, "kb");
+  // Events match by name plus occurrence, and the two plans' keys for one event
+  // share nothing, the way two plans built separately do.
+  assert.notEqual(original.income.events[0].key, rebuilt.income.events[0].key);
+
+  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const diff = register(bridge);
+  const out = text(await diff({ planA: "Original", planB: "Rebuilt" }));
+
+  assert.equal(out.changed, false);
+  assert.equal(out.sections.income.sameCount, 2);
+  assert.equal(out.sections.expenses.sameCount, 1);
+  assert.equal(out.sections.milestones.sameCount, 1);
+  assert.equal(out.sections.accounts.sameCount, 1);
+  assert.equal(out.sections.priorities.sameCount, 1);
+  assert.equal(
+    JSON.stringify(out).includes("key-"),
+    false,
+    "a stored event key leaked into the diff",
+  );
+
+  // A real difference sitting next to a differing key is still reported, and the
+  // key is not one of the paths it names.
+  rebuilt.income.events[1].amount = 13000;
+  const changed = text(
+    await diff({ planA: "Original", planB: "Rebuilt", section: "income" }),
+  );
+
+  assert.equal(changed.changed, true);
+  assert.equal(changed.sections.income.sameCount, 1);
+  assert.deepEqual(changed.sections.income.different, [
+    { name: "Rental", changes: { amount: "12000 → 13000" } },
   ]);
 });
 

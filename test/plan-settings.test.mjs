@@ -241,7 +241,14 @@ test("get settings tool returns supported sections as addressable values", async
   assert.equal(output.planName, "codex");
   assert.equal(output.sections[0].section, "variables");
   assert.deepEqual(output.sections[0].settings, [
-    { path: "inflation", type: "number", value: 0.03 },
+    {
+      path: "inflation",
+      type: "number",
+      value: 0.03,
+      description:
+        "Annual baseline inflation rate applied to living expenses and cost escalations.",
+      units: "percentage points",
+    },
   ]);
 });
 

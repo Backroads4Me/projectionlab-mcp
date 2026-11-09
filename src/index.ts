@@ -34,6 +34,7 @@ import { registerPlanDataResource } from "./resources/planData.js";
 import { registerSummaryResource } from "./resources/summary.js";
 import { registerKnowledgeResource } from "./resources/knowledge.js";
 import { registerGuideResource } from "./resources/guide.js";
+import { registerDataModelResource } from "./resources/dataModel.js";
 
 // Prompts
 import { registerPrompts } from "./prompts/index.js";
@@ -88,6 +89,7 @@ async function main() {
   registerSummaryResource(server, bridge);
   registerKnowledgeResource(server);
   registerGuideResource(server);
+  registerDataModelResource(server);
 
   // Register prompts
   registerPrompts(server, bridge);

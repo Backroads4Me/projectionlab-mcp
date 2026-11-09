@@ -156,7 +156,9 @@ question.
 Resources: `projectionlab://knowledge` (data model, FIRE and decumulation
 concepts, retirement tax concepts without yearly figures, an analysis
 checklist, and an index of ProjectionLab help articles),
-`projectionlab://summary` and `projectionlab://plan-data` (full export).
+`projectionlab://data-model` (field meanings, units, and allowed values for
+`listPaths` writes, version-stamped), `projectionlab://summary` and
+`projectionlab://plan-data` (full export).
 Prompts: `analyze-plan` and `optimize-tax` (`planName`), `compare-plans`
 (`plan1`, `plan2`), `review-assumptions` (`planName`).
 
@@ -200,7 +202,8 @@ Change the plan only when the user explicitly asks for that change.
 - Never assume a rate's scale. ProjectionLab 4.6.0 stores most rates as
   percentage points (`variables.inflation: 3` means 3%), but some as fractions
   (`variables.taxStrategy.bracketRate: 0.22` means 22%). Read the current
-  value first and write the new one on the same scale.
+  value first and write the new one on the same scale; `projectionlab://data-model`
+  records each field's units and allowed values.
 - Never skip the dry run, and never pass `confirm: true` until the user has
   said yes to the change that exact dry run showed.
 - Never write to a plan the user did not name. If the user named no plan and

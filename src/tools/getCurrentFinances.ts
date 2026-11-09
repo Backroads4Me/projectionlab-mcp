@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
+import { annotateAddressableValues } from "../dataModel.js";
 import {
   currentFinanceAccountNotFoundError,
   findCurrentFinanceEntry,
@@ -85,7 +86,10 @@ export function registerGetCurrentFinancesTool(
             collection: entry.collection,
             ...(listPaths ? { listPaths: true } : {}),
             data: listPaths
-              ? listAddressableValues(entry.account)
+              ? annotateAddressableValues(
+                  entry.collection,
+                  listAddressableValues(entry.account),
+                )
               : {
                   ...entry.account,
                   ...(realEstate ? { realEstate } : {}),

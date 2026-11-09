@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
+import { annotateAddressableValues } from "../dataModel.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
@@ -135,7 +136,10 @@ export function registerGetPlanSectionTool(
         }
 
         if (listPaths) {
-          sectionData = listAddressableValues(sectionData);
+          sectionData = annotateAddressableValues(
+            section,
+            listAddressableValues(sectionData),
+          );
         }
 
         const output = {

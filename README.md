@@ -213,6 +213,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `projectionlab://plan-data` | Full export of all plans/finances/progress/settings (refreshed per access) |
 | `projectionlab://summary` | High-level snapshot: net worth, account breakdown, plan count |
 | `projectionlab://knowledge` | Curated ProjectionLab data-model + FIRE/tax reference (static) |
+| `projectionlab://data-model` | Field meanings, units, and allowed values for `listPaths` writes, version-stamped to ProjectionLab 4.6.0 (static) |
 | `projectionlab://guide` | Agent guide: setup walkthrough, tool selection, change workflow, privacy rules (static) |
 
 ### Prompts

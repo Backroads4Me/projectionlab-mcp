@@ -46,6 +46,7 @@ export function listPlanSettings(
 export function applyPlanSettingChanges(
   sectionData: unknown,
   incoming: Record<string, unknown>,
+  section?: PlanSettingSection,
 ): {
   updated: Record<string, unknown>;
   changes: Record<string, PlanSettingChange>;
@@ -54,6 +55,7 @@ export function applyPlanSettingChanges(
     sectionData,
     incoming,
     PLAN_SETTING_CONTEXT,
+    section,
   );
 }
 

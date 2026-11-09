@@ -229,6 +229,28 @@ until the user sets `PL_READ_ONLY=false` (MCP host `env` block or
 `~/.projectionlab-mcp/.env`) and restarts the server. Explain this and let the
 user decide; do not enable writes on your own.
 
+### Units
+
+The scale of a number is the easiest thing to get wrong. Confirmed on
+ProjectionLab 4.6.0:
+
+- Rates in `variables` are percentage points: `inflation: 3` means 3%.
+- `taxStrategy.bracketRate` and `taxStrategy.capGainsBracketRate` are decimal
+  fractions: `0.22` means 22%.
+- Dollar amounts are plain numbers.
+- An amount field carries an `amountType` beside it (for example `"today$"`)
+  that says what basis the number is on, and a property carrying cost
+  (`taxRate`, `maintenanceRate`, `insuranceRate`) carries a rate type
+  (`"%"` or `"today$"`) that decides whether the number is a percentage or a
+  dollar amount.
+
+For every other field read `projectionlab://data-model`; with `listPaths: true`
+each listed path also comes back with `units` and `allowedValues` when the
+registry knows the field. Writing a string outside the allowed values of a
+field tagged `observed` is refused with `INVALID_INPUT`, and the refusal lists
+the choices: pick one of them and re-run the dry run. Numbers and booleans are
+never refused this way, and `ui-label` fields are annotated but not enforced.
+
 ### Choose the write tool
 
 Every tool below also takes `confirm` (default `false`, a dry run).
@@ -318,6 +340,64 @@ at 55 plan."
    returns the dry-run diff. Show it to the user.
 3. After the user approves, repeat the call with `"confirm": true`, then
    re-read the setting and suggest recalculating the plan in ProjectionLab.
+
+**Change an event.** User: "Raise my Groceries expense to 600 a month in my
+Retire at 55 plan."
+
+1. `projectionlab_get_plan_section` with `planIdentifier: "Retire at 55"`,
+   `section: "expenses"`, `eventIdentifier: "Groceries"` and `listPaths: true`
+   lists that event's editable dot paths with their JSON types, including
+   `amount` (type `number`), `amountType` and `frequency`. Here `frequency` is
+   `"monthly"`, which matches how the user stated the amount, so 600 is
+   written as is. When `frequency` does not match how the user stated the
+   amount, ask the user rather than converting it yourself.
+2. `projectionlab_update_plan_event` with
+   `{"planIdentifier": "Retire at 55", "section": "expenses", "eventIdentifier": "Groceries", "pathChanges": {"amount": 600}}`
+   returns `dryRun: true`, the `planName`, `section`, the `event` label, and
+   `changes` such as `{"amount": {"before": 500, "after": 600}}`. Use
+   `pathChanges`, not `patch`, so sibling fields are kept. Show the before and
+   after values to the user.
+3. After the user approves, repeat the call with `"confirm": true`. The reply
+   gives `verified` and saves a snapshot, so `projectionlab_rollback` can undo
+   the change. Then re-read the event and suggest recalculating the plan.
+
+**Write a wrong enum value.** User: "Mark my Groceries expense as a
+must-have." Same plan and event as the example above.
+
+1. `projectionlab_update_plan_event` with
+   `{"planIdentifier": "Retire at 55", "section": "expenses", "eventIdentifier": "Groceries", "pathChanges": {"spendingType": "must-have"}}`
+   is refused during validation, so no dry run comes back. The reply is:
+
+   ```json
+   {
+     "error": "INVALID_INPUT",
+     "message": "Invalid value \"must-have\" for \"expenses.spendingType\". Allowed values: essential, discretionary.",
+     "suggestion": "Write one of the listed values, or inspect projectionlab://data-model for what \"spendingType\" means and what enables it."
+   }
+   ```
+
+2. Pick one of the listed values and re-run the same call with
+   `"pathChanges": {"spendingType": "essential"}`. The dry run comes back with
+   `changes` such as
+   `{"spendingType": {"before": "discretionary", "after": "essential"}}`.
+   Show it, get the user's approval, then confirm.
+
+**Change a Current Finances account.** User: "Our rental property is worth
+480000 now; update Current Finances."
+
+1. `projectionlab_describe_schema` gives the asset's exact `accountId` (a
+   property reads as `type: "real-estate"`). Then
+   `projectionlab_get_current_finances` with that `accountId` and
+   `listPaths: true` lists the account's editable paths, including `amount`
+   and `balance`.
+2. `projectionlab_update_account` with
+   `{"accountId": "acct_abc123", "pathChanges": {"amount": 480000}}` returns
+   `dryRun: true`, the `accountName`, `collection: "assets"`, and `changes`
+   such as `{"amount": {"before": 450000, "after": 480000}}`. A property's
+   market value is stored in `amount`; `balance` is its outstanding loan, so
+   a value change goes in `amount`, never `balance`. Show the preview.
+3. After the user approves, repeat the call with `"confirm": true`. The reply
+   gives `verified` and saves a snapshot of Current Finances.
 
 **Clone a plan.** User: "Copy my Retire at 55 plan so I can try retiring
 at 60."

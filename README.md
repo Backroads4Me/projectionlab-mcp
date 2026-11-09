@@ -37,6 +37,18 @@ Prefer to set it up yourself? See **[Manual setup](https://github.com/Backroads4
 
 ---
 
+## Safety
+
+- **Read-only by default.** The assistant can read your plan but not change it until you set `PL_READ_ONLY=false`.
+- **Preview before saving.** Every change is a preview until the assistant explicitly confirms it, and the assistant is instructed to show you the preview and ask first.
+- **Undo.** Every confirmed change is backed up first, so it can be rolled back.
+- **No overwriting your edits.** If a plan was saved in ProjectionLab after the assistant read it, the change is refused rather than overwriting your edit.
+- **Stays on your computer.** Your API key and the connection token are stored only on your computer, and the browser connects only to the server running there.
+
+Details are in the [safety model](https://github.com/Backroads4Me/projectionlab-mcp/blob/main/REFERENCE.md#safety-model) and [Privacy](https://github.com/Backroads4Me/projectionlab-mcp/blob/main/PRIVACY.md).
+
+---
+
 ## More documentation
 
 - **[Manual setup](https://github.com/Backroads4Me/projectionlab-mcp/blob/main/MANUAL-SETUP.md)**: set everything up yourself, step by step.

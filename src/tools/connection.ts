@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
+import { config } from "../config.js";
 import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 
@@ -15,6 +16,8 @@ export function registerConnectionTool(
       description:
         "Verify connectivity to ProjectionLab. Checks that the browser is running, " +
         "the ProjectionLab page is loaded, the Plugin API is accessible, and the API key is valid. " +
+        "Also reports writesEnabled, which is false while the server is in read-only mode " +
+        "(PL_READ_ONLY is not \"false\") and every write tool, dry runs included, is refused. " +
         "Call this first in every session, before any other ProjectionLab tool. If any check " +
         "fails, read the projectionlab://guide resource and walk the user through the fix.",
       outputSchema: {
@@ -23,6 +26,7 @@ export function registerConnectionTool(
         apiAvailable: z.boolean(),
         apiKeyValid: z.boolean(),
         errors: z.array(z.string()),
+        writesEnabled: z.boolean(),
       },
       annotations: {
         readOnlyHint: true,
@@ -32,7 +36,10 @@ export function registerConnectionTool(
     },
     async () => {
       try {
-        const status = await bridge.checkConnection();
+        const status = {
+          ...(await bridge.checkConnection()),
+          writesEnabled: !config.readOnly,
+        };
         return {
           content: [{ type: "text", text: toJson(status) }],
           structuredContent: { ...status },

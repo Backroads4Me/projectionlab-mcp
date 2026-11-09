@@ -21,9 +21,9 @@ also serves this guide as the MCP resource `projectionlab://guide`.
 ## Start every session with a connection check
 
 Call `projectionlab_check_connection` before any other ProjectionLab tool. It
-returns `browser`, `pageLoaded`, `apiAvailable`, `apiKeyValid` and `errors`.
-When every flag is `true`, proceed. Otherwise fix the first failing item with
-the user, one step at a time, then check again.
+returns `browser`, `pageLoaded`, `apiAvailable`, `apiKeyValid`, `errors` and
+`writesEnabled`. When the first four flags are `true`, proceed. Otherwise fix
+the first failing item with the user, one step at a time, then check again.
 
 | Failing item | What it means | What to do with the user |
 |---|---|---|
@@ -223,14 +223,15 @@ Change the plan only when the user explicitly asks for that change.
   memory; they change every year. Use `projectionlab://knowledge` for the
   concepts and have the user check current figures.
 - Never call a write tool before `projectionlab_check_connection` returns
-  every flag `true`.
+  `browser`, `pageLoaded`, `apiAvailable` and `apiKeyValid` all `true`.
 - Never replace a whole section when a targeted tool can make the change.
   `projectionlab_update_plan_section` overwrites the complete array, so any
   event missing from what you send is gone.
 
-**Writes are off by default.** Every write tool fails with `READ_ONLY_MODE`
-until the user sets `PL_READ_ONLY=false` (MCP host `env` block or
-`~/.projectionlab-mcp/.env`) and restarts the server. Explain this and let the
+**Writes are off by default.** `writesEnabled` in the connection check shows
+the current mode. While it is `false`, every write tool, dry runs included,
+fails with `READ_ONLY_MODE` until the user sets `PL_READ_ONLY=false` (MCP host
+`env` block or `~/.projectionlab-mcp/.env`) and restarts the server. Explain this and let the
 user decide; do not enable writes on your own.
 
 ### Units

@@ -22,6 +22,7 @@ const { registerUpdatePlanSectionTool } = await import(
   "../dist/tools/updatePlanSection.js"
 );
 const { registerClonePlanTool } = await import("../dist/tools/clonePlan.js");
+const { registerConnectionTool } = await import("../dist/tools/connection.js");
 const { registerPlanDataResource } = await import("../dist/resources/planData.js");
 const { registerSummaryResource } = await import("../dist/resources/summary.js");
 const { registerGuideResource } = await import("../dist/resources/guide.js");
@@ -234,6 +235,29 @@ test("write tools refuse in read-only mode", async () => {
       assert.match(result.content[0].text, /READ_ONLY_MODE/, name);
     }
     assert.equal(bridge.writes, 0);
+  } finally {
+    config.readOnly = false;
+  }
+});
+
+test("check_connection reports whether writes are enabled", async () => {
+  const server = fakeServer();
+  const status = {
+    browser: true,
+    pageLoaded: true,
+    apiAvailable: true,
+    apiKeyValid: true,
+    errors: [],
+  };
+  registerConnectionTool(server, { checkConnection: async () => ({ ...status }) });
+  const { handler } = server.tools.get("projectionlab_check_connection");
+  try {
+    for (const readOnly of [true, false]) {
+      config.readOnly = readOnly;
+      const result = await handler({});
+      assert.deepEqual(result.structuredContent, { ...status, writesEnabled: !readOnly });
+      assert.equal(JSON.parse(result.content[0].text).writesEnabled, !readOnly);
+    }
   } finally {
     config.readOnly = false;
   }

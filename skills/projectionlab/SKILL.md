@@ -301,7 +301,7 @@ Copy this checklist and work through it for each change:
 ```
 Change progress:
 - [ ] 1. Read the current value and its path
-- [ ] 2. Dry run (no confirm) and show the user the before/after values
+- [ ] 2. Dry run (no confirm) and describe the change in plain words
 - [ ] 3. Get the user's approval for this specific change
 - [ ] 4. Re-run the same call with confirm: true
 - [ ] 5. Re-read the field to verify it landed
@@ -310,6 +310,12 @@ Change progress:
 
 - **Every write tool is a dry run unless `confirm: true` is passed.** Pass it
   only after the user approves the change the dry run showed.
+- **Describe previews in the user's terms, never as JSON.** Name the plan and
+  the item as they appear in ProjectionLab, and give each value the way the
+  app shows it: "In Retire at 55, Travel goes from $10,000 to $12,000 a
+  year." Leave out field paths, IDs, and internal codes. For a whole-section
+  replacement, list what is added, removed, and changed rather than every
+  field.
 - **Every confirmed change is snapshotted first.** Tell the user before the
   first change that it can be undone: `projectionlab_list_snapshots` lists the
   snapshots and `projectionlab_rollback` restores one (also a dry run until
@@ -361,7 +367,8 @@ Retire at 55 plan."
    returns `dryRun: true`, the `planName`, `section`, the `event` label, and
    `changes` such as `{"amount": {"before": 500, "after": 600}}`. Use
    `pathChanges`, not `patch`, so sibling fields are kept. Show the before and
-   after values to the user.
+   after values to the user in plain words: "In Retire at 55, Groceries goes
+   from $500 to $600 a month. Want me to make that change?"
 3. After the user approves, repeat the call with `"confirm": true`. The reply
    gives `verified` and saves a snapshot, so `projectionlab_rollback` can undo
    the change. Then re-read the event and suggest recalculating the plan.

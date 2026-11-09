@@ -25,7 +25,7 @@ export function readGuide(): string {
 export const SERVER_INSTRUCTIONS = `ProjectionLab MCP: reads and edits the user's ProjectionLab retirement plan through their logged-in browser tab.
 
 - Call projectionlab_check_connection first in every session. If any check fails, read the resource projectionlab://guide and walk the user through the fix one step at a time.
-- Writes are disabled unless the user sets PL_READ_ONLY=false. Every write tool is a dry run unless confirm: true is passed; show the user the preview and confirm only the specific change they approved. Confirmed changes are snapshotted and can be undone with projectionlab_rollback.
+- Writes are disabled unless the user sets PL_READ_ONLY=false. Every write tool is a dry run unless confirm: true is passed; describe the preview to the user in plain words (which plan, which item, the old and new value), never as JSON, and confirm only the specific change they approved. Confirmed changes are snapshotted and can be undone with projectionlab_rollback.
 - Change the plan only when the user explicitly asks.
 - Plan figures are private: never send them outside the conversation. Never reveal PL_API_KEY or the WebSocket token.
 - The server reads plan definitions; projections and Chance of Success run only in the ProjectionLab UI.

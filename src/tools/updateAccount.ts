@@ -265,7 +265,7 @@ export function registerUpdateAccountTool(
           };
         }
 
-        await snapshots.create("updateAccount", ["currentFinances"], {
+        const snapshot = await snapshots.create("updateAccount", ["currentFinances"], {
           currentFinances: today,
         });
 
@@ -306,6 +306,7 @@ export function registerUpdateAccountTool(
                 collection: entry.collection,
                 changes: renderedChanges,
                 verified,
+                snapshotId: snapshot.id,
                 message:
                   verified === true
                     ? "Account patched and verified. Snapshot saved automatically."

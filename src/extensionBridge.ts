@@ -33,6 +33,10 @@ function originAllowed(origin: string | undefined): boolean {
 }
 
 const HELLO_TIMEOUT_MS = 5_000;
+/** Bytes a connection may send before its hello is read. A hello frame is a
+ * few hundred bytes; the cap stops an unauthenticated peer from making the
+ * server buffer a large frame (ws allows 100 MiB by default). */
+const MAX_PRE_HELLO_BYTES = 64 * 1024;
 /** How often to retry the WebSocket port while another instance holds it. */
 const PORT_RETRY_MS = 3_000;
 const EXTENSION_HELP =
@@ -161,18 +165,33 @@ export class ExtensionBridge implements Bridge {
         ws.close(CLOSE_CODES.AUTH_FAILED, "origin not allowed");
         return;
       }
-      this.awaitHello(ws, origin ?? "(no origin)");
+      const socket = req.socket;
+      let preHelloBytes = 0;
+      const countPreHelloBytes = (chunk: Buffer) => {
+        preHelloBytes += chunk.length;
+        if (preHelloBytes > MAX_PRE_HELLO_BYTES) {
+          log.warn("extension", `Dropped connection from ${origin ?? "(no origin)"}: too much data before hello`);
+          socket.off("data", countPreHelloBytes);
+          socket.destroy();
+        }
+      };
+      socket.on("data", countPreHelloBytes);
+      this.awaitHello(ws, origin ?? "(no origin)", () =>
+        socket.off("data", countPreHelloBytes),
+      );
     });
   }
 
-  /** New sockets must send a valid hello before anything else. */
-  private awaitHello(ws: WebSocket, origin: string): void {
+  /** New sockets must send a valid hello before anything else. `helloRead`
+   * runs once the first message arrives, whatever it holds. */
+  private awaitHello(ws: WebSocket, origin: string, helloRead: () => void): void {
     const timer = setTimeout(() => {
       ws.close(CLOSE_CODES.AUTH_FAILED, "hello timeout");
     }, HELLO_TIMEOUT_MS);
 
     ws.once("message", (raw) => {
       clearTimeout(timer);
+      helloRead();
       let hello: ClientFrame;
       try {
         hello = JSON.parse(String(raw)) as ClientFrame;

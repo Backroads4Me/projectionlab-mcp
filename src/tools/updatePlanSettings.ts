@@ -127,7 +127,9 @@ export function registerUpdatePlanSettingsTool(
           };
         }
 
-        await snapshots.create("updatePlanSettings", ["plans"], { plans });
+        const snapshot = await snapshots.create("updatePlanSettings", ["plans"], {
+          plans,
+        });
 
         const updatedPlans = [...plans];
         updatedPlans[planIndex] = { ...plan, [section]: updated };
@@ -161,6 +163,7 @@ export function registerUpdatePlanSettingsTool(
                 section,
                 changes: redactSecrets(changes, { byName: true }),
                 verified,
+                snapshotId: snapshot.id,
                 message: verified
                   ? "Plan settings patched and verified. Snapshot saved automatically."
                   : "Plan settings update was sent but verification did not confirm every value. A snapshot was saved; inspect the plan settings and roll back if needed.",

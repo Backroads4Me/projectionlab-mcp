@@ -1,7 +1,7 @@
-// Asset labeling in projectionlab_describe_schema accounts: an asset's loan
-// and market value are reported as separate named fields, real estate keeps
-// its "real-estate" type, and every non-asset row keeps the plain balance
-// shape.
+// projectionlab_describe_schema output: an asset's loan and market value are
+// reported as separate named fields, real estate keeps its "real-estate" type,
+// every non-asset row keeps the plain balance shape, and the progress entry
+// count reads ProjectionLab's progress export.
 
 import assert from "node:assert/strict";
 import test from "node:test";

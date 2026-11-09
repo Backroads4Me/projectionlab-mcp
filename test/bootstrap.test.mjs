@@ -10,19 +10,19 @@ import vm from "node:vm";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import WebSocket from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import { freePort } from "./helpers/free-port.mjs";
 
 const PORT = await freePort();
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_TRANSPORT = "extension";
 process.env.PL_WS_PORT = String(PORT);
 process.env.PL_WS_TOKEN = "test-token";
 process.env.PL_SNAPSHOT_DIR = join(mkdtempSync(join(tmpdir(), "plmcp-")), "snapshots");
 process.env.LOG_LEVEL = "error";
 
 const { ExtensionBridge } = await import("../dist/extensionBridge.js");
+const { buildBootstrapSnippet } = await import("../dist/bootstrap.js");
 
 const calls = [];
 const pluginApi = {
@@ -97,4 +97,51 @@ test("bootstrap snippet acts as a full executor", async () => {
     close() {}
   };
   await bridge.close();
+});
+
+test("bootstrap snippet refuses a method outside the wire protocol", async () => {
+  // A stand-in server, so the test can send a request the bridge never would.
+  const port = await freePort();
+  const wss = new WebSocketServer({ host: "127.0.0.1", port });
+  await new Promise((resolve) => wss.once("listening", resolve));
+  let called = false;
+  const sandbox = {
+    window: { projectionlabPluginAPI: { wipeEverything: () => { called = true; } } },
+    WebSocket,
+    console: { log: () => {} },
+    setTimeout: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      t.unref();
+      return t;
+    },
+    clearTimeout,
+  };
+  const response = new Promise((resolve) => {
+    wss.on("connection", (ws) => {
+      ws.on("message", (raw) => {
+        const frame = JSON.parse(String(raw));
+        if (frame.type === "hello") {
+          ws.send(JSON.stringify({ type: "helloAck", protocolVersion: frame.protocolVersion }));
+          ws.send(JSON.stringify({ type: "request", id: "1", method: "wipeEverything", params: [] }));
+        } else if (frame.type === "response") {
+          resolve(frame);
+        }
+      });
+    });
+  });
+  vm.createContext(sandbox);
+  vm.runInContext(buildBootstrapSnippet(port, "test-token"), sandbox);
+
+  const frame = await response;
+  assert.equal(frame.ok, false);
+  assert.equal(frame.error.code, "UNKNOWN");
+  assert.match(frame.error.message, /Not a wire protocol method: wipeEverything/);
+  assert.equal(called, false);
+
+  sandbox.WebSocket = class {
+    send() {}
+    close() {}
+  };
+  for (const client of wss.clients) client.terminate();
+  await new Promise((resolve) => wss.close(resolve));
 });

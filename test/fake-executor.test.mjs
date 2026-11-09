@@ -17,7 +17,6 @@ const PORT = await freePort();
 const TOKEN = "test-token";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_TRANSPORT = "extension";
 process.env.PL_WS_PORT = String(PORT);
 process.env.PL_WS_TOKEN = TOKEN;
 process.env.PL_SNAPSHOT_DIR = join(mkdtempSync(join(tmpdir(), "plmcp-")), "snapshots");
@@ -239,6 +238,37 @@ test("a malformed frame before hello closes that socket and the server keeps ser
   raw.on("error", () => {});
   raw.write(Buffer.from([0x81, 0x02, 0x68, 0x69]));
   await closed;
+
+  const exec = connectExecutor({ handler: healthyHandler });
+  await exec.ready;
+  assert.ok(await bridge.describePluginApi());
+  exec.ws.close();
+  await exec.done;
+});
+
+test("a connection that sends too much before hello is dropped at once", async () => {
+  const raw = net.connect(PORT, "127.0.0.1");
+  await new Promise((resolve, reject) => {
+    raw.once("connect", resolve);
+    raw.once("error", reject);
+  });
+  raw.write(
+    "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+  );
+  await new Promise((resolve) => raw.once("data", resolve));
+  raw.on("error", () => {});
+  const closed = new Promise((resolve) => raw.once("close", resolve));
+  const started = Date.now();
+  // A masked text frame announcing 1 MiB (RFC 6455 5.2), then 128 KiB of it.
+  const header = Buffer.alloc(14);
+  header[0] = 0x81;
+  header[1] = 0x80 | 127;
+  header.writeBigUInt64BE(1024n * 1024n, 2);
+  raw.write(Buffer.concat([header, Buffer.alloc(128 * 1024)]));
+  await closed;
+  // Well before the 5-second hello timeout, which would also close it.
+  assert.ok(Date.now() - started < 2_000, `closed after ${Date.now() - started}ms`);
 
   const exec = connectExecutor({ handler: healthyHandler });
   await exec.ready;

@@ -116,6 +116,7 @@ test("Current Finances path patch validates dry-run, preserves siblings, snapsho
         data.currentFinances.investmentAccounts[0].allocation.stocks,
         0.6,
       );
+      return { id: "snap-account" };
     },
   };
   registerUpdateAccountTool(server, bridge, snapshots);
@@ -144,6 +145,7 @@ test("Current Finances path patch validates dry-run, preserves siblings, snapsho
     }),
   );
   assert.equal(executed.verified, true);
+  assert.equal(executed.snapshotId, "snap-account");
   assert.equal(actions[0].kind, "snapshot");
   assert.deepEqual(actions[1], {
     kind: "update",

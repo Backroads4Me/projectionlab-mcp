@@ -12,4 +12,4 @@ dist/
 .DS_Store
 
 # Local working notes
-docs/
+dev-docs/

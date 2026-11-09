@@ -151,7 +151,9 @@ npm run build
 cd extension && npm install && npm run build   # build the extension
 ```
 
-Register `node /absolute/path/to/projectionlab-mcp/dist/index.js` with your MCP host, load the built extension (`extension/dist/chromium` or `extension/dist/firefox`), configure its port + token on the options page, then run `projectionlab_check_connection`.
+Copy your **Plugin API Key** from ProjectionLab → Account Settings → Plugins (enable plugins first) and save it as `PL_API_KEY=...` in `~/.projectionlab-mcp/.env` (`chmod 600`).
+
+Register `node /absolute/path/to/projectionlab-mcp/dist/index.js` with your MCP host and restart it; on first start the server creates the token at `~/.projectionlab-mcp/ws-token`. Load the built extension (`extension/dist/chromium` or `extension/dist/firefox`), enter port `8788` and that token on its options page, then run `projectionlab_check_connection`.
 
 ### Configuration
 

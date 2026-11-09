@@ -42,20 +42,32 @@ const FRAC = "decimal fraction";
 const DOLLARS = "dollars";
 const YEARS = "years";
 
+// A one-time event (frequency "once") keeps the end reference it was created
+// with: the UI hides it and the simulation ignores it. Confirmed in the Cash
+// Flow view with one-time inheritances dated after a retirement milestone
+// that their stored end ("exclude" "retirement") would otherwise cut off.
+const ONE_TIME_END_NOTE =
+  'On a one-time event (frequency "once") the end reference is a leftover default: the UI hides it and the simulation ignores it, so it is not a user setting.';
+
 function timingFields(prefix: string): Record<string, DataModelField> {
+  const endNote = prefix === "end" ? ONE_TIME_END_NOTE : undefined;
+  const modifierNote =
+    '"include" counts the milestone year itself; "exclude" leaves it out (an end of "exclude" "retirement" stops the year before retirement); an integer means that many years after it.';
   return {
     [`${prefix}.type`]: {
       description: `Kind of the ${prefix} reference: a fixed date, a keyword, or a milestone.`,
       allowedValues: ["date", "keyword", "milestone"],
       evidence: "ui-label",
+      note: endNote,
     },
     [`${prefix}.value`]: {
-      description: `Target of the ${prefix} reference: "YYYY-MM-DD" when type is "date", a keyword such as "now", "beforeCurrentYear", "endOfPlan", or "never" when type is "keyword", or a milestone ID when type is "milestone".`,
+      description: `Target of the ${prefix} reference: "YYYY-MM-DD" when type is "date", a keyword such as "now", "beforeCurrentYear", "endOfPlan", or "never" when type is "keyword", or a built-in milestone keyword such as "retirement" or a milestone ID when type is "milestone".`,
       evidence: "ui-label",
+      note: endNote,
     },
     [`${prefix}.modifier`]: {
       description: `Offset applied to a milestone ${prefix} reference.`,
-      note: '"include" means the milestone year itself; an integer means that many years after it.',
+      note: endNote ? `${modifierNote} ${endNote}` : modifierNote,
       evidence: "ui-label",
     },
   };

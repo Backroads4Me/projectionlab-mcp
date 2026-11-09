@@ -188,6 +188,9 @@ values; it is not an API, and it does not contain the application logic.
   value alone.
 - When a write reports that a value was stored, that proves the value was
   stored. It does not prove the app reads it or acts on it.
+- A one-time event (`frequency: "once"`) still stores an `end` reference, such
+  as `"exclude"` `"retirement"`. The UI hides it and the simulation ignores
+  it, so do not report it as a setting or as a reason the event might not pay.
 
 When a change's effect matters, the user has to look at the result in the
 ProjectionLab UI. The stored data cannot show it.

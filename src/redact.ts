@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 
-const REDACTED = "[REDACTED]";
+/** The stand-in every redacted value carries; shared with the diff engine. */
+export const REDACTED = "[REDACTED]";
 
 // Field names whose values are secrets regardless of content. Used only for
 // read-only artifacts (exports, resources) - NOT for snapshots, since redacting

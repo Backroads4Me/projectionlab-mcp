@@ -9,6 +9,7 @@ import {
   type PlanObj,
   type PlanSection,
 } from "./plans.js";
+import { REDACTED, isSecretFieldName } from "./redact.js";
 
 /**
  * Field-level diff of two copies of the same data, shared by
@@ -20,13 +21,21 @@ import {
  * The engine is pure and bounds its own output: `DiffBudget` caps how many
  * field changes and how many list entries one call may report, so the payload
  * stays small enough for a local model to hold in context. Omitted items are
- * counted rather than dropped silently.
+ * counted rather than dropped silently, and whether something counts as
+ * changed is decided from the data, never from what was left to report.
+ *
+ * A change whose path names a credential (`credentials.apiKey`,
+ * `access.0.password`) is recorded as `[REDACTED]`, so neither value leaves
+ * the process, and a value longer than `MAX_VALUE_CHARS` is truncated with its
+ * original length so one long note cannot flood the diff.
  */
 
 /** Field changes one diff reports before it starts omitting. */
 export const FIELD_CHANGE_CAP = 200;
 /** Added/removed names and ids one diff reports before it starts omitting. */
 export const ENTRY_CAP = 200;
+/** Serialized values longer than this are truncated in a change entry. */
+export const MAX_VALUE_CHARS = 200;
 
 /**
  * Plan fields ProjectionLab computes or re-stamps on its own. Leaving them out
@@ -63,22 +72,24 @@ function isContainer(value: unknown): boolean {
   return !!value && typeof value === "object";
 }
 
-function addChange(
-  changes: Record<string, string>,
-  path: string,
-  before: unknown,
-  after: unknown,
-  budget: DiffBudget,
-): void {
-  const a = JSON.stringify(before);
-  const b = JSON.stringify(after);
-  if (a === b) return;
-  if (budget.fieldChangesUsed >= budget.fieldChangeCap) {
-    budget.omittedFieldChanges++;
-    return;
+function renderValue(value: unknown): string {
+  const json = JSON.stringify(value);
+  if (json === undefined) return "(absent)";
+  if (json.length <= MAX_VALUE_CHARS) return json;
+  return `${json.slice(0, MAX_VALUE_CHARS)}...[truncated from ${json.length} characters]`;
+}
+
+/**
+ * True when any element of a dot path names a credential, so a nested
+ * `credentials.apiKey` or `access.0.password` is caught even though the whole
+ * path is not a field name. Numeric elements are array positions, not names.
+ */
+function pathHoldsSecret(path: string): boolean {
+  for (const element of path.split(".")) {
+    if (/^\d+$/.test(element)) continue;
+    if (isSecretFieldName(element)) return true;
   }
-  budget.fieldChangesUsed++;
-  changes[path] = `${a ?? "(absent)"} → ${b ?? "(absent)"}`;
+  return false;
 }
 
 /**
@@ -130,6 +141,17 @@ function walkLeaves(
   if (prefix) out.set(prefix, value);
 }
 
+export interface LeafDiff {
+  /** The changes the budget had room to record, `path: "before → after"`. */
+  changes: Record<string, string>;
+  /**
+   * Differences found, whether or not the budget had room to record them.
+   * Callers decide "modified" from this, never from `changes`, so a difference
+   * that falls after the cap is still counted as a change.
+   */
+  detected: number;
+}
+
 /**
  * Leaf-by-leaf diff of two values as `path: "before → after"`. Arrays carry
  * their index in the path, so a reordered list reads as changed leaves rather
@@ -139,12 +161,28 @@ export function diffLeafValues(
   before: unknown,
   after: unknown,
   budget: DiffBudget,
-): Record<string, string> {
+): LeafDiff {
   const changes: Record<string, string> = {};
+  let detected = 0;
+
+  const record = (path: string, from: unknown, to: unknown): void => {
+    if (JSON.stringify(from) === JSON.stringify(to)) return;
+    detected++;
+    if (budget.fieldChangesUsed >= budget.fieldChangeCap) {
+      budget.omittedFieldChanges++;
+      return;
+    }
+    budget.fieldChangesUsed++;
+    changes[path] = pathHoldsSecret(path)
+      ? REDACTED
+      : `${renderValue(from)} → ${renderValue(to)}`;
+  };
+
   if (!isContainer(before) && !isContainer(after)) {
-    addChange(changes, "(value)", before, after, budget);
-    return changes;
+    record("(value)", before, after);
+    return { changes, detected };
   }
+
   const beforeLeaves = new Map<string, unknown>();
   const afterLeaves = new Map<string, unknown>();
   walkLeaves(before, "", beforeLeaves);
@@ -153,14 +191,40 @@ export function diffLeafValues(
     ...new Set([...beforeLeaves.keys(), ...afterLeaves.keys()]),
   ].sort();
   for (const path of paths) {
-    addChange(changes, path, beforeLeaves.get(path), afterLeaves.get(path), budget);
+    record(path, beforeLeaves.get(path), afterLeaves.get(path));
   }
-  return changes;
+  return { changes, detected };
+}
+
+/**
+ * The change entry for one event or row: its identity, the field changes the
+ * budget recorded, and how many more it found than it could record.
+ */
+function changeEntry<T extends object>(
+  identity: T,
+  leaf: LeafDiff,
+): T & { changes?: Record<string, string>; omittedChanges?: number } {
+  const recorded = Object.keys(leaf.changes).length;
+  return {
+    ...identity,
+    ...(recorded > 0 ? { changes: leaf.changes } : {}),
+    ...(leaf.detected > recorded
+      ? { omittedChanges: leaf.detected - recorded }
+      : {}),
+  };
 }
 
 function isEventish(section: unknown): boolean {
   if (Array.isArray(section)) return true;
   return isContainer(section) && Array.isArray((section as PlanObj).events);
+}
+
+export interface ChangeEntry {
+  name?: string;
+  id?: string;
+  changes?: Record<string, string>;
+  /** Field changes found for this entry that the cap left out. */
+  omittedChanges?: number;
 }
 
 export interface EventSectionDiff {
@@ -172,7 +236,7 @@ export interface EventSectionDiff {
   removedCount: number;
   removed?: string[];
   modifiedCount: number;
-  modified?: { name: string; changes: Record<string, string> }[];
+  modified?: ChangeEntry[];
   unchangedCount: number;
 }
 
@@ -180,6 +244,8 @@ export interface FieldSectionDiff {
   kind: "fields";
   changed: boolean;
   changes?: Record<string, string>;
+  /** Field changes found that the cap left out of `changes`. */
+  omittedChanges?: number;
 }
 
 /**
@@ -201,7 +267,7 @@ export function diffEventSection(
 
   const added: string[] = [];
   const removed: string[] = [];
-  const modified: { name: string; changes: Record<string, string> }[] = [];
+  const modified: ChangeEntry[] = [];
   let addedCount = 0;
   let removedCount = 0;
   let modifiedCount = 0;
@@ -214,10 +280,10 @@ export function diffEventSection(
       addEntry(added, name, budget);
       continue;
     }
-    const changes = diffLeafValues(previous.event, event, budget);
-    if (Object.keys(changes).length > 0) {
+    const leaf = diffLeafValues(previous.event, event, budget);
+    if (leaf.detected > 0) {
       modifiedCount++;
-      addEntry(modified, { name, changes }, budget);
+      addEntry(modified, changeEntry({ name }, leaf), budget);
     } else {
       unchangedCount++;
     }
@@ -256,11 +322,11 @@ export function diffFieldSection(
   after: unknown,
   budget: DiffBudget,
 ): FieldSectionDiff {
-  const changes = diffLeafValues(before, after, budget);
+  const leaf = diffLeafValues(before, after, budget);
   return {
     kind: "fields",
-    changed: Object.keys(changes).length > 0,
-    ...(Object.keys(changes).length > 0 ? { changes } : {}),
+    changed: leaf.detected > 0,
+    ...changeEntry({}, leaf),
   };
 }
 
@@ -316,6 +382,8 @@ export interface PlanDiff {
   name: string;
   changed: boolean;
   changes?: Record<string, string>;
+  /** Plan setting changes the cap left out of `changes`. */
+  omittedChanges?: number;
   sections?: Record<string, EventSectionDiff | FieldSectionDiff>;
   changedSections?: string[];
 }
@@ -355,15 +423,12 @@ export function diffPlan(
     beforeRest[key] = (before as PlanObj)[key];
     afterRest[key] = (after as PlanObj)[key];
   }
-  const changes = diffLeafValues(beforeRest, afterRest, budget);
-
-  const changed =
-    changedSections.length > 0 || Object.keys(changes).length > 0;
+  const planFields = diffLeafValues(beforeRest, afterRest, budget);
 
   return {
     ...planIdentity(after ?? before),
-    changed,
-    ...(Object.keys(changes).length > 0 ? { changes } : {}),
+    changed: changedSections.length > 0 || planFields.detected > 0,
+    ...changeEntry({}, planFields),
     ...(sectionNames.length > 0 ? { sections } : {}),
     ...(changedSections.length > 0 ? { changedSections } : {}),
   };
@@ -409,6 +474,7 @@ export function diffPlanList(
   const unchanged: string[] = [];
   let addedCount = 0;
   let removedCount = 0;
+  let changedCount = 0;
   let unchangedCount = 0;
 
   for (const [key, plan] of afterByKey) {
@@ -420,8 +486,10 @@ export function diffPlanList(
       continue;
     }
     const diff = diffPlan(previous, plan, budget, options.section);
-    if (diff.changed) changedPlans.push(diff);
-    else {
+    if (diff.changed) {
+      changedCount++;
+      addEntry(changedPlans, diff, budget);
+    } else {
       unchangedCount++;
       addEntry(unchanged, diff.name, budget);
     }
@@ -435,24 +503,22 @@ export function diffPlanList(
   }
 
   return {
-    changed:
-      addedCount > 0 || removedCount > 0 || changedPlans.length > 0,
+    changed: addedCount > 0 || removedCount > 0 || changedCount > 0,
     planCount: `${beforePlans.length} → ${afterPlans.length}`,
     addedCount,
     ...(added.length > 0 ? { added } : {}),
     removedCount,
     ...(removed.length > 0 ? { removed } : {}),
-    changedCount: changedPlans.length,
+    changedCount,
     ...(changedPlans.length > 0 ? { changedPlans } : {}),
     unchangedCount,
     ...(unchanged.length > 0 ? { unchanged } : {}),
   };
 }
 
-export interface RowDiff {
+export interface RowDiff extends ChangeEntry {
   id: string;
   name: string;
-  changes: Record<string, string>;
 }
 
 export interface CollectionDiff {
@@ -528,10 +594,10 @@ function diffCollection(
       addEntry(added, { id, name }, budget);
       continue;
     }
-    const changes = diffLeafValues(previous.row, row, budget);
-    if (Object.keys(changes).length > 0) {
+    const leaf = diffLeafValues(previous.row, row, budget);
+    if (leaf.detected > 0) {
       modifiedCount++;
-      addEntry(modified, { id, name, changes }, budget);
+      addEntry(modified, changeEntry({ id, name }, leaf), budget);
     } else {
       unchangedCount++;
     }
@@ -560,7 +626,9 @@ function diffCollection(
 export interface CurrentFinancesDiff {
   changed: boolean;
   collections: Record<string, CollectionDiff>;
+  /** Changes to `today` fields outside the account collections. */
   changes?: Record<string, string>;
+  omittedChanges?: number;
 }
 
 /**
@@ -605,13 +673,12 @@ export function diffCurrentFinances(
     beforeRest[key] = beforeRoot[key];
     afterRest[key] = afterRoot[key];
   }
-  const changes = diffLeafValues(beforeRest, afterRest, budget);
-  if (Object.keys(changes).length > 0) changed = true;
+  const rest = diffLeafValues(beforeRest, afterRest, budget);
 
   return {
-    changed,
+    changed: changed || rest.detected > 0,
     collections,
-    ...(Object.keys(changes).length > 0 ? { changes } : {}),
+    ...changeEntry({}, rest),
   };
 }
 

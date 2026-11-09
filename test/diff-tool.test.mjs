@@ -587,3 +587,221 @@ test("diff says which sections were compared and which were skipped", async () =
   });
   assert.equal(out.sections.plans, undefined);
 });
+
+function wideFields(from) {
+  const fields = {};
+  for (let i = 0; i < 60; i++) fields[`f${i}`] = from + i;
+  return fields;
+}
+
+test("a difference past the cap still counts as changed, event by event", async () => {
+  const snapshots = freshSnapshots();
+  const before = [
+    {
+      id: "p1",
+      name: "Many events",
+      income: {
+        events: [1, 2, 3, 4, 5].map((n) => ({
+          id: `i${n}`,
+          name: `ev${n}`,
+          ...wideFields(n * 100),
+        })),
+      },
+      expenses: { events: [] },
+      milestones: [],
+    },
+  ];
+  const saved = await snapshotOf(snapshots, before);
+
+  const after = structuredClone(before);
+  for (const event of after[0].income.events) {
+    for (let i = 0; i < 60; i++) event[`f${i}`] = 1000 + i;
+  }
+  const bridge = fakeBridge({ plans: after, today: {} });
+
+  const out = text(
+    await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
+  );
+  const income = out.sections.plans.changedPlans[0].sections.income;
+
+  // 300 differences, 200 recorded: the last event shows nothing but is still
+  // counted, so the diff never reads as "no differences".
+  assert.equal(out.changed, true);
+  assert.equal(out.sections.plans.changed, true);
+  assert.equal(income.changed, true);
+  assert.equal(income.modifiedCount, 5);
+  assert.equal(income.unchangedCount, 0);
+  assert.equal(income.modified.length, 5);
+  assert.equal(income.modified[0].changes.f0, "100 → 1000");
+  assert.equal(income.modified[3].omittedChanges, 40);
+  assert.equal(income.modified[4].changes, undefined);
+  assert.equal(income.modified[4].omittedChanges, 60);
+  assert.equal(out.omittedFieldChanges, 100);
+});
+
+test("a Current Finances row past the cap still counts as modified", async () => {
+  const snapshots = freshSnapshots();
+  const rows = [1, 2, 3, 4, 5].map((n) => ({
+    id: `a${n}`,
+    name: `Asset ${n}`,
+    ...wideFields(n),
+  }));
+  const saved = await snapshots.create("updateAccount", ["currentFinances"], {
+    currentFinances: { assets: structuredClone(rows) },
+  });
+
+  const after = structuredClone(rows);
+  for (const row of after) {
+    for (let i = 0; i < 60; i++) row[`f${i}`] = 1000 + i;
+  }
+  const bridge = fakeBridge({ plans: [], today: { assets: after } });
+
+  const out = text(
+    await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
+  );
+  const assets = out.sections.currentFinances.collections.assets;
+
+  assert.equal(out.changed, true);
+  assert.equal(out.sections.currentFinances.changed, true);
+  assert.equal(assets.changed, true);
+  assert.equal(assets.modifiedCount, 5);
+  assert.equal(assets.unchangedCount, 0);
+  assert.equal(assets.modified[0].changes.f0, "1 → 1000");
+  assert.equal(assets.modified[4].changes, undefined);
+  assert.equal(assets.modified[4].omittedChanges, 60);
+  assert.equal(out.omittedFieldChanges, 100);
+});
+
+test("plan settings changed past the cap still count as changed", async () => {
+  const snapshots = freshSnapshots();
+  const incomeFields = {};
+  for (let i = 0; i < 200; i++) incomeFields[`f${i}`] = i;
+  const settingsFields = {};
+  for (let i = 0; i < 30; i++) settingsFields[`s${i}`] = i;
+
+  const plan = {
+    id: "p1",
+    name: "Budget used up",
+    income: { events: [{ id: "i1", name: "Salary", ...incomeFields }] },
+    expenses: { events: [] },
+    milestones: [],
+    ...settingsFields,
+  };
+  const saved = await snapshotOf(snapshots, [plan]);
+
+  const after = structuredClone(plan);
+  for (let i = 0; i < 200; i++) after.income.events[0][`f${i}`] = i + 1;
+  for (let i = 0; i < 30; i++) after[`s${i}`] = i + 1;
+  const bridge = fakeBridge({ plans: [after], today: {} });
+
+  const out = text(
+    await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
+  );
+  const changedPlan = out.sections.plans.changedPlans[0];
+
+  // income consumed the whole budget; the plan settings that follow are still
+  // reported as changed, with their own omitted count.
+  assert.equal(out.changed, true);
+  assert.equal(changedPlan.changed, true);
+  assert.deepEqual(changedPlan.changedSections, ["income"]);
+  assert.equal(
+    Object.keys(changedPlan.sections.income.modified[0].changes).length,
+    200,
+  );
+  assert.equal(changedPlan.changes, undefined);
+  assert.equal(changedPlan.omittedChanges, 30);
+  assert.equal(out.omittedFieldChanges, 30);
+});
+
+test("secrets nested under an event path never reach the output", async () => {
+  const snapshots = freshSnapshots();
+  const event = {
+    id: "i1",
+    name: "Salary",
+    amount: 100,
+    credentials: { apiKey: "sekretAlpha1", label: "bank feed" },
+    auth: { token: "sekretBravo2" },
+    access: [{ password: "sekretCharlie3" }],
+  };
+  const saved = await snapshotOf(
+    snapshots,
+    [{ id: "p1", name: "Secrets", income: { events: [event] } }],
+  );
+
+  const after = structuredClone(event);
+  after.amount = 200;
+  after.credentials.apiKey = "sekretAlpha1changed";
+  after.auth.token = "sekretBravo2changed";
+  after.access[0].password = "sekretCharlie3changed";
+  const bridge = fakeBridge({
+    plans: [{ id: "p1", name: "Secrets", income: { events: [after] } }],
+    today: {},
+  });
+
+  const raw = await register(bridge, snapshots)({
+    from: { snapshotId: saved.id },
+  });
+  const json = raw.content[0].text;
+  for (const secret of [
+    "sekretAlpha1",
+    "sekretBravo2",
+    "sekretCharlie3",
+    "bank feed",
+  ]) {
+    assert.equal(json.includes(secret), false, `${secret} leaked: ${json}`);
+  }
+
+  const [modified] = JSON.parse(json).sections.plans.changedPlans[0].sections
+    .income.modified;
+  assert.equal(modified.name, "Salary");
+  assert.deepEqual(modified.changes, {
+    amount: "100 → 200",
+    "credentials.apiKey": "[REDACTED]",
+    "auth.token": "[REDACTED]",
+    "access.0.password": "[REDACTED]",
+  });
+  assert.equal(
+    JSON.parse(json).sections.plans.changedPlans[0].sections.income
+      .modifiedCount,
+    1,
+  );
+  assert.equal(JSON.parse(json).changed, true);
+});
+
+test("a very long value is truncated with its original length", async () => {
+  const snapshots = freshSnapshots();
+  const saved = await snapshotOf(
+    snapshots,
+    [
+      {
+        id: "p1",
+        name: "Long note",
+        income: { events: [{ id: "i1", name: "Salary", note: "short" }] },
+      },
+    ],
+  );
+  const bridge = fakeBridge({
+    plans: [
+      {
+        id: "p1",
+        name: "Long note",
+        income: {
+          events: [{ id: "i1", name: "Salary", note: "z".repeat(500) }],
+        },
+      },
+    ],
+    today: {},
+  });
+
+  const raw = await register(bridge, snapshots)({
+    from: { snapshotId: saved.id },
+  });
+  const json = raw.content[0].text;
+  const { changes } = JSON.parse(json).sections.plans.changedPlans[0].sections
+    .income.modified[0];
+
+  const truncated = '"' + "z".repeat(199) + "...[truncated from 502 characters]";
+  assert.equal(changes.note, `"short" → ${truncated}`);
+  assert.ok(changes.note.length < 260, changes.note.length);
+  assert.equal(json.includes("z".repeat(500)), false);
+});

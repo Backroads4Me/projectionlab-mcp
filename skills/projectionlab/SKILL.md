@@ -125,9 +125,13 @@ question.
   patches, so a reported path is also the path to fix. `lastUpdated`, `simKey`
   and `meta` are left out, so a plan ProjectionLab merely re-saved reads as
   unchanged; a renamed event reads as one removed plus one added. Narrow with
-  `planIdentifier` and `section`. Output is capped, with `omittedFieldChanges`
-  counting what was left out. Use it to confirm a write landed as intended, to
-  tell the user what changed, or to see what a rollback would undo.
+  `planIdentifier` and `section`. Output is capped: a value over 200 characters
+  is truncated with its length, a path naming a credential (`credentials.apiKey`,
+  `auth.token`, `access.0.password`) reads as `[REDACTED]`, and what the cap left
+  out is counted in `omittedFieldChanges` and per-entry `omittedChanges` rather
+  than dropped, so a difference past the cap still reads as changed. Use it to
+  confirm a write landed as intended, to tell the user what changed, or to see
+  what a rollback would undo.
 - Results over about 100,000 characters are written to
   `~/.projectionlab-mcp/exports/` and returned as a file path. Read the parts
   you need from the file.

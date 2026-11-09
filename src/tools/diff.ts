@@ -4,6 +4,7 @@ import type { Bridge } from "../bridge.js";
 import { resolveSnapshot, type SnapshotManager } from "../snapshot.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
+import { textOrFile } from "../largeOutput.js";
 import { redactSecrets } from "../redact.js";
 import {
   FIELD_CHANGE_CAP,
@@ -97,8 +98,11 @@ export function registerDiffTool(
         "Use it to confirm a write landed as intended, to explain to the user what changed, or to " +
         "see what projectionlab_rollback would undo before rolling back. " +
         "Narrow the output with planIdentifier (plan name or ID) and section. " +
-        "Secret-looking fields are redacted, and output is capped at " +
-        `${FIELD_CHANGE_CAP} field changes with omittedFieldChanges counting the rest.`,
+        "Any value whose path names a credential (apiKey, token, password, ...) is reported as " +
+        "[REDACTED] rather than shown, and a value longer than 200 characters is truncated with its " +
+        "original length. Output is capped at " +
+        `${FIELD_CHANGE_CAP} field changes, with omittedFieldChanges and per-entry ` +
+        "omittedChanges counting the rest; a difference past the cap is still counted as changed.",
       inputSchema: {
         from: selectorSchema.describe(
           "The baseline side, whose values are reported as before: one saved snapshot, selected like projectionlab_rollback does.",
@@ -318,12 +322,13 @@ export function registerDiffTool(
             : {}),
         };
 
+        const json = toJson(redactSecrets(result, { byName: true }));
+        // A spilled result keeps the facts that name the comparison; the
+        // sections themselves stay in the file it points at.
+        const { sections: _sections, ...summary } = result;
         return {
           content: [
-            {
-              type: "text",
-              text: toJson(redactSecrets(result, { byName: true })),
-            },
+            { type: "text", text: await textOrFile(json, "diff", summary) },
           ],
         };
       } catch (err) {

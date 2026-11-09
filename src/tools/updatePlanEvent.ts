@@ -9,9 +9,11 @@ import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
   applyExistingPathChanges,
+  listAddressableValues,
   pathChangesApplied,
   type PathValueChange,
 } from "../pathPatch.js";
+import { enumRefusalError } from "../dataModel.js";
 import { redactSecrets } from "../redact.js";
 import {
   diffFields,
@@ -203,6 +205,12 @@ export function registerUpdatePlanEventTool(
         } else {
           for (const key of Object.keys(patch ?? {})) {
             assertMutableEventPath(key);
+          }
+          // The merge replaces whole top-level fields, so check every value it
+          // writes against the observed enums, as pathChanges does.
+          for (const { path, value } of listAddressableValues(patch ?? {})) {
+            const refusal = enumRefusalError(section, path, value);
+            if (refusal) throw refusal;
           }
           patched = { ...event, ...patch };
           changes = diffFields(event, patched);

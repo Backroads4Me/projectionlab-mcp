@@ -110,6 +110,13 @@ function planState() {
             },
           ],
         },
+        milestones: [
+          {
+            id: "m1",
+            name: "Retirement",
+            criteria: [{ type: "year", value: "2040-01-01", modifier: "include" }],
+          },
+        ],
       },
     ],
     today: {
@@ -381,4 +388,57 @@ test("writing an asset payment method refuses unobserved values and accepts obse
     before: "pay-in-full",
     after: "financed",
   });
+});
+
+test("a milestone criterion's type is refused outside the observed kinds, by its indexed path", async () => {
+  const server = fakeServer();
+  const state = planState();
+  const bridge = fakeBridge(state);
+  const update = caller(
+    server,
+    "projectionlab_update_plan_event",
+    bridge,
+    new SnapshotManager(),
+  );
+  const err = await errorFor(update, {
+    planIdentifier: "Retire",
+    section: "milestones",
+    eventIdentifier: "Retirement",
+    pathChanges: { "criteria.0.type": "someday" },
+  });
+  assert.equal(err.error, "INVALID_INPUT");
+  assert.match(err.message, /"milestones\.criteria\.0\.type"/);
+  assert.deepEqual(bridge.writes, []);
+  const out = text(
+    await update({
+      planIdentifier: "Retire",
+      section: "milestones",
+      eventIdentifier: "Retirement",
+      pathChanges: { "criteria.0.type": "age" },
+    }),
+  );
+  assert.equal(out.dryRun, true);
+});
+
+test("the legacy patch input refuses an unobserved enum value too", async () => {
+  const server = fakeServer();
+  const state = planState();
+  const bridge = fakeBridge(state);
+  const update = caller(
+    server,
+    "projectionlab_update_plan_event",
+    bridge,
+    new SnapshotManager(),
+  );
+  const err = await errorFor(update, {
+    planIdentifier: "Retire",
+    section: "expenses",
+    eventIdentifier: "Living",
+    patch: { spendingType: "luxury" },
+    confirm: true,
+  });
+  assert.equal(err.error, "INVALID_INPUT");
+  assert.match(err.message, /"expenses\.spendingType"/);
+  assert.deepEqual(bridge.writes, []);
+  assert.equal(state.plans[0].expenses.events[0].spendingType, "essential");
 });

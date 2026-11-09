@@ -2,168 +2,18 @@ import { z } from "zod";
 import { toJson } from "../json.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
-import type { SnapshotManager } from "../snapshot.js";
+import { resolveSnapshot, type SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { restoredSectionMatches } from "./restore.js";
-import type { Snapshot } from "../types/projectionlab.js";
 
 function getExportSection(
   data: Record<string, unknown>,
   section: string,
 ): unknown {
   return section === "currentFinances" ? data.today : data[section];
-}
-
-interface RollbackSelectorArgs {
-  snapshotId?: string | null;
-  nBack?: number | null;
-  beforeTime?: string | null;
-}
-
-type RollbackSelector =
-  | { kind: "snapshotId"; value: string }
-  | { kind: "nBack"; value: number }
-  | { kind: "beforeTime"; value: string };
-
-const SELECTOR_KEYS = ["snapshotId", "nBack", "beforeTime"] as const;
-
-const SELECTOR_HELP =
-  "Supply exactly one of snapshotId (an exact ID from projectionlab_list_snapshots), " +
-  "nBack (how many snapshots back, 1 being the most recent) or " +
-  "beforeTime (an ISO 8601 time with an explicit Z or ±HH:MM offset)";
-
-// Snapshot timestamps are UTC instants. Date.parse reads an offset-less
-// date-time in the host's zone and accepts loose text such as "12345" or
-// "November 8 2026", so beforeTime has to carry its own offset to name one
-// unambiguous instant. A bare date is refused for the same reason: it states
-// no time of day.
-const ISO_TIME_WITH_OFFSET =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:\d{2})$/i;
-
-/** The instant a beforeTime names, or NaN when it is not a usable one. */
-function parseBeforeTime(value: string): number {
-  const parts = ISO_TIME_WITH_OFFSET.exec(value);
-  if (!parts) return NaN;
-
-  const ms = Date.parse(value);
-  if (Number.isNaN(ms)) return NaN;
-
-  const offset = parts[8].toUpperCase();
-  const offsetMinutes =
-    offset === "Z"
-      ? 0
-      : (offset[0] === "-" ? -1 : 1) *
-        (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
-
-  // Date.parse rolls 31 February over instead of rejecting it, so the wall
-  // clock the caller wrote has to survive the round trip.
-  const wall = new Date(ms + offsetMinutes * 60_000);
-  const matches =
-    wall.getUTCFullYear() === Number(parts[1]) &&
-    wall.getUTCMonth() === Number(parts[2]) - 1 &&
-    wall.getUTCDate() === Number(parts[3]) &&
-    wall.getUTCHours() === Number(parts[4]) &&
-    wall.getUTCMinutes() === Number(parts[5]);
-
-  return matches ? ms : NaN;
-}
-
-function pickSelector(args: RollbackSelectorArgs): RollbackSelector {
-  const supplied = SELECTOR_KEYS.filter(
-    (key) => args[key] !== undefined && args[key] !== null,
-  );
-
-  if (supplied.length !== 1) {
-    throw new ProjectionLabError(
-      "INVALID_INPUT",
-      supplied.length === 0
-        ? "No rollback snapshot selector supplied"
-        : `Supply exactly one rollback snapshot selector, received ${supplied.join(" and ")}`,
-      SELECTOR_HELP,
-    );
-  }
-
-  // Exactly one key is present and is neither undefined nor null.
-  return { kind: supplied[0], value: args[supplied[0]] } as RollbackSelector;
-}
-
-/**
- * Resolve a rollback selector to one snapshot.
- *
- * nBack and beforeTime rank snapshots newest first, the order
- * projectionlab_list_snapshots shows, and count every saved snapshot including
- * the rollback_pre_* snapshot a confirmed rollback itself writes. nBack: 1 is
- * therefore always the top of that list, which is the state saved just before
- * a confirmed rollback, so a rollback is undone by rolling back once more.
- */
-async function resolveSnapshot(
-  snapshots: SnapshotManager,
-  args: RollbackSelectorArgs,
-): Promise<Snapshot> {
-  const selector = pickSelector(args);
-
-  switch (selector.kind) {
-    case "snapshotId":
-      return snapshots.get(selector.value);
-
-    case "nBack": {
-      const nBack = selector.value;
-      if (!Number.isInteger(nBack) || nBack < 1) {
-        throw new ProjectionLabError(
-          "INVALID_INPUT",
-          `nBack must be a positive integer with 1 as the most recent snapshot, received ${String(nBack)}`,
-          SELECTOR_HELP,
-        );
-      }
-
-      const list = await snapshots.list();
-      if (nBack > list.length) {
-        const existence =
-          list.length === 0
-            ? "no snapshots exist"
-            : `only ${list.length} snapshot${list.length === 1 ? "" : "s"} exist${list.length === 1 ? "s" : ""}`;
-        throw new ProjectionLabError(
-          "SNAPSHOT_NOT_FOUND",
-          `nBack ${nBack} is out of range; ${existence}`,
-          "Use projectionlab_list_snapshots to see them, or a smaller nBack. " +
-            "Snapshots are saved automatically before confirmed writes",
-        );
-      }
-
-      return snapshots.get(list[nBack - 1].id);
-    }
-
-    case "beforeTime": {
-      const cutoff = parseBeforeTime(selector.value);
-      if (Number.isNaN(cutoff)) {
-        throw new ProjectionLabError(
-          "INVALID_INPUT",
-          `beforeTime "${selector.value}" is not an ISO 8601 time with an explicit Z or ±HH:MM offset`,
-          "Use a time such as 2026-11-08T15:30:00Z or 2026-11-08T15:30:00+02:00. " +
-            "projectionlab_list_snapshots shows snapshot times in that form",
-        );
-      }
-
-      const list = await snapshots.list();
-      const match = list.find(
-        (entry) => Date.parse(entry.timestamp) < cutoff,
-      );
-      if (!match) {
-        throw new ProjectionLabError(
-          "SNAPSHOT_NOT_FOUND",
-          list.length === 0
-            ? "No snapshots exist, so nothing predates that beforeTime"
-            : `No snapshot predates ${selector.value}; the oldest is ${list[list.length - 1].timestamp}`,
-          "Use projectionlab_list_snapshots to see the saved snapshot times, or a later beforeTime",
-        );
-      }
-
-      return snapshots.get(match.id);
-    }
-  }
 }
 
 export function registerSnapshotTools(

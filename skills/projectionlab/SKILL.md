@@ -91,6 +91,7 @@ question.
 | Current Finances, or one account's editable paths | `projectionlab_get_current_finances` |
 | Everything (rarely needed) | `projectionlab_export_data` |
 | Snapshots already saved (id, time, operation, sections) | `projectionlab_list_snapshots` |
+| What changed between a snapshot and now, or between two snapshots | `projectionlab_diff` |
 
 - `projectionlab_describe_schema` lists accounts by type. A real-estate
   asset appears as `type: "real-estate"` with `marketValue` and `loanBalance`
@@ -112,6 +113,25 @@ question.
   `paymentMethod: "financed"`, and carrying costs where present. Answer
   questions about a property's value or equity from that block, not from
   the raw `balance`.
+- `projectionlab_diff` answers "what changed?" in one read-only call, so it
+  works with `PL_READ_ONLY=true`. `from` selects a saved snapshot with exactly
+  one of `snapshotId`, `nBack` or `beforeTime`, the same selectors
+  `projectionlab_rollback` takes and resolves the same way; `to` selects another
+  snapshot, or omit it to compare against the data in ProjectionLab now. Only
+  the sections the `from` snapshot holds are compared, and `comparedSections`
+  names them. Each changed event comes back as
+  `"path": "before → after"` dot paths, the form
+  `projectionlab_get_plan_section` reads and `projectionlab_update_plan_event`
+  patches, so a reported path is also the path to fix. `lastUpdated`, `simKey`
+  and `meta` are left out, so a plan ProjectionLab merely re-saved reads as
+  unchanged; a renamed event reads as one removed plus one added. Narrow with
+  `planIdentifier` and `section`. Output is capped: a value over 200 characters
+  is truncated with its length, a path naming a credential (`credentials.apiKey`,
+  `auth.token`, `access.0.password`) reads as `[REDACTED]`, and what the cap left
+  out is counted in `omittedFieldChanges` and per-entry `omittedChanges` rather
+  than dropped, so a difference past the cap still reads as changed. Use it to
+  confirm a write landed as intended, to tell the user what changed, or to see
+  what a rollback would undo.
 - Results over about 100,000 characters are written to
   `~/.projectionlab-mcp/exports/` and returned as a file path. Read the parts
   you need from the file.
@@ -309,10 +329,14 @@ at 60."
 2. `projectionlab_rollback` with `{"nBack": 1}` resolves the selector and
    returns `dryRun: true`, the `snapshotId` it picked, its `timestamp`,
    `operation`, and the `sections` it would restore. Show the preview.
-3. After the user approves, repeat with `{"nBack": 1, "confirm": true}`. A
+3. `projectionlab_diff` with `{"from": {"nBack": 1}}` takes the same selector
+   and picks the same snapshot, so its field-level list of what differs from the
+   live data shows exactly what that rollback would undo. Show it with the
+   preview when the user asks what will come back.
+4. After the user approves, repeat with `{"nBack": 1, "confirm": true}`. A
    confirmed rollback saves the current state first, so another `nBack: 1`
    right after a rollback undoes that rollback.
-4. `snapshotId` names one id from the list. `beforeTime` takes an ISO 8601
+5. `snapshotId` names one id from the list. `beforeTime` takes an ISO 8601
    time carrying a `Z` or `±HH:MM` offset, such as `2026-11-08T15:30:00Z`,
    and restores the latest snapshot strictly before it; a time with no
    offset is refused.

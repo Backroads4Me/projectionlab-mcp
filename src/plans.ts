@@ -138,6 +138,33 @@ export function eventLabel(event: unknown): string {
   return "unnamed";
 }
 
+/**
+ * Key events for diffing by label plus occurrence number, so events sharing a
+ * name each keep their own entry. Ids are not used because a replacement
+ * section may omit them. The display name shows the occurrence only when the
+ * label repeats.
+ */
+export function keyEvents(
+  events: unknown[],
+): Map<string, { name: string; event: unknown }> {
+  const labelCounts = new Map<string, number>();
+  for (const e of events) {
+    const label = eventLabel(e);
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  const keyed = new Map<string, { name: string; event: unknown }>();
+  for (const e of events) {
+    const label = eventLabel(e);
+    const n = (seen.get(label) ?? 0) + 1;
+    seen.set(label, n);
+    const key = `${label}#${n}`;
+    const name = (labelCounts.get(label) ?? 0) > 1 ? `${label} #${n}` : label;
+    keyed.set(key, { name, event: e });
+  }
+  return keyed;
+}
+
 function sectionIsEventBased(section: unknown): boolean {
   if (Array.isArray(section)) return true;
   return (

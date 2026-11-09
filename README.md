@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/Backroads4Me/projectionlab-mcp/main/assets/logo.png" alt="ProjectionLab MCP logo" width="80"></p>
+
 # ProjectionLab MCP Server
 
 **Talk to an AI assistant about your retirement plan, and let it read and optionally update your numbers in [ProjectionLab](https://projectionlab.com) for you.**
@@ -7,6 +9,10 @@ ProjectionLab is a retirement and financial-planning app. This project connects 
 - *"Walk me through what my plan assumes: returns, inflation, spending, and when Social Security starts."*
 - *"Copy my plan as 'Returns -2%' and lower the stock and bond returns by 2 points in the copy, so I can compare the two in ProjectionLab."*
 - *"Raise my travel spending to $12,000 a year."* (then check the effect in ProjectionLab)
+
+![An assistant lists the biggest expenses in a sample plan, then previews lowering travel to $9,000 a year before saving anything](https://raw.githubusercontent.com/Backroads4Me/projectionlab-mcp/main/assets/chat-plan-change-preview.png)
+
+*Asking about a plan, then previewing a change before it is saved.*
 
 The assistant can look at your plan, walk through the tradeoffs with you, and, only when you say so, make changes for you.
 

@@ -29,7 +29,7 @@ Paste this into your AI assistant:
 > ProjectionLab Plugin API key and loading the browser extension) one step at
 > a time. Keep it in read-only mode until I say otherwise.
 
-Your assistant installs the server, asks for your ProjectionLab Plugin API key, and walks you through a couple of short steps in your browser (loading a small helper extension and pasting in a code). When it's done, start asking questions about your plan.
+Your assistant installs the server, asks for your ProjectionLab Plugin API key, and walks you through a couple of short steps in your browser: loading a small helper extension and entering a connection code in its settings. When it's done, start asking questions about your plan.
 
 If anything gets stuck, tell your assistant what you see on screen; it can troubleshoot from there.
 

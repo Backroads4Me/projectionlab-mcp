@@ -1,12 +1,12 @@
 # ProjectionLab MCP Server
 
-**Talk to an AI assistant about your retirement plan, and let it read and update your numbers in [ProjectionLab](https://projectionlab.com) for you.**
+**Talk to an AI assistant about your retirement plan, and let it read and optionally update your numbers in [ProjectionLab](https://projectionlab.com) for you.**
 
-ProjectionLab is a retirement and financial-planning app. This project connects it to an AI assistant (like Claude, or any assistant that supports the "MCP" standard; more on that below) so you can ask questions in plain English and get real answers based on *your* actual plan:
+ProjectionLab is a retirement and financial-planning app. This project connects it to an AI assistant (like Claude, or any assistant that supports the "MCP" standard; more on that below) so you can ask questions in plain English about *your* actual plan. The assistant reads and edits your plan; ProjectionLab itself runs the projections, so you see the results (charts, Chance of Success) in the app.
 
-- *"Am I on track to retire at 60?"*
-- *"What happens to my plan if the market returns 2% less than I assumed?"*
-- *"Bump my planned travel spending to $12,000 a year and show me the effect."*
+- *"Walk me through what my plan assumes: returns, inflation, spending, and when Social Security starts."*
+- *"Copy my plan as 'Returns -2%' and lower the stock and bond returns by 2 points in the copy, so I can compare the two in ProjectionLab."*
+- *"Raise my travel spending to $12,000 a year."* (then check the effect in ProjectionLab)
 
 The assistant can look at your plan, walk through the tradeoffs with you, and, only when you say so, make changes for you. Every change is previewed before it happens and can be undone.
 

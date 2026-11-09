@@ -31,14 +31,26 @@ export function buildSummary(data: ExportedData): FinancialSummary {
       for (const item of items) {
         if (item && typeof item === "object") {
           const obj = item as Record<string, unknown>;
-          const balance = Number(obj.balance ?? obj.value ?? 0);
           group.count++;
-          group.total += balance;
-          // Debts reduce net worth
-          if (section === "debts") {
-            totalNetWorth -= Math.abs(balance);
+          if (section === "assets") {
+            // In today.assets, amount is market value and balance is the loan balance.
+            const marketValue = Number(obj.amount ?? obj.value ?? 0);
+            group.total += marketValue;
+            totalNetWorth += marketValue;
+            // An outstanding loan balance on an asset is subtracted from net worth
+            // as a liability. Paid-in-full assets carry balance: 0.
+            const loanBalance = Number(obj.balance ?? 0);
+            if (loanBalance > 0) {
+              totalNetWorth -= loanBalance;
+            }
           } else {
-            totalNetWorth += balance;
+            const balance = Number(obj.balance ?? obj.value ?? 0);
+            group.total += balance;
+            if (section === "debts") {
+              totalNetWorth -= Math.abs(balance);
+            } else {
+              totalNetWorth += balance;
+            }
           }
         }
       }

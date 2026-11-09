@@ -21,11 +21,11 @@ export function registerDeletePlanTool(
       title: "Delete Plan",
       description:
         "Permanently removes one plan by exact plan ID; names are never matched, so get the ID " +
-        "from projectionlab_describe_schema first. Refuses the active plan (switch to another plan " +
-        "in ProjectionLab) and the last remaining plan. When confirm is false (default), returns a " +
-        "dry-run preview. When confirm is true, auto-snapshots all plans, writes the remaining " +
-        "plans, and verifies the deleted plan is gone while every other plan and the active plan " +
-        "are unchanged. projectionlab_rollback on the snapshot restores the deleted plan.",
+        "from projectionlab_describe_schema first. Refuses the last remaining plan. " +
+        "When confirm is false (default), returns a dry-run preview. When confirm is true, " +
+        "auto-snapshots all plans, writes the remaining plans, and verifies the deleted plan is " +
+        "gone while every other plan is unchanged. projectionlab_rollback on the snapshot " +
+        "restores the deleted plan.",
       inputSchema: {
         planId: z
           .string()

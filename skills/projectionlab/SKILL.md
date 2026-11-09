@@ -217,7 +217,7 @@ To explore a what-if without touching the original, clone the plan first and
 patch the copy.
 
 `projectionlab_delete_plan` takes an exact plan ID only, never a name, and
-refuses the active plan and the last remaining plan. Its snapshot lets
+refuses the last remaining plan. Its snapshot lets
 `projectionlab_rollback` restore the deleted plan.
 
 `projectionlab_restore_current_finances`, `projectionlab_restore_plans`,

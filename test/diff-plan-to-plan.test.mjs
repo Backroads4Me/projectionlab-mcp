@@ -21,6 +21,7 @@ process.env.LOG_LEVEL = "error";
 
 const { registerDiffTool } = await import("../dist/tools/diff.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
+const { z } = await import("zod");
 
 function fakeServer() {
   const tools = new Map();
@@ -109,10 +110,17 @@ function planOf(prefix, name) {
   };
 }
 
+/**
+ * Registers the tool and returns a caller that validates arguments against
+ * the tool's input schema first, as an MCP client does, so a schema that
+ * rejects a valid call fails here too.
+ */
 function register(bridge, snapshots = freshSnapshots()) {
   const server = fakeServer();
   registerDiffTool(server, bridge, snapshots);
-  return (args) => server.tools.get("projectionlab_diff").handler(args);
+  const { definition, handler } = server.tools.get("projectionlab_diff");
+  const schema = z.object(definition.inputSchema).strict();
+  return (args) => handler(schema.parse(args));
 }
 
 /** Two plans with the same content and nothing in common among their ids. */

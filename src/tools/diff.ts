@@ -312,9 +312,11 @@ export function registerDiffTool(
         `${FIELD_CHANGE_CAP} field changes, with omittedFieldChanges and per-entry ` +
         "omittedChanges counting the rest; a difference past the cap is still counted as changed.",
       inputSchema: {
-        from: selectorSchema.describe(
-          "The baseline side, whose values are reported as before: one saved snapshot, selected like projectionlab_rollback does. Required to compare points in time. With planA and planB it is optional and names the one snapshot both plans are read from.",
-        ),
+        from: selectorSchema
+          .optional()
+          .describe(
+            "The baseline side, whose values are reported as before: one saved snapshot, selected like projectionlab_rollback does. Required to compare points in time. With planA and planB it is optional and names the one snapshot both plans are read from.",
+          ),
         to: selectorSchema
           .optional()
           .describe(

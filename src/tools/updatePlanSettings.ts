@@ -49,7 +49,7 @@ export function registerUpdatePlanSettingsTool(
         changes: z
           .record(z.string(), z.unknown())
           .describe(
-            'Dot-path to value map, e.g. { "inflation": 0.03, "estate.enabled": true }. Every path must already exist and retain its current JSON type.',
+            'Dot-path to value map, e.g. { "inflation": 3, "estate.enabled": true }. Every path must already exist and retain its current JSON type. Rates use the scale of the current value: most are percentage points (inflation 3 means 3%), some are fractions (taxStrategy.bracketRate 0.22 means 22%).',
           ),
         confirm: z
           .boolean()

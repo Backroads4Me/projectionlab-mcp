@@ -182,6 +182,10 @@ Change the plan only when the user explicitly asks for that change.
 - Never guess a path. Read it first with `projectionlab_get_plan_settings`,
   `projectionlab_get_plan_section` or `projectionlab_get_current_finances`,
   the last two with `listPaths: true`.
+- Never assume a rate's scale. ProjectionLab 4.6.0 stores most rates as
+  percentage points (`variables.inflation: 3` means 3%), but some as fractions
+  (`variables.taxStrategy.bracketRate: 0.22` means 22%). Read the current
+  value first and write the new one on the same scale.
 - Never skip the dry run, and never pass `confirm: true` until the user has
   said yes to the change that exact dry run showed.
 - Never write to a plan the user did not name. If the user named no plan and
@@ -289,9 +293,9 @@ at 55 plan."
 
 1. `projectionlab_get_plan_settings` with `planIdentifier: "Retire at 55"`,
    `section: "variables"` shows the path `inflation` with JSON type `number`
-   and its current value, a fraction such as `0.025`.
+   and its current value in percentage points, such as `2.5` for 2.5%.
 2. `projectionlab_update_plan_settings` with
-   `{"planIdentifier": "Retire at 55", "section": "variables", "changes": {"inflation": 0.03}}`
+   `{"planIdentifier": "Retire at 55", "section": "variables", "changes": {"inflation": 3}}`
    returns the dry-run diff. Show it to the user.
 3. After the user approves, repeat the call with `"confirm": true`, then
    re-read the setting and suggest recalculating the plan in ProjectionLab.

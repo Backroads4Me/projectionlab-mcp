@@ -25,6 +25,10 @@ const { registerRestoreTools, restoredSectionMatches } = await import(
 const { registerSnapshotTools } = await import("../dist/tools/snapshots.js");
 const { registerGetPlanTool } = await import("../dist/tools/getPlan.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
+const { registerUpdatePlanSectionTool } = await import(
+  "../dist/tools/updatePlanSection.js"
+);
+const { z } = await import("zod");
 
 function fakeServer() {
   const tools = new Map();
@@ -103,6 +107,26 @@ test("plan tools reject a blank planIdentifier at the schema", () => {
   assert.equal(schema.planIdentifier.safeParse("").success, false);
   assert.equal(schema.planIdentifier.safeParse("  ").success, false);
   assert.equal(schema.planIdentifier.safeParse("Retire").success, true);
+});
+
+test("replacement tools refuse a call that omits the replacement data", () => {
+  // The MCP SDK validates arguments with z.object(inputSchema), so a call
+  // without the data field must fail there instead of writing undefined.
+  const server = fakeServer();
+  const bridge = fakeBridge({ plans: samplePlans() });
+  const snapshots = new SnapshotManager();
+  registerUpdatePlanSectionTool(server, bridge, snapshots);
+  registerRestoreTools(server, bridge, snapshots);
+  const cases = [
+    ["projectionlab_update_plan_section", { planIdentifier: "Retire", section: "income", confirm: true }, "sectionData"],
+    ["projectionlab_restore_progress", { confirm: true }, "progress"],
+  ];
+  for (const [name, args, field] of cases) {
+    const schema = z.object(server.tools.get(name).definition.inputSchema);
+    const result = schema.safeParse(args);
+    assert.equal(result.success, false, name);
+    assert.deepEqual(result.error.issues.map((i) => i.path.join(".")), [field], name);
+  }
 });
 
 test("schema and summary report event counts per plan", async () => {

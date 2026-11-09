@@ -347,7 +347,10 @@ Retire at 55 plan."
 1. `projectionlab_get_plan_section` with `planIdentifier: "Retire at 55"`,
    `section: "expenses"`, `eventIdentifier: "Groceries"` and `listPaths: true`
    lists that event's editable dot paths with their JSON types, including
-   `amount` (type `number`) and `amountType`.
+   `amount` (type `number`), `amountType` and `frequency`. Here `frequency` is
+   `"monthly"`, which matches how the user stated the amount, so 600 is
+   written as is. When `frequency` does not match how the user stated the
+   amount, ask the user rather than converting it yourself.
 2. `projectionlab_update_plan_event` with
    `{"planIdentifier": "Retire at 55", "section": "expenses", "eventIdentifier": "Groceries", "pathChanges": {"amount": 600}}`
    returns `dryRun: true`, the `planName`, `section`, the `event` label, and

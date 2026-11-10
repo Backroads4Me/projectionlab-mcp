@@ -42,6 +42,7 @@ test("bootstrap snippet acts as a full executor", async () => {
   const sandbox = {
     window: { projectionlabPluginAPI: pluginApi },
     WebSocket,
+    crypto: { randomUUID: () => "sandbox-instance-id" },
     console: { log: () => {} },
     // unref'd so the snippet's reconnect loop can't hold the process open
     // after the bridge shuts down at the end of the test
@@ -108,6 +109,7 @@ test("bootstrap snippet refuses a method outside the wire protocol", async () =>
   const sandbox = {
     window: { projectionlabPluginAPI: { wipeEverything: () => { called = true; } } },
     WebSocket,
+    crypto: { randomUUID: () => "sandbox-instance-id" },
     console: { log: () => {} },
     setTimeout: (fn, ms) => {
       const t = setTimeout(fn, ms);
@@ -183,6 +185,7 @@ test("the snippet classifies key errors by whole-number 401/403 only", async () 
       },
     },
     WebSocket,
+    crypto: { randomUUID: () => "sandbox-instance-id" },
     console: { log: () => {} },
     setTimeout: (fn, ms) => {
       const t = setTimeout(fn, ms);
@@ -223,4 +226,101 @@ test("the snippet and page-main carry one identical key-error regex", async () =
   const pageMainCopy = pageMain.match(literal)[0];
   assert.equal(snippetCopy, pageMainCopy);
   assert.match(snippetCopy, /\\b401\\b\|\\b403\\b/);
+});
+
+/**
+ * Runs the snippet against a stand-in server that acks the hello and then
+ * closes with closeCode. Collects the hellos sent, the snippet's console
+ * lines, and the reconnect delays it scheduled.
+ */
+async function snippetCloseScenario(closeCode) {
+  const port = await freePort();
+  const wss = new WebSocketServer({ host: "127.0.0.1", port });
+  await new Promise((resolve) => wss.once("listening", resolve));
+  const hellos = [];
+  const logs = [];
+  const retryDelays = [];
+  wss.on("connection", (ws) => {
+    ws.on("message", (raw) => {
+      const frame = JSON.parse(String(raw));
+      if (frame.type === "hello") {
+        hellos.push(frame);
+        ws.send(JSON.stringify({ type: "helloAck", protocolVersion: frame.protocolVersion }));
+        ws.close(closeCode, "scenario");
+      }
+    });
+  });
+  const sandbox = {
+    window: {},
+    WebSocket,
+    crypto: { randomUUID: () => "11111111-2222-3333-4444-555555555555" },
+    console: { log: (_prefix, m) => logs.push(m) },
+    setTimeout: (fn, ms) => {
+      retryDelays.push(ms);
+      const t = setTimeout(fn, ms);
+      t.unref();
+      return t;
+    },
+    clearTimeout,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(buildBootstrapSnippet(port, "test-token"), sandbox);
+  await new Promise((resolve) => {
+    const t = setTimeout(resolve, 300);
+    t.unref();
+  });
+  return { hellos, logs, retryDelays, sandbox, wss };
+}
+
+async function cleanupScenario(sandbox, wss) {
+  sandbox.WebSocket = class {
+    send() {}
+    close() {}
+  };
+  for (const client of wss.clients) client.terminate();
+  await new Promise((resolve) => wss.close(resolve));
+}
+
+test("the snippet sends a stable instance id and never asks for takeover", async () => {
+  const s = await snippetCloseScenario(4004);
+  try {
+    assert.ok(s.hellos.length >= 1);
+    assert.equal(s.hellos[0].instanceId, "11111111-2222-3333-4444-555555555555");
+    assert.equal("takeover" in s.hellos[0], false);
+  } finally {
+    await cleanupScenario(s.sandbox, s.wss);
+  }
+});
+
+test("on 4004 the snippet waits 30 seconds and stays installed", async () => {
+  const s = await snippetCloseScenario(4004);
+  try {
+    assert.match(s.logs.join("\n"), /another executor is connected/);
+    assert.equal(s.retryDelays[0], 30000);
+    assert.equal(s.sandbox.window.__plmcpBootstrap, true);
+  } finally {
+    await cleanupScenario(s.sandbox, s.wss);
+  }
+});
+
+test("on 4003 the snippet logs the takeover and waits 30 seconds", async () => {
+  const s = await snippetCloseScenario(4003);
+  try {
+    assert.match(s.logs.join("\n"), /took over the connection/);
+    assert.equal(s.retryDelays[0], 30000);
+    assert.equal(s.sandbox.window.__plmcpBootstrap, true);
+  } finally {
+    await cleanupScenario(s.sandbox, s.wss);
+  }
+});
+
+test("on 4001 the snippet stops and clears the installed flag", async () => {
+  const s = await snippetCloseScenario(4001);
+  try {
+    assert.match(s.logs.join("\n"), /stopped:/);
+    assert.deepEqual(s.retryDelays, []);
+    assert.equal(s.sandbox.window.__plmcpBootstrap, false);
+  } finally {
+    await cleanupScenario(s.sandbox, s.wss);
+  }
 });

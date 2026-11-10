@@ -34,6 +34,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   if (window.__plmcpBootstrap) { console.log("[plmcp] bootstrap already running"); return; }
   window.__plmcpBootstrap = true;
   let stopped = false;
+  const instanceId = crypto.randomUUID();
   const log = (m) => console.log("[plmcp]", m);
   function waitForApi(timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -84,7 +85,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   function connect() {
     if (stopped) return;
     const ws = new WebSocket("ws://127.0.0.1:" + cfg.port);
-    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", token: cfg.token, protocolVersion: cfg.protocolVersion, executor: cfg.executor }));
+    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", token: cfg.token, protocolVersion: cfg.protocolVersion, executor: cfg.executor, instanceId }));
     ws.onmessage = (ev) => {
       let frame;
       try { frame = JSON.parse(ev.data); } catch { return; }
@@ -95,7 +96,8 @@ export function buildBootstrapSnippet(port: number, token: string): string {
     ws.onclose = (ev) => {
       if (stopped) return;
       if (ev.code === 4001 || ev.code === 4002) { stopped = true; window.__plmcpBootstrap = false; log("stopped: " + (ev.reason || ev.code)); return; }
-      if (ev.code === 4003) { stopped = true; window.__plmcpBootstrap = false; log("replaced by another executor (probably the extension) - bootstrap no longer needed"); return; }
+      if (ev.code === 4004) { log("another executor is connected; this tab will connect if that one goes away (retrying in 30s)"); setTimeout(connect, 30000); return; }
+      if (ev.code === 4003) { log("another executor took over the connection (retrying in 30s)"); setTimeout(connect, 30000); return; }
       log("disconnected; retrying in 3s");
       setTimeout(connect, 3000);
     };

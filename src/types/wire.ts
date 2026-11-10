@@ -53,6 +53,12 @@ export interface HelloFrame {
 export interface HelloAckFrame {
   type: "helloAck";
   protocolVersion: number;
+  /**
+   * The server's release version (package.json). Additive: executors that
+   * ignore it keep working, and older servers simply omit it. The extension
+   * shows a line when its own version differs.
+   */
+  serverVersion?: string;
 }
 
 export interface RequestFrame {

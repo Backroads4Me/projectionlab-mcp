@@ -18,7 +18,7 @@ The server opens a WebSocket listener on `127.0.0.1:<PL_WS_PORT>`. A browser-sid
 
 `src/types/wire.ts` is the contract shared by the server and every executor:
 
-- The executor connects and sends a `hello` frame with a shared token and protocol version. The server validates the `Origin` header (extension or app origin only), checks the token, and replies `helloAck`, or closes with code `4001` (auth), `4002` (version), or `4003` (a newer executor replaced this one).
+- The executor connects and sends a `hello` frame with a shared token and protocol version. The server validates the `Origin` header (extension or app origin only), checks the token, and replies `helloAck`, or closes with code `4001` (auth), `4002` (version), or `4003` (a newer executor replaced this one). The `helloAck` carries the server's release version in `serverVersion` so the extension can show a mismatch line; executors that ignore the field are unaffected, and servers older than the field simply omit it.
 - Requests are `{ id, method, params }`; responses are `{ id, ok, result | error }`. Methods map directly to Plugin API calls plus `describeApi`/`waitForApi`.
 - A ~20 s `ping`/`pong` heartbeat keeps the connection healthy (and keeps a Manifest V3 service worker from being suspended).
 

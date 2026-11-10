@@ -26,7 +26,7 @@ const { ExtensionBridge } = await import("../dist/extensionBridge.js");
 const { PROTOCOL_VERSION, CLOSE_CODES } = await import("../dist/types/wire.js");
 
 /** Minimal scriptable executor: answers requests via the supplied handler. */
-function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, handler } = {}) {
+function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, executor = "fake/1.0", handler } = {}) {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   const events = { closed: null, acked: false };
   const done = new Promise((resolve) => {
@@ -36,11 +36,14 @@ function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, ha
     });
   });
   ws.on("open", () => {
-    ws.send(JSON.stringify({ type: "hello", token, protocolVersion, executor: "fake/1.0" }));
+    ws.send(JSON.stringify({ type: "hello", token, protocolVersion, executor }));
   });
   ws.on("message", (raw) => {
     const frame = JSON.parse(String(raw));
-    if (frame.type === "helloAck") events.acked = true;
+    if (frame.type === "helloAck") {
+      events.acked = true;
+      events.ack = frame;
+    }
     if (frame.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
     if (frame.type === "request" && handler) {
       const reply = handler(frame);
@@ -115,6 +118,7 @@ test("all Bridge methods round-trip through a healthy executor", async () => {
     pageLoaded: true,
     apiAvailable: true,
     apiKeyValid: true,
+    executor: "fake/1.0",
     errors: [],
   });
 
@@ -275,6 +279,17 @@ test("a connection that sends too much before hello is dropped at once", async (
   assert.ok(await bridge.describePluginApi());
   exec.ws.close();
   await exec.done;
+});
+
+test("helloAck carries the server release and checkConnection names the executor", async () => {
+  const { VERSION } = await import("../dist/version.js");
+  const exec = connectExecutor({ executor: "extension/9.9.9", handler: healthyHandler });
+  await exec.ready;
+  assert.equal(exec.events.ack.protocolVersion, PROTOCOL_VERSION);
+  assert.equal(exec.events.ack.serverVersion, VERSION);
+  const status = await bridge.checkConnection();
+  assert.equal(status.executor, "extension/9.9.9");
+  exec.ws.close();
 });
 
 test("close() shuts down cleanly and further calls fail fast", async () => {

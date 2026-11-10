@@ -5,6 +5,8 @@ export interface ConnectionStatus {
   pageLoaded: boolean;
   apiAvailable: boolean;
   apiKeyValid: boolean;
+  /** Connected executor's identity, "extension/<version>" or "bootstrap/<version>". */
+  executor?: string;
   errors: string[];
 }
 

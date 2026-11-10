@@ -8,6 +8,7 @@ import { config, USER_ENV_FILE } from "./config.js";
 import { ProjectionLabError } from "./errors.js";
 import { log } from "./logger.js";
 import type { ExportedData } from "./types/projectionlab.js";
+import { VERSION } from "./version.js";
 import {
   CLOSE_CODES,
   HEARTBEAT_INTERVAL_MS,
@@ -242,7 +243,7 @@ export class ExtensionBridge implements Bridge {
     this.conn = ws;
     this.connExecutor = executor;
     log.info("extension", `Executor connected: ${executor}`);
-    ws.send(JSON.stringify({ type: "helloAck", protocolVersion: PROTOCOL_VERSION }));
+    ws.send(JSON.stringify({ type: "helloAck", protocolVersion: PROTOCOL_VERSION, serverVersion: VERSION }));
 
     ws.on("message", (raw) => this.onFrame(ws, raw));
     ws.on("close", () => {
@@ -466,6 +467,7 @@ export class ExtensionBridge implements Bridge {
         return result;
       }
       result.browser = true;
+      result.executor = this.connExecutor || undefined;
       try {
         await this.request(
           "waitForApi",

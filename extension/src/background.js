@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { executePageRequest } from "./page-main.js";
-import { makeResponseFrame, reconnectBlockedForClose, statusMessageForClose } from "./wire.js";
+import { makeResponseFrame, reconnectBlockedForClose, shouldTriggerConnect, statusMessageForClose } from "./wire.js";
 
 const DEFAULT_PORT = 8788;
 const PROTOCOL_VERSION = 1;
@@ -12,6 +12,16 @@ let retryMs = 2_000;
 let generation = 0;
 let reconnectBlocked = false;
 const inFlight = new Map();
+
+// The blocked flag also lives in storage.session, which survives a
+// service-worker restart but clears when the browser closes. Chrome
+// terminates the worker about 30 seconds after the socket closes, and the
+// reconnect alarm starts it again; without the stored flag the restarted
+// worker would reconnect and displace the other executor.
+async function isReconnectBlocked() {
+  const { reconnectBlocked: stored } = await browser.storage.session.get({ reconnectBlocked: false });
+  return stored;
+}
 
 const EXTENSION_NAME = "MCP Bridge for ProjectionLab";
 // Toolbar label per connection status: authed = token accepted by the server,
@@ -60,7 +70,11 @@ async function connect(force = false) {
     await setStatus("disconnected", "Configure the shared token to connect.");
     return;
   }
-  reconnectBlocked = false;
+  if (force) {
+    // Saving the options page is how the user clears a block.
+    reconnectBlocked = false;
+    await browser.storage.session.set({ reconnectBlocked: false });
+  }
   await setStatus("disconnected");
   const ws = new WebSocket(`ws://127.0.0.1:${config.port}`);
   socket = ws;
@@ -84,7 +98,9 @@ async function connect(force = false) {
     socket = undefined;
     // 4003 REPLACED blocks reconnect like an auth failure: two executors
     // that each reconnect when replaced would displace each other forever.
+    // The flag is persisted so a service-worker restart honors the block.
     reconnectBlocked = reconnectBlockedForClose(event.code);
+    void browser.storage.session.set({ reconnectBlocked });
     void setStatus("disconnected", statusMessageForClose(event));
     scheduleReconnect(myGeneration);
   };
@@ -143,7 +159,11 @@ browser.storage.onChanged.addListener((changes, area) => {
 });
 browser.action.onClicked.addListener(() => void browser.runtime.openOptionsPage());
 browser.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === RECONNECT_ALARM && !reconnectBlocked && !socket) void connect();
+  if (alarm.name !== RECONNECT_ALARM || socket) return;
+  void (async () => {
+    if (!shouldTriggerConnect({ blocked: await isReconnectBlocked(), force: false })) return;
+    void connect();
+  })();
 });
 async function createReconnectAlarm() {
   // Firefox MV3 uses an event page and does not treat WebSocket traffic as
@@ -152,4 +172,10 @@ async function createReconnectAlarm() {
   await browser.alarms.create(RECONNECT_ALARM, { periodInMinutes: isFirefox ? 0.25 : 1 });
 }
 void createReconnectAlarm();
-void connect();
+void (async () => {
+  // A worker restarted by the reconnect alarm must honor a block persisted
+  // before the restart; only saving the options page (forced connect) or a
+  // browser restart (which clears storage.session) resumes reconnecting.
+  if (!shouldTriggerConnect({ blocked: await isReconnectBlocked(), force: false })) return;
+  void connect();
+})();

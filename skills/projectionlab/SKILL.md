@@ -279,7 +279,9 @@ values intact. Paths must already exist and keep their JSON type; get them from
 the matching read tool (`get_plan_settings`, `get_plan_section` with
 `listPaths: true`, or `get_current_finances` with `listPaths: true`). The
 older `patch` (events) and `data` (accounts) inputs merge top-level fields
-only; supply exactly one of the patch inputs.
+only; existing fields keep their JSON type and are validated like
+`pathChanges`, and new fields must be plain, non-secret names. Supply
+exactly one of the patch inputs.
 
 Milestones: ProjectionLab always keeps a Retirement and a Life Expectancy
 milestone and disables deleting them in the app, so never remove either one.

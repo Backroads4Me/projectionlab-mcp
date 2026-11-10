@@ -175,7 +175,9 @@ Event forms use the same path workflow. Fetch one event with
 `projectionlab_get_plan_section` using its `eventIdentifier` and
 `"listPaths": true`, then pass selected paths to
 `projectionlab_update_plan_event` as `pathChanges`. The older `patch` input
-remains available for shallow top-level changes.
+remains available for shallow top-level changes: existing fields are
+validated like `pathChanges` (same JSON type, secret-named fields refused)
+and new fields must be plain, non-secret names.
 
 Current Finances accounts also support targeted discovery and nested patches.
 Call `projectionlab_get_current_finances` with an exact `accountId` and

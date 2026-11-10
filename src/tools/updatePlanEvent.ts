@@ -14,9 +14,8 @@ import {
   type PathValueChange,
 } from "../pathPatch.js";
 import { enumRefusalError } from "../dataModel.js";
-import { redactSecrets } from "../redact.js";
+import { isSecretFieldName, redactSecrets } from "../redact.js";
 import {
-  diffFields,
   eventLabel,
   requireEventIndex,
   requirePlanIndex,
@@ -53,6 +52,73 @@ function assertMutableEventPath(path: string): void {
   }
 }
 
+const UNSAFE_NEW_FIELDS = new Set([
+  "__proto__",
+  "prototype",
+  "constructor",
+  "id",
+]);
+
+/**
+ * The legacy shallow top-level patch, validated like pathChanges. Existing
+ * fields go through applyExistingPathChanges (same existence, JSON-type,
+ * unsafe-key and secret-name checks); values replacing a whole nested object
+ * are still checked leaf by leaf against the observed enums. New fields stay
+ * allowed only as plain, non-secret names.
+ */
+function applyEventPatch(
+  event: PlanObj,
+  patch: Record<string, unknown>,
+  section: string,
+): { updated: PlanObj; changes: Record<string, PathValueChange> } {
+  for (const key of Object.keys(patch)) {
+    assertMutableEventPath(key);
+  }
+  for (const { path, value } of listAddressableValues(patch)) {
+    const refusal = enumRefusalError(section, path, value);
+    if (refusal) throw refusal;
+  }
+  const existing: Record<string, unknown> = {};
+  const additions: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (Object.prototype.hasOwnProperty.call(event, key)) {
+      existing[key] = value;
+      continue;
+    }
+    if (
+      key.length === 0 ||
+      key.includes(".") ||
+      UNSAFE_NEW_FIELDS.has(key) ||
+      isSecretFieldName(key)
+    ) {
+      throw new ProjectionLabError(
+        "INVALID_INPUT",
+        `Invalid new event field "${key}"`,
+        "New top-level fields must be plain, non-secret names; use pathChanges to change existing nested values",
+      );
+    }
+    additions[key] = value;
+  }
+
+  let updated = event;
+  let changes: Record<string, PathValueChange> = {};
+  if (Object.keys(existing).length > 0) {
+    const result = applyExistingPathChanges(
+      event,
+      existing,
+      EVENT_FIELD_CONTEXT,
+      section,
+    );
+    updated = result.updated;
+    changes = result.changes;
+  }
+  for (const [key, value] of Object.entries(additions)) {
+    updated = { ...updated, [key]: value };
+    changes[key] = { before: "[ABSENT]", after: value };
+  }
+  return { updated, changes };
+}
+
 /** Rebuild a section with one event replaced, preserving its container shape. */
 function replaceEvent(
   sectionData: unknown,
@@ -85,7 +151,8 @@ export function registerUpdatePlanEventTool(
         "get valid paths from projectionlab_get_plan_section with eventIdentifier and listPaths=true. " +
         "See projectionlab://data-model for field units and allowed values. " +
         "The legacy patch input shallowly merges top-level fields and replaces any nested object " +
-        "supplied there. Supply exactly one of patch or pathChanges. All sibling events are preserved. " +
+        "supplied there; existing fields keep their JSON type and new fields must be plain, " +
+        "non-secret names. Supply exactly one of patch or pathChanges. All sibling events are preserved. " +
         "This is the PREFERRED write tool for single-event changes: much smaller and " +
         "safer than regenerating a whole section. " +
         "When confirm is false (default), returns a dry-run field-level diff. " +
@@ -112,7 +179,7 @@ export function registerUpdatePlanEventTool(
           .record(z.string(), z.unknown())
           .optional()
           .describe(
-            "Top-level fields to change, e.g. { amount: 5000 }. Merged shallowly; a nested object replaces that complete nested object. Use pathChanges for nested fields.",
+            "Top-level fields to change, e.g. { amount: 5000 }. Existing fields keep their JSON type and are validated like pathChanges; a nested object supplied here replaces that complete nested object. New fields must be plain, non-secret names. Use pathChanges for nested fields.",
           ),
         pathChanges: z
           .record(z.string(), z.unknown())
@@ -187,8 +254,7 @@ export function registerUpdatePlanEventTool(
 
         const event = events[eventIndex] as PlanObj;
         let patched: PlanObj;
-        let changes: Record<string, string> | Record<string, PathValueChange>;
-        let pathDiff: Record<string, PathValueChange> | undefined;
+        let changes: Record<string, PathValueChange>;
         if (pathChanges !== undefined) {
           for (const path of Object.keys(pathChanges)) {
             assertMutableEventPath(path);
@@ -201,19 +267,10 @@ export function registerUpdatePlanEventTool(
           );
           patched = result.updated;
           changes = result.changes;
-          pathDiff = result.changes;
         } else {
-          for (const key of Object.keys(patch ?? {})) {
-            assertMutableEventPath(key);
-          }
-          // The merge replaces whole top-level fields, so check every value it
-          // writes against the observed enums, as pathChanges does.
-          for (const { path, value } of listAddressableValues(patch ?? {})) {
-            const refusal = enumRefusalError(section, path, value);
-            if (refusal) throw refusal;
-          }
-          patched = { ...event, ...patch };
-          changes = diffFields(event, patched);
+          const result = applyEventPatch(event, patch ?? {}, section);
+          patched = result.updated;
+          changes = result.changes;
         }
         const renderedChanges = redactSecrets(changes, { byName: true });
 
@@ -298,18 +355,11 @@ export function registerUpdatePlanEventTool(
                 eventLabel(e) === eventLabel(patched)),
           ) as PlanObj | undefined;
           if (verifiedEvent) {
-            verified =
-              pathDiff !== undefined
-                ? pathChangesApplied(
-                    verifiedEvent,
-                    pathDiff,
-                    EVENT_FIELD_CONTEXT,
-                  )
-                : Object.entries(patch ?? {}).every(
-                    ([key, expected]) =>
-                      JSON.stringify(verifiedEvent[key]) ===
-                      JSON.stringify(expected),
-                  );
+            verified = pathChangesApplied(
+              verifiedEvent,
+              changes,
+              EVENT_FIELD_CONTEXT,
+            );
           }
         }
 

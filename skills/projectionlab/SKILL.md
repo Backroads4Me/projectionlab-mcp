@@ -79,6 +79,11 @@ Recommended, persistent: the **MCP Bridge for ProjectionLab** browser extension.
    check.
 4. Open https://app.projectionlab.com and log in.
 
+If another browser is already connected to the server, the status reads
+**Standing by** instead: that extension connects on its own when the other
+browser disconnects, and pressing Save on the options page makes this
+browser the active one now.
+
 A Firefox user whose setup worked before only needs step 2 again after
 restarting Firefox: load `manifest.json` from the same folder, and re-enter
 the port and token if the options page is empty. Do not repeat the rest of

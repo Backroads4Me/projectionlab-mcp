@@ -38,6 +38,7 @@ local server.
 | The local server's port and shared token, and the auto-open setting | You enter them on the options page | Stored in the browser's extension storage on your computer. The token is sent only to the local server, to authenticate the connection. |
 | Connection status and the last error message | The extension itself | Stored in the browser's extension storage, to show on the options page and toolbar icon |
 | The connected server's release version (`serverVersion`) | The local server's handshake reply | Stored in the browser's extension storage, to show on the options page when the two releases differ |
+| A random installation id (`instanceId`) and the time you last pressed Save (`connectRequestedAt`) | The extension generates the id on first use; the time is recorded when you save the options page | Stored in the browser's extension storage. The id identifies this browser to the local server, so the browser you are using is not displaced by another one; it is random, carries no personal information, and goes only to `127.0.0.1` |
 
 The extension does not read your browsing history, does not access any site
 other than `https://app.projectionlab.com`, and does not read the content of

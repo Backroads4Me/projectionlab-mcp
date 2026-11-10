@@ -230,6 +230,14 @@ export class ExtensionBridge implements Bridge {
     if (this.conn && this.conn !== ws) {
       log.info("extension", `Replacing ${this.connExecutor} with ${executor}`);
       this.conn.close(CLOSE_CODES.REPLACED, "replaced by newer connection");
+      // The replaced executor's state must not leak into the new one: its
+      // cached export could be served from the previous browser, its
+      // unanswered requests would hang until the 60s timeout, and a pong the
+      // old executor never sent must not drop the new one at the next
+      // heartbeat tick. The new socket and the heartbeat stay as they are.
+      this.exportCache = null;
+      this.awaitingPong = false;
+      this.abandonRequests("executor was replaced");
     }
     this.conn = ws;
     this.connExecutor = executor;
@@ -331,6 +339,21 @@ export class ExtensionBridge implements Bridge {
     }, HEARTBEAT_INTERVAL_MS);
   }
 
+  /** Reject every in-flight request; the executor that was sent to is gone. */
+  private abandonRequests(reason: string): void {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(
+        new ProjectionLabError(
+          "EXTENSION_NOT_CONNECTED",
+          `Request ${id} aborted: ${reason}`,
+          "The browser-side executor disconnected mid-request. Check the browser and retry.",
+        ),
+      );
+    }
+    this.pending.clear();
+  }
+
   private dropConnection(reason: string): void {
     // Close the socket if it's still live - wss.close() waits for all
     // clients, so leaving it open would hang shutdown.
@@ -347,17 +370,7 @@ export class ExtensionBridge implements Bridge {
       clearInterval(this.heartbeat);
       this.heartbeat = null;
     }
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(
-        new ProjectionLabError(
-          "EXTENSION_NOT_CONNECTED",
-          `Request ${id} aborted: ${reason}`,
-          "The browser-side executor disconnected mid-request. Check the browser and retry.",
-        ),
-      );
-    }
-    this.pending.clear();
+    this.abandonRequests(reason);
   }
 
   private serialize<T>(fn: () => Promise<T>): Promise<T> {

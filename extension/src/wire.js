@@ -35,7 +35,17 @@ export const STANDBY_RETRY_MS = 30_000;
  * after an ordinary drop comes at 2 seconds.
  */
 export function retryDelayForClose(previousDelay, code) {
-  return code === 4003 || code === 4004 ? STANDBY_RETRY_MS : previousDelay;
+  return isStandbyClose(code) ? STANDBY_RETRY_MS : previousDelay;
+}
+
+/**
+ * Whether a close means another executor holds the connection: 4003 (it took
+ * over) or 4004 (it was already there). The standby wait runs from this
+ * close, so the caller records its time for the alarm and startup gate;
+ * otherwise an alarm firing seconds after a takeover would retry at once.
+ */
+export function isStandbyClose(code) {
+  return code === 4003 || code === 4004;
 }
 
 /** The delay for the attempt after this one: exponential up to the cap. */
@@ -44,43 +54,41 @@ export function doubledDelay(previousDelay) {
 }
 
 /**
- * The reconnect delay once the server accepts the hello. An executor that
- * just came out of a 4003/4004 cycle keeps its slow delay: resetting it to
- * 2 seconds would let a flapping connection hammer the server and fight a
- * healthy executor for the slot.
- */
-export function delayAfterHelloAck(previousCloseCode, previousDelay) {
-  return previousCloseCode === 4003 || previousCloseCode === 4004
-    ? previousDelay
-    : 2_000;
-}
-
-/**
- * The connection status to show for a server close. 4004 is standby: the
- * extension is healthy, the server is simply busy with another browser, and
- * a retry on the slow schedule connects by itself when that one goes away.
+ * The connection status to show for a server close. 4003 and 4004 are both
+ * standby: the extension is healthy, another browser holds the connection,
+ * and a retry on the slow schedule connects by itself when that one goes
+ * away.
  */
 export function connectionStatusForClose(code) {
-  return code === 4004 ? "standby" : "disconnected";
+  return isStandbyClose(code) ? "standby" : "disconnected";
 }
 
 /** The status text shown for a server close. */
 export function statusMessageForClose(event) {
   if (event.code === 4001) return "Authentication failed. Check the shared token.";
   if (event.code === 4002) return "Wire protocol version mismatch.";
-  if (event.code === 4003) return "Another browser or tab took over the connection. This one connects on its own again.";
+  if (event.code === 4003) return "Another browser or tab took over the connection. This one connects on its own when that one disconnects.";
   if (event.code === 4004) return "Another browser is connected to the server. This one connects on its own when that one disconnects.";
   return event.reason || `Connection closed (${event.code}).`;
 }
 
 /**
- * Whether a storage.local change means the user asked to connect now: an
- * edit to port or token, or any options-page Save (which writes
- * connectRequestedAt even when nothing was edited). A forced connect clears
- * a stored block and asks the server for a takeover.
+ * Whether a storage.local change means the extension should connect now and
+ * ask the server for a takeover. A new port or token value always does. An
+ * options-page Save with nothing edited (it writes connectRequestedAt) does
+ * so only while this executor is not the active one: when it already holds
+ * the connection there is nothing to take over, and reconnecting would drop
+ * a request in flight.
+ *
+ * Old and new values are compared because Firefox reports every key passed
+ * to storage.set, including keys whose value did not change, while Chrome
+ * reports only the keys that changed.
  */
-export function isForcedConnectChange(changes) {
-  return Boolean(changes && (changes.connectRequestedAt || changes.port || changes.token));
+export function isForcedConnectChange(changes, { authed = false } = {}) {
+  if (!changes) return false;
+  const differs = (change) => Boolean(change) && change.oldValue !== change.newValue;
+  if (differs(changes.port) || differs(changes.token)) return true;
+  return differs(changes.connectRequestedAt) && !authed;
 }
 
 /**

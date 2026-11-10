@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { executePageRequest } from "./page-main.js";
-import { buildHelloFrame, connectionStatusForClose, delayAfterHelloAck, doubledDelay, isForcedConnectChange, makeResponseFrame, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, STANDBY_RETRY_MS, statusMessageForClose } from "./wire.js";
+import { buildHelloFrame, connectionStatusForClose, doubledDelay, isForcedConnectChange, isStandbyClose, makeResponseFrame, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, STANDBY_RETRY_MS, statusMessageForClose } from "./wire.js";
 
 const DEFAULT_PORT = 8788;
 const PROTOCOL_VERSION = 1;
@@ -10,6 +10,8 @@ let socket;
 let reconnectTimer;
 let retryMs = 2_000;
 let lastCloseCode = 0;
+// True between an accepted hello and the close of that socket.
+let authed = false;
 let generation = 0;
 let reconnectBlocked = false;
 const inFlight = new Map();
@@ -74,6 +76,7 @@ function scheduleReconnect(myGeneration) {
 async function connect(force = false) {
   if (!force && (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING)) return;
   const myGeneration = ++generation;
+  authed = false;
   clearTimeout(reconnectTimer);
   reconnectTimer = undefined;
   if (socket) { socket.onclose = null; socket.close(); }
@@ -110,9 +113,11 @@ async function connect(force = false) {
     try { frame = JSON.parse(event.data); }
     catch { void setStatus("connected", "Server sent invalid JSON."); return; }
     if (frame.type === "helloAck") {
-      // The slow standby delay survives an accepted hello; an ordinary
-      // connection resets the exponential schedule to 2 seconds.
-      retryMs = delayAfterHelloAck(lastCloseCode, retryMs);
+      // An accepted hello resets the backoff. A later 4003 or 4004 still
+      // waits STANDBY_RETRY_MS, because retryDelayForClose goes by the
+      // close code and not by this value.
+      retryMs = 2_000;
+      authed = true;
       // The options page shows a line when the two releases differ; an
       // absent field (older server) stores "" so no stale value lingers.
       void browser.storage.local.set({ serverVersion: frame.serverVersion ?? "" });
@@ -125,12 +130,15 @@ async function connect(force = false) {
   ws.onclose = (event) => {
     if (myGeneration !== generation) return;
     socket = undefined;
+    authed = false;
     lastCloseCode = event.code;
     // Only 4001/4002 block; 4003 and 4004 retry on the slow standby schedule
     // so the executor reconnects on its own once the active one goes away.
     // The flag is persisted so a service-worker restart honors the block.
     reconnectBlocked = reconnectBlockedForClose(event.code);
-    void browser.storage.session.set({ reconnectBlocked });
+    // A standby close starts the slow wait now: the alarm and startup gate
+    // measure from lastConnectAttemptAt.
+    void browser.storage.session.set(isStandbyClose(event.code) ? { reconnectBlocked, lastConnectAttemptAt: Date.now() } : { reconnectBlocked });
     void setStatus(connectionStatusForClose(event.code), statusMessageForClose(event));
     scheduleReconnect(myGeneration);
   };
@@ -185,7 +193,7 @@ async function handleRequest(request, ws) {
 }
 
 browser.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && isForcedConnectChange(changes)) void connect(true);
+  if (area === "local" && isForcedConnectChange(changes, { authed })) void connect(true);
 });
 browser.action.onClicked.addListener(() => void browser.runtime.openOptionsPage());
 browser.alarms.onAlarm.addListener((alarm) => {

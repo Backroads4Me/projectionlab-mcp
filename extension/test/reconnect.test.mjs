@@ -1,17 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildHelloFrame, connectionStatusForClose, delayAfterHelloAck, isForcedConnectChange, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, statusMessageForClose } from "../src/wire.js";
+import { buildHelloFrame, connectionStatusForClose, isForcedConnectChange, isStandbyClose, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, statusMessageForClose } from "../src/wire.js";
 
 test("saving the options page or editing port or token forces a connect", async () => {
-  assert.equal(isForcedConnectChange({ connectRequestedAt: {} }), true);
-  assert.equal(isForcedConnectChange({ port: {} }), true);
-  assert.equal(isForcedConnectChange({ token: {} }), true);
-  assert.equal(isForcedConnectChange({ connectionStatus: {}, lastError: {} }), false);
+  const saved = { connectRequestedAt: { oldValue: 1, newValue: 2 } };
+  const newPort = { port: { oldValue: 8788, newValue: 9000 } };
+  const newToken = { token: { oldValue: "a", newValue: "b" } };
+  assert.equal(isForcedConnectChange(saved), true);
+  assert.equal(isForcedConnectChange({ connectRequestedAt: { newValue: 2 } }), true);
+  assert.equal(isForcedConnectChange(newPort), true);
+  assert.equal(isForcedConnectChange({ token: { newValue: "first" } }), true);
+  assert.equal(isForcedConnectChange({ connectionStatus: { oldValue: "a", newValue: "b" } }), false);
   assert.equal(isForcedConnectChange({}), false);
+  // A Save with nothing edited is a takeover request only while this
+  // executor does not hold the connection; a new port or token always
+  // reconnects.
+  assert.equal(isForcedConnectChange(saved, { authed: true }), false);
+  assert.equal(isForcedConnectChange(saved, { authed: false }), true);
+  assert.equal(isForcedConnectChange({ ...saved, ...newToken }, { authed: true }), true);
+  assert.equal(isForcedConnectChange(newPort, { authed: true }), true);
+  // Firefox lists every key passed to storage.set, changed or not. An
+  // unedited Save there carries port and token with equal old and new
+  // values, which must not count as an edit.
+  const firefoxUneditedSave = {
+    ...saved,
+    port: { oldValue: 8788, newValue: 8788 },
+    token: { oldValue: "a", newValue: "a" },
+    autoOpen: { oldValue: true, newValue: true },
+  };
+  assert.equal(isForcedConnectChange(firefoxUneditedSave, { authed: true }), false);
+  assert.equal(isForcedConnectChange(firefoxUneditedSave, { authed: false }), true);
 
   const source = await import("node:fs/promises").then((fs) => fs.readFile(new URL("../src/background.js", import.meta.url), "utf8"));
   assert.match(source, /async function connect\(force = false\)/);
-  assert.match(source, /area === "local" && isForcedConnectChange\(changes\)\) void connect\(true\)/);
+  assert.match(source, /area === "local" && isForcedConnectChange\(changes, \{ authed \}\)\) void connect\(true\)/);
   const options = await import("node:fs/promises").then((fs) => fs.readFile(new URL("../src/options.js", import.meta.url), "utf8"));
   // A Save writes connectRequestedAt even when no field was edited, so the
   // background always sees a storage change to force on.
@@ -31,15 +53,21 @@ test("4003 and 4004 keep retrying slowly; only auth refusals block", () => {
   assert.equal(retryDelayForClose(2_000, 4004), 30_000);
   assert.equal(retryDelayForClose(4_000, 4003), 30_000);
   assert.equal(retryDelayForClose(2_000, 1006), 2_000);
-  // An accepted hello after a standby cycle keeps the slow delay; after an
-  // ordinary drop it resets the schedule to 2 seconds.
-  assert.equal(delayAfterHelloAck(4004, 30_000), 30_000);
-  assert.equal(delayAfterHelloAck(4003, 30_000), 30_000);
-  assert.equal(delayAfterHelloAck(1006, 16_000), 2_000);
-  assert.equal(delayAfterHelloAck(0, 30_000), 2_000);
+  // The delay after a 4003 or 4004 comes from the close code alone, so an
+  // executor that reconnected in between still waits the standby interval.
+  assert.equal(retryDelayForClose(2_000, 4003), 30_000);
+
+  // The standby wait is measured from a 4003 or 4004 close, so the alarm
+  // gate refuses an attempt a few seconds after one.
+  assert.equal(isStandbyClose(4003), true);
+  assert.equal(isStandbyClose(4004), true);
+  assert.equal(isStandbyClose(4001), false);
+  assert.equal(isStandbyClose(1006), false);
+  assert.equal(shouldAttemptReconnect({ blocked: false, force: false, lastAttemptAt: 100_000, now: 103_000, minDelayMs: 30_000 }), false);
+  assert.equal(shouldAttemptReconnect({ blocked: false, force: false, lastAttemptAt: 100_000, now: 130_000, minDelayMs: 30_000 }), true);
 
   assert.equal(connectionStatusForClose(4004), "standby");
-  assert.equal(connectionStatusForClose(4003), "disconnected");
+  assert.equal(connectionStatusForClose(4003), "standby");
   assert.equal(connectionStatusForClose(1006), "disconnected");
 });
 

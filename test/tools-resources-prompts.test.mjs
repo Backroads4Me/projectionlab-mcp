@@ -456,15 +456,32 @@ test("resource error details never leak the API key", async () => {
   registerPlanDataResource(server, leaking);
   registerSummaryResource(server, leaking);
 
-  const planData = JSON.parse(await readResource(server, "projectionlab://plan-data"));
+  // The failure is also logged; capture stderr lines to check them too.
+  const logged = [];
+  const realError = console.error;
+  console.error = (...args) => logged.push(args.join(" "));
+  let planData;
+  let summary;
+  try {
+    planData = JSON.parse(await readResource(server, "projectionlab://plan-data"));
+    summary = JSON.parse(await readResource(server, "projectionlab://summary"));
+  } finally {
+    console.error = realError;
+  }
+
   assert.equal(planData.error, "Failed to export data");
   assert.equal(planData.details.includes("test-api-key"), false);
   assert.match(planData.details, /\[REDACTED\]/);
 
-  const summary = JSON.parse(await readResource(server, "projectionlab://summary"));
   assert.equal(summary.error, "Failed to build summary");
   assert.equal(summary.details.includes("test-api-key"), false);
   assert.match(summary.details, /\[REDACTED\]/);
+
+  assert.equal(logged.length, 2);
+  for (const line of logged) {
+    assert.equal(line.includes("test-api-key"), false, line);
+    assert.match(line, /executor failed for key \[REDACTED\]/);
+  }
 });
 
 test("summary resource reports the same per-plan counts as the tool", async () => {

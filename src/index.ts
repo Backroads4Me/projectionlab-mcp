@@ -7,6 +7,7 @@ import { ExtensionBridge } from "./extensionBridge.js";
 import { registerBootstrapTool } from "./tools/bootstrap.js";
 import { SnapshotManager } from "./snapshot.js";
 import { log } from "./logger.js";
+import { updateCheck } from "./updateCheck.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import { VERSION } from "./version.js";
 
@@ -56,6 +57,8 @@ async function main() {
   );
 
   const bridge = new ExtensionBridge();
+  // Fire-and-forget registry lookup; startup never waits on the network.
+  updateCheck.start();
   registerBootstrapTool(server, bridge);
   const snapshots = new SnapshotManager();
 

@@ -45,6 +45,7 @@ test("server exits when the host closes stdin, releasing the WebSocket port", as
       PL_WS_PORT: String(port),
       PL_WS_TOKEN: "eof-token",
       PL_SNAPSHOT_DIR: join(home, "snapshots"),
+      PL_UPDATE_CHECK: "false", // the suite must never call the registry
       LOG_LEVEL: "info",
     },
     stdio: ["pipe", "pipe", "pipe"],

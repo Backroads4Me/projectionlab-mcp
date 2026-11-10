@@ -93,6 +93,9 @@ export const config = {
   prettyJson: optionalBoolean("PL_PRETTY_JSON") ?? false,
   // Writes stay disabled unless PL_READ_ONLY is exactly "false".
   readOnly: (process.env.PL_READ_ONLY ?? "").trim().toLowerCase() !== "false",
+  // On unless PL_UPDATE_CHECK is exactly "false"; the only registry request
+  // the server makes is the one this gates.
+  updateCheck: (process.env.PL_UPDATE_CHECK ?? "").trim().toLowerCase() !== "false",
   snapshotDir: expandHome(optional("PL_SNAPSHOT_DIR", "~/.projectionlab-mcp/snapshots")),
   logLevel: logLevel(),
 } as const;

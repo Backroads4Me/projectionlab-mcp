@@ -145,3 +145,82 @@ test("bootstrap snippet refuses a method outside the wire protocol", async () =>
   for (const client of wss.clients) client.terminate();
   await new Promise((resolve) => wss.close(resolve));
 });
+
+test("the snippet classifies key errors by whole-number 401/403 only", async () => {
+  const port = await freePort();
+  const wss = new WebSocketServer({ host: "127.0.0.1", port });
+  await new Promise((resolve) => wss.once("listening", resolve));
+  const responses = new Map();
+  const responsesDone = new Promise((resolve) => {
+    wss.on("connection", (ws) => {
+      ws.on("message", (raw) => {
+        const frame = JSON.parse(String(raw));
+        if (frame.type === "hello") {
+          ws.send(JSON.stringify({ type: "helloAck", protocolVersion: frame.protocolVersion }));
+          ws.send(JSON.stringify({ type: "request", id: "bare-401", method: "exportData", params: [{ key: "status 401 from the api" }] }));
+          ws.send(JSON.stringify({ type: "request", id: "digits", method: "exportData", params: [{ key: "your balance is 14010 and 40300" }] }));
+        } else if (frame.type === "response") {
+          responses.set(frame.id, frame);
+          if (responses.size === 2) resolve();
+        }
+      });
+    });
+  });
+  // A snippet that stops answering fails the test instead of hanging it.
+  const done = Promise.race([
+    responsesDone,
+    new Promise((_, reject) => {
+      const t = setTimeout(() => reject(new Error("snippet never answered")), 10000);
+      t.unref();
+    }),
+  ]);
+  const sandbox = {
+    window: {
+      projectionlabPluginAPI: {
+        exportData: async ({ key }) => {
+          throw new Error(key);
+        },
+      },
+    },
+    WebSocket,
+    console: { log: () => {} },
+    setTimeout: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      t.unref();
+      return t;
+    },
+    clearTimeout,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(buildBootstrapSnippet(port, "test-token"), sandbox);
+
+  try {
+    await done;
+    assert.equal(responses.get("bare-401").ok, false);
+    assert.equal(responses.get("bare-401").error.code, "API_KEY_INVALID");
+    assert.equal(responses.get("digits").ok, false);
+    assert.equal(responses.get("digits").error.code, "UNKNOWN");
+  } finally {
+    sandbox.WebSocket = class {
+      send() {}
+      close() {}
+    };
+    for (const client of wss.clients) client.terminate();
+    await new Promise((resolve) => wss.close(resolve));
+  }
+});
+
+test("the snippet and page-main carry one identical key-error regex", async () => {
+  // The two executors must classify errors the same way; bootstrap.ts says
+  // its executor logic stays in sync with extension/src/page-main.js.
+  const { readFile } = await import("node:fs/promises");
+  const pageMain = await readFile(
+    new URL("../extension/src/page-main.js", import.meta.url),
+    "utf8",
+  );
+  const literal = /\/api\.\?key\|[^/\n]*\/i/;
+  const snippetCopy = buildBootstrapSnippet(1, "t").match(literal)[0];
+  const pageMainCopy = pageMain.match(literal)[0];
+  assert.equal(snippetCopy, pageMainCopy);
+  assert.match(snippetCopy, /\\b401\\b\|\\b403\\b/);
+});

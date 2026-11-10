@@ -77,7 +77,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
     } catch (err) {
       const msg = err && err.message ? err.message : String(err);
       const code = err && err.code === "API_NOT_AVAILABLE" ? "API_NOT_AVAILABLE"
-        : /api.?key|invalid key|unauthori[sz]ed|forbidden|401|403/i.test(msg) ? "API_KEY_INVALID" : "UNKNOWN";
+        : /api.?key|invalid key|unauthori[sz]ed|forbidden|\\b401\\b|\\b403\\b/i.test(msg) ? "API_KEY_INVALID" : "UNKNOWN";
       ws.send(JSON.stringify({ type: "response", id: frame.id, ok: false, error: { code, message: msg } }));
     }
   }

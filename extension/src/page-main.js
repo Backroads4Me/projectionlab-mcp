@@ -20,7 +20,7 @@ export async function executePageRequest(request) {
   function classifyError(error) {
     if (error?.code === "API_NOT_AVAILABLE") return "API_NOT_AVAILABLE";
     const message = error instanceof Error ? error.message : String(error);
-    return /api.?key|invalid key|unauthori[sz]ed|forbidden|401|403/i.test(message) ? "API_KEY_INVALID" : "UNKNOWN";
+    return /api.?key|invalid key|unauthori[sz]ed|forbidden|\b401\b|\b403\b/i.test(message) ? "API_KEY_INVALID" : "UNKNOWN";
   }
 
   try {

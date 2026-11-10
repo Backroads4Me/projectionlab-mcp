@@ -178,7 +178,9 @@ Event forms use the same path workflow. Fetch one event with
 `projectionlab_update_plan_event` as `pathChanges`. The older `patch` input
 remains available for shallow top-level changes: existing fields are
 validated like `pathChanges` (same JSON type, secret-named fields refused)
-and new fields must be plain, non-secret names.
+and new fields must be plain, non-secret names. Both inputs report each
+dry-run change as `{ "before": ..., "after": ... }`; a field the patch adds
+reports `"before": "[ABSENT]"`.
 
 Current Finances accounts also support targeted discovery and nested patches.
 Call `projectionlab_get_current_finances` with an exact `accountId` and

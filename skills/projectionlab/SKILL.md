@@ -394,8 +394,10 @@ Retire at 55 plan."
 2. `projectionlab_update_plan_event` with
    `{"planIdentifier": "Retire at 55", "section": "expenses", "eventIdentifier": "Groceries", "pathChanges": {"amount": 600}}`
    returns `dryRun: true`, the `planName`, `section`, the `event` label, and
-   `changes` such as `{"amount": {"before": 500, "after": 600}}`. Use
-   `pathChanges`, not `patch`, so sibling fields are kept. Show the before and
+   `changes` such as `{"amount": {"before": 500, "after": 600}}`; the `patch`
+   input reports the same before/after objects, and a field it adds reports
+   `"before": "[ABSENT]"`. Use `pathChanges`, not `patch`, so sibling fields
+   are kept. Show the before and
    after values to the user in plain words: "In Retire at 55, Groceries goes
    from $500 to $600 a month. Want me to make that change?"
 3. After the user approves, repeat the call with `"confirm": true`. The reply

@@ -4,6 +4,9 @@ import type { Bridge } from "../bridge.js";
 import { config } from "../config.js";
 import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
+import { updateCheck } from "../updateCheck.js";
+import { versionNotices } from "../versionNotices.js";
+import { VERSION } from "../version.js";
 
 export function registerConnectionTool(
   server: McpServer,
@@ -19,14 +22,23 @@ export function registerConnectionTool(
         "Also reports writesEnabled, which is false while the server is in read-only mode " +
         "(PL_READ_ONLY is not \"false\") and every write tool, dry runs included, is refused. " +
         "Call this first in every session, before any other ProjectionLab tool. If any check " +
-        "fails, read the projectionlab://guide resource and walk the user through the fix.",
+        "fails, read the projectionlab://guide resource and walk the user through the fix. " +
+        "The result also carries versions (server, executor, latest npm release) and notices: " +
+        "plain sentences to relay to the user when a release is out of date.",
       outputSchema: {
         browser: z.boolean(),
         pageLoaded: z.boolean(),
         apiAvailable: z.boolean(),
         apiKeyValid: z.boolean(),
+        executor: z.string().optional(),
         errors: z.array(z.string()),
         writesEnabled: z.boolean(),
+        versions: z.object({
+          server: z.string(),
+          executor: z.string().nullable(),
+          latest: z.string().nullable(),
+        }),
+        notices: z.array(z.string()),
       },
       annotations: {
         readOnlyHint: true,
@@ -40,9 +52,15 @@ export function registerConnectionTool(
           ...(await bridge.checkConnection()),
           writesEnabled: !config.readOnly,
         };
+        const versions = {
+          server: VERSION,
+          executor: status.executor ?? null,
+          latest: updateCheck.latest(),
+        };
+        const result = { ...status, versions, notices: versionNotices(versions) };
         return {
-          content: [{ type: "text", text: toJson(status) }],
-          structuredContent: { ...status },
+          content: [{ type: "text", text: toJson(result) }],
+          structuredContent: result,
         };
       } catch (err) {
         return errorResult(err);

@@ -28,6 +28,9 @@ const { registerSummaryResource } = await import("../dist/resources/summary.js")
 const { registerGuideResource } = await import("../dist/resources/guide.js");
 const { registerKnowledgeResource } = await import("../dist/resources/knowledge.js");
 const { registerPrompts } = await import("../dist/prompts/index.js");
+const { updateCheck } = await import("../dist/updateCheck.js");
+const { VERSION } = await import("../dist/version.js");
+const { z } = await import("zod");
 
 function fakeServer() {
   const tools = new Map();
@@ -255,12 +258,56 @@ test("check_connection reports whether writes are enabled", async () => {
     for (const readOnly of [true, false]) {
       config.readOnly = readOnly;
       const result = await handler({});
-      assert.deepEqual(result.structuredContent, { ...status, writesEnabled: !readOnly });
+      assert.deepEqual(result.structuredContent, {
+        ...status,
+        writesEnabled: !readOnly,
+        versions: { server: VERSION, executor: null, latest: updateCheck.latest() },
+        notices: [],
+      });
       assert.equal(JSON.parse(result.content[0].text).writesEnabled, !readOnly);
     }
   } finally {
     config.readOnly = false;
   }
+});
+
+test("check_connection carries versions and notices, and validates against its outputSchema", async () => {
+  // One injected lookup primes the process-wide holder; no test hits the network.
+  updateCheck.start(async () => ({
+    ok: true,
+    json: async () => ({ version: "99.0.0" }),
+  }));
+  await new Promise((r) => setTimeout(r, 0));
+
+  const server = fakeServer();
+  registerConnectionTool(server, {
+    checkConnection: async () => ({
+      browser: true,
+      pageLoaded: true,
+      apiAvailable: true,
+      apiKeyValid: true,
+      executor: "extension/0.0.1",
+      errors: [],
+    }),
+  });
+  const { definition, handler } = server.tools.get("projectionlab_check_connection");
+  const result = await handler({});
+  assert.deepEqual(result.structuredContent.versions, {
+    server: VERSION,
+    executor: "extension/0.0.1",
+    latest: "99.0.0",
+  });
+  // Rule 1 (npm newer) and rule 2 (extension older) fire; rule 3 is quiet
+  // because rule 1 already covers the server being behind.
+  assert.equal(result.structuredContent.notices.length, 2);
+  assert.match(result.structuredContent.notices[0], /available on npm/);
+  assert.match(result.structuredContent.notices[1], /browser extension is version 0\.0\.1/);
+  z.object(definition.outputSchema).parse(result.structuredContent);
+  assert.deepEqual(
+    JSON.parse(result.content[0].text),
+    result.structuredContent,
+    "the JSON text mirrors structuredContent",
+  );
 });
 
 // --- clone_plan ---

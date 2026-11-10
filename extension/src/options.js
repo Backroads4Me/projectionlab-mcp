@@ -3,10 +3,12 @@ import { RELEASES_URL, updateLineForVersions } from "./wire.js";
 const elements = Object.fromEntries(["settings", "port", "token", "toggleToken", "autoOpen", "status", "hint", "error", "saved", "version", "update"].map((id) => [id, document.getElementById(id)]));
 
 // Stored connectionStatus values, set by background.js: authed = token
-// accepted by the server, connected = socket open and awaiting that answer.
+// accepted by the server, connected = socket open and awaiting that answer,
+// standby = the server holds another executor and this one retries slowly.
 const STATUS_TEXT = {
   authed: ["Connected", "Your AI assistant can reach ProjectionLab through this browser."],
   connected: ["Connecting…", "Reached the server; waiting for it to accept the token."],
+  standby: ["Standing by", "Another browser is connected to the server. This one connects on its own when that one disconnects. Press Save to use this browser now."],
   disconnected: ["Not connected", "Start your AI assistant (it runs the projectionlab-mcp server), and check that the port and token match. The extension retries on its own."],
 };
 
@@ -54,7 +56,7 @@ elements.toggleToken.addEventListener("click", () => {
 });
 elements.settings.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await browser.storage.local.set({ port: Number(elements.port.value), token: elements.token.value.trim(), autoOpen: elements.autoOpen.checked });
+  await browser.storage.local.set({ port: Number(elements.port.value), token: elements.token.value.trim(), autoOpen: elements.autoOpen.checked, connectRequestedAt: Date.now() });
   elements.saved.textContent = "Saved";
   setTimeout(() => { elements.saved.textContent = ""; }, 1500);
 });

@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { executePageRequest } from "./page-main.js";
-import { makeResponseFrame, reconnectBlockedForClose, shouldTriggerConnect, statusMessageForClose } from "./wire.js";
+import { buildHelloFrame, connectionStatusForClose, delayAfterHelloAck, doubledDelay, isForcedConnectChange, makeResponseFrame, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, STANDBY_RETRY_MS, statusMessageForClose } from "./wire.js";
 
 const DEFAULT_PORT = 8788;
 const PROTOCOL_VERSION = 1;
@@ -9,26 +9,38 @@ const RECONNECT_ALARM = "plmcp-reconnect";
 let socket;
 let reconnectTimer;
 let retryMs = 2_000;
+let lastCloseCode = 0;
 let generation = 0;
 let reconnectBlocked = false;
 const inFlight = new Map();
 
-// The blocked flag also lives in storage.session, which survives a
-// service-worker restart but clears when the browser closes. Chrome
-// terminates the worker about 30 seconds after the socket closes, and the
-// reconnect alarm starts it again; without the stored flag the restarted
-// worker would reconnect and displace the other executor.
-async function isReconnectBlocked() {
-  const { reconnectBlocked: stored } = await browser.storage.session.get({ reconnectBlocked: false });
-  return stored;
+// The blocked flag and the last attempt time live in storage.session, which
+// survives a service-worker restart but clears when the browser closes.
+// Chrome terminates the worker about 30 seconds after the socket closes, and
+// the reconnect alarm starts it again; without the stored state the restarted
+// worker would retry early or outrun the standby schedule.
+async function sessionGet(defaults) {
+  return browser.storage.session.get(defaults);
+}
+
+// One stable id per installation, kept across restarts and browser updates:
+// it lets the server tell "this same executor on a new socket" from a second
+// browser, so a stale socket never locks the extension out of its own slot.
+async function getInstanceId() {
+  const { instanceId } = await browser.storage.local.get({ instanceId: "" });
+  if (instanceId) return instanceId;
+  const fresh = crypto.randomUUID();
+  await browser.storage.local.set({ instanceId: fresh });
+  return fresh;
 }
 
 const EXTENSION_NAME = "MCP Bridge for ProjectionLab";
 // Toolbar label per connection status: authed = token accepted by the server,
-// connected = socket open and awaiting the server's helloAck. Only authed
+// connected = socket open and awaiting the server's helloAck, standby = the
+// server holds another executor and this one retries slowly. Only authed
 // shows a badge: the server runs only while an MCP host does, so being
-// disconnected is the normal idle state.
-const STATUS_LABELS = { authed: "connected", connected: "connecting", disconnected: "not connected" };
+// disconnected is the normal idle state, and standby needs no badge either.
+const STATUS_LABELS = { authed: "connected", connected: "connecting", standby: "standing by", disconnected: "not connected" };
 
 async function showBadge(connectionStatus, lastError) {
   const authed = connectionStatus === "authed";
@@ -54,34 +66,43 @@ const codedError = (code, message) => Object.assign(new Error(message), { code }
 
 function scheduleReconnect(myGeneration) {
   if (reconnectBlocked || myGeneration !== generation || reconnectTimer) return;
-  const delay = retryMs;
-  retryMs = Math.min(retryMs * 2, 30_000);
+  const delay = retryDelayForClose(retryMs, lastCloseCode);
+  retryMs = doubledDelay(delay);
   reconnectTimer = setTimeout(() => { reconnectTimer = undefined; void connect(); }, delay);
 }
 
 async function connect(force = false) {
   if (!force && (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING)) return;
   const myGeneration = ++generation;
-  if (reconnectTimer) clearTimeout(reconnectTimer);
+  clearTimeout(reconnectTimer);
   reconnectTimer = undefined;
   if (socket) { socket.onclose = null; socket.close(); }
+  await browser.storage.session.set({ lastConnectAttemptAt: Date.now() });
   const config = await browser.storage.local.get({ port: DEFAULT_PORT, token: "" });
   if (!config.token) {
     await setStatus("disconnected", "Configure the shared token to connect.");
     return;
   }
   if (force) {
-    // Saving the options page is how the user clears a block.
+    // Saving the options page is how the user clears a block and asks to
+    // become the active browser now.
     reconnectBlocked = false;
     await browser.storage.session.set({ reconnectBlocked: false });
   }
   await setStatus("disconnected");
+  const instanceId = await getInstanceId();
   const ws = new WebSocket(`ws://127.0.0.1:${config.port}`);
   socket = ws;
   ws.onopen = () => {
     if (myGeneration !== generation) return;
     void setStatus("connected");
-    ws.send(JSON.stringify({ type: "hello", token: config.token, protocolVersion: PROTOCOL_VERSION, executor: `extension/${browser.runtime.getManifest().version}` }));
+    ws.send(JSON.stringify(buildHelloFrame({
+      token: config.token,
+      protocolVersion: PROTOCOL_VERSION,
+      executor: `extension/${browser.runtime.getManifest().version}`,
+      instanceId,
+      takeover: force,
+    })));
   };
   ws.onmessage = (event) => {
     if (myGeneration !== generation) return;
@@ -89,7 +110,9 @@ async function connect(force = false) {
     try { frame = JSON.parse(event.data); }
     catch { void setStatus("connected", "Server sent invalid JSON."); return; }
     if (frame.type === "helloAck") {
-      retryMs = 2_000;
+      // The slow standby delay survives an accepted hello; an ordinary
+      // connection resets the exponential schedule to 2 seconds.
+      retryMs = delayAfterHelloAck(lastCloseCode, retryMs);
       // The options page shows a line when the two releases differ; an
       // absent field (older server) stores "" so no stale value lingers.
       void browser.storage.local.set({ serverVersion: frame.serverVersion ?? "" });
@@ -102,12 +125,13 @@ async function connect(force = false) {
   ws.onclose = (event) => {
     if (myGeneration !== generation) return;
     socket = undefined;
-    // 4003 REPLACED blocks reconnect like an auth failure: two executors
-    // that each reconnect when replaced would displace each other forever.
+    lastCloseCode = event.code;
+    // Only 4001/4002 block; 4003 and 4004 retry on the slow standby schedule
+    // so the executor reconnects on its own once the active one goes away.
     // The flag is persisted so a service-worker restart honors the block.
     reconnectBlocked = reconnectBlockedForClose(event.code);
     void browser.storage.session.set({ reconnectBlocked });
-    void setStatus("disconnected", statusMessageForClose(event));
+    void setStatus(connectionStatusForClose(event.code), statusMessageForClose(event));
     scheduleReconnect(myGeneration);
   };
 }
@@ -161,27 +185,31 @@ async function handleRequest(request, ws) {
 }
 
 browser.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.port || changes.token)) void connect(true);
+  if (area === "local" && isForcedConnectChange(changes)) void connect(true);
 });
 browser.action.onClicked.addListener(() => void browser.runtime.openOptionsPage());
 browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== RECONNECT_ALARM || socket) return;
   void (async () => {
-    if (!shouldTriggerConnect({ blocked: await isReconnectBlocked(), force: false })) return;
+    const { reconnectBlocked: blocked, lastConnectAttemptAt } = await sessionGet({ reconnectBlocked: false, lastConnectAttemptAt: 0 });
+    if (!shouldAttemptReconnect({ blocked, force: false, lastAttemptAt: lastConnectAttemptAt, now: Date.now(), minDelayMs: STANDBY_RETRY_MS })) return;
     void connect();
   })();
 });
 async function createReconnectAlarm() {
   // Firefox MV3 uses an event page and does not treat WebSocket traffic as
-  // activity, so a sub-30-second alarm prevents it from being unloaded.
+  // activity, so a sub-30-second alarm prevents it from being unloaded. The
+  // attempt-time gate keeps standby retries at least STANDBY_RETRY_MS apart.
   const isFirefox = typeof browser.runtime.getBrowserInfo === "function";
   await browser.alarms.create(RECONNECT_ALARM, { periodInMinutes: isFirefox ? 0.25 : 1 });
 }
 void createReconnectAlarm();
 void (async () => {
   // A worker restarted by the reconnect alarm must honor a block persisted
-  // before the restart; only saving the options page (forced connect) or a
-  // browser restart (which clears storage.session) resumes reconnecting.
-  if (!shouldTriggerConnect({ blocked: await isReconnectBlocked(), force: false })) return;
+  // before the restart and the standby retry schedule; only saving the
+  // options page (forced connect) or a browser restart (which clears
+  // storage.session) resumes reconnecting early.
+  const { reconnectBlocked: blocked, lastConnectAttemptAt } = await sessionGet({ reconnectBlocked: false, lastConnectAttemptAt: 0 });
+  if (!shouldAttemptReconnect({ blocked, force: false, lastAttemptAt: lastConnectAttemptAt, now: Date.now(), minDelayMs: STANDBY_RETRY_MS })) return;
   void connect();
 })();

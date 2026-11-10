@@ -61,11 +61,14 @@ checks on Node 20 for every pull request and push to `main`.
 - `src/planVersion.ts`: plan version tokens and the `PLAN_CONFLICT` checks.
 - `src/pathPatch.ts`: path-addressed value listing and patching for updates.
 - `src/redact.ts`: secret scrubbing for anything persisted or exported.
+- `src/logger.ts`: structured stderr logger, scrubbing `PL_API_KEY` from all output.
+- `src/largeOutput.ts`: writes oversized tool outputs to `~/.projectionlab-mcp/exports/` with 30-day retention.
+- `src/dataModel.ts`: ProjectionLab data model annotations and validation.
 - `src/snapshot.ts`: pre-write snapshots + retention.
 - `src/secureFs.ts`: owner-only directory and file writes.
 - `src/tools/*`: one file per tool or closely related group (`restore.ts`,
   `snapshots.ts`); each exports a `register…Tool(s)(server, …)`.
-- `src/resources/*`: MCP resources (`guide`, `knowledge`, `plan-data`, `summary`).
+- `src/resources/*`: MCP resources (`data-model`, `guide`, `knowledge`, `plan-data`, `summary`).
 - `src/prompts/index.ts`: analysis prompt templates.
 - `skills/projectionlab/SKILL.md`: the agent guide for *users* of the server,
   shipped in the package and served as `projectionlab://guide`. Keep it in
@@ -76,12 +79,15 @@ checks on Node 20 for every pull request and push to `main`.
 - `.github/workflows/`: CI, npm publish, and extension release.
 
 ## Conventions
-
 - **ESM + NodeNext**: local imports use the `.js` extension even from `.ts`.
 - **Tools**: register with `server.registerTool`, validate inputs with `zod`,
   serialize output with `toJson` (respects `PL_PRETTY_JSON`), and return errors
   via `errorResult(err)` / throw `ProjectionLabError`.
 - **Annotations**: set `readOnlyHint`/`destructiveHint` honestly on every tool.
+- **Logging**: all server logging uses `log.*` from `src/logger.ts`, which scrubs
+  `PL_API_KEY` from every line and writes to stderr (stdout is strictly for stdio
+  MCP JSON-RPC). Direct `console.*` calls are forbidden outside `logger.ts` and
+  `bootstrap.ts` (enforced by `test/no-console.test.mjs`).
 - **No new deps** without good reason; keep the runtime footprint small.
 
 ## Safety model (do not weaken)
@@ -95,8 +101,14 @@ checks on Node 20 for every pull request and push to `main`.
   tool read them (`assertPlansUnchanged`, plus `expectedPlanVersion` on
   `update_plan_section`). A plan saved in ProjectionLab meanwhile is never
   overwritten.
+- Writes refuse payloads carrying the redaction sentinel (`[REDACTED]`) under
+  sensitive field names, preventing accidental overwrite with redacted reads.
+- `update_plan_section` validates the shape of `sectionData` against the
+  section's expected schema before applying changes.
 - Writes are disabled unless `PL_READ_ONLY=false`; every mutating tool checks
   `config.readOnly` before writing.
+- Only one browser executor connects at a time; competing connections are
+  answered with `BUSY` and stand by without disrupting the active session.
 - **Never** print, log, or persist `PL_API_KEY`. Anything written to disk
   (snapshots) or returned as plan data goes through the redaction helpers in
   `src/redact.ts` first: snapshots store the literal key as the restorable

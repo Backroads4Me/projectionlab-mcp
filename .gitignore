@@ -1,5 +1,7 @@
 # Secrets
 .env
+.env.*
+!.env.example
 .ws-token
 
 # Dependencies
@@ -8,8 +10,21 @@ node_modules/
 # Build output
 dist/
 
-# OS
-.DS_Store
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Local working notes
+# Editor and OS
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Local working notes and tools
 dev-docs/
+.flowly/
+.claude/

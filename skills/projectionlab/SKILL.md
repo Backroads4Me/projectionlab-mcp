@@ -171,8 +171,8 @@ narrowest read that answers the question.
   what to use when the user wants to know whether two plans agree without sending
   their contents to the model.
 - Results over about 100,000 characters are written to
-  `~/.projectionlab-mcp/exports/` and returned as a file path. Read the parts
-  you need from the file.
+  `~/.projectionlab-mcp/exports/` and returned as a file path (pruned
+  automatically after 30 days). Read the parts you need from the file.
 - `projectionlab_describe_plugin_api` lists the Plugin API methods the running
   app exposes. Use it before concluding that a capability does not exist.
 
@@ -248,6 +248,9 @@ Change the plan only when the user explicitly asks for that change.
 - Never replace a whole section when a targeted tool can make the change.
   `projectionlab_update_plan_section` overwrites the complete array, so any
   event missing from what you send is gone.
+- Never write payloads carrying `[REDACTED]` under secret fields. Reads scrub
+  secrets with this placeholder, and write tools refuse payloads containing it
+  to prevent overwriting real credentials or keys with placeholder text.
 
 **Writes are off by default.** `writesEnabled` in the connection check shows
 the current mode. While it is `false`, every write tool, dry runs included,
@@ -484,9 +487,10 @@ at 60."
    and picks the same snapshot, so its field-level list of what differs from the
    live data shows exactly what that rollback would undo. Show it with the
    preview when the user asks what will come back.
-4. After the user approves, repeat with `{"nBack": 1, "confirm": true}`. A
-   confirmed rollback saves the current state first, so another `nBack: 1`
-   right after a rollback undoes that rollback.
+4. After the user approves, repeat with `{"nBack": 1, "confirm": true}`. The
+   reply reports `verified: true` (or lists `unverifiedSections` if the
+   re-read differed). A confirmed rollback saves the current state first, so
+   another `nBack: 1` right after a rollback undoes that rollback.
 5. `snapshotId` names one id from the list. `beforeTime` takes an ISO 8601
    time carrying a `Z` or `±HH:MM` offset, such as `2026-11-08T15:30:00Z`,
    and restores the latest snapshot strictly before it; a time with no

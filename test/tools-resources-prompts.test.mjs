@@ -399,6 +399,27 @@ test("plan-data resource redacts the API key and secret-named fields", async () 
   assert.match(text, /Retire at 55/);
 });
 
+test("resource error details never leak the API key", async () => {
+  const leaking = {
+    async exportData() {
+      throw new Error(`executor failed for key ${config.apiKey}`);
+    },
+  };
+  const server = fakeServer();
+  registerPlanDataResource(server, leaking);
+  registerSummaryResource(server, leaking);
+
+  const planData = JSON.parse(await readResource(server, "projectionlab://plan-data"));
+  assert.equal(planData.error, "Failed to export data");
+  assert.equal(planData.details.includes("test-api-key"), false);
+  assert.match(planData.details, /\[REDACTED\]/);
+
+  const summary = JSON.parse(await readResource(server, "projectionlab://summary"));
+  assert.equal(summary.error, "Failed to build summary");
+  assert.equal(summary.details.includes("test-api-key"), false);
+  assert.match(summary.details, /\[REDACTED\]/);
+});
+
 test("summary resource reports the same per-plan counts as the tool", async () => {
   const server = fakeServer();
   registerSummaryResource(

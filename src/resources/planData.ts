@@ -37,7 +37,11 @@ export function registerPlanDataResource(
               uri: uri.href,
               text: JSON.stringify({
                 error: "Failed to export data",
-                details: err instanceof Error ? err.message : String(err),
+                // The message can echo request data, so scrub the Plugin API
+                // key from it the way errorResult does.
+                details: redactSecrets(
+                  err instanceof Error ? err.message : String(err),
+                ),
               }),
               mimeType: "application/json",
             },

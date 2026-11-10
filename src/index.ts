@@ -7,6 +7,7 @@ import { ExtensionBridge } from "./extensionBridge.js";
 import { registerBootstrapTool } from "./tools/bootstrap.js";
 import { SnapshotManager } from "./snapshot.js";
 import { log } from "./logger.js";
+import { redactSecrets } from "./redact.js";
 import { updateCheck } from "./updateCheck.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import { VERSION } from "./version.js";
@@ -125,7 +126,11 @@ async function main() {
   log.info("server", "ProjectionLab MCP server running on stdio");
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
+main().catch((err: unknown) => {
+  // The one console call outside the logger. An Error's stack can carry a
+  // message built from request data, so the text is scrubbed the same way
+  // every logged line is before it reaches stderr.
+  const text = err instanceof Error ? err.stack || err.message || String(err) : String(err);
+  console.error("Fatal error:", redactSecrets(text));
   process.exit(1);
 });

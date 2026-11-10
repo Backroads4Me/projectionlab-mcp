@@ -442,3 +442,40 @@ test("the legacy patch input refuses an unobserved enum value too", async () => 
   assert.deepEqual(bridge.writes, []);
   assert.equal(state.plans[0].expenses.events[0].spendingType, "essential");
 });
+
+test("path patches reject non-index segments on arrays", async () => {
+  const { applyExistingPathChanges } = await import("../dist/pathPatch.js");
+  const context = {
+    label: "milestone",
+    discoveryTool: "projectionlab_get_plan_section",
+    example: '{ "criteria.0.amount": 1 }',
+  };
+  const data = {
+    name: "Retire",
+    criteria: [
+      { amount: 100, type: "netWorth" },
+      { amount: 200, type: "income" },
+    ],
+  };
+  // "length" is an own property of arrays; it must not be patchable.
+  const refused = (path) =>
+    assert.throws(
+      () => applyExistingPathChanges(data, { [path]: 3 }, context),
+      (err) => err.code === "INVALID_INPUT",
+      `${path} must be refused`,
+    );
+  refused("criteria.length");
+  refused("criteria.length.amount");
+  refused("criteria.at");
+  refused("criteria.01.amount");
+  refused("criteria.1.5.amount");
+  refused("criteria.2.amount");
+  // Indexes stay addressable.
+  const { updated } = applyExistingPathChanges(
+    data,
+    { "criteria.1.amount": 250 },
+    context,
+  );
+  assert.equal(updated.criteria[1].amount, 250);
+  assert.equal(data.criteria[1].amount, 200);
+});

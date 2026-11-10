@@ -154,6 +154,15 @@ function replaceAtPath(
   context: PathPatchContext,
 ): PlanObj | unknown[] {
   const [head, ...tail] = parts;
+  // "length" is an own property of arrays, so hasOwnProperty alone would let
+  // a leaf patch resize the array through copy[Number("length")].
+  if (Array.isArray(root) && !/^(0|[1-9]\d*)$/.test(head)) {
+    throw new ProjectionLabError(
+      "INVALID_INPUT",
+      `Array segment "${head}" in ${context.label} path "${fullPath}" is not an index`,
+      `Use a numeric array index returned by ${context.discoveryTool}`,
+    );
+  }
   if (!Object.prototype.hasOwnProperty.call(root, head)) {
     throw new ProjectionLabError(
       "INVALID_INPUT",

@@ -143,7 +143,7 @@ export function registerUpdatePlanSectionTool(
         sectionData: z
           .unknown()
           .describe(
-            "Complete replacement data for the section. Must be the full section, not a partial patch, and in the section's current container shape: an array for milestones, an object with an events array for event sections, an object for variables, montecarlo and withdrawalStrategy. null, primitives and mismatched shapes are refused.",
+            "Complete replacement data for the section. Must be the full section, not a partial patch, and in the section's container shape: an array for milestones, an object with an events array for income, expenses, accounts, assets and priorities, an object for variables, montecarlo and withdrawalStrategy. null, primitives and mismatched shapes are refused.",
           ),
         confirm: z
           .boolean()

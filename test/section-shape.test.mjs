@@ -44,8 +44,8 @@ function samplePlans() {
   ];
 }
 
-function setup() {
-  const state = { plans: structuredClone(samplePlans()) };
+function setupWith(plans) {
+  const state = { plans: structuredClone(plans) };
   const bridge = {
     writes: [],
     async exportData() {
@@ -59,6 +59,10 @@ function setup() {
   const server = fakeServer();
   registerUpdatePlanSectionTool(server, bridge, new SnapshotManager());
   return { server, bridge };
+}
+
+function setup() {
+  return setupWith(samplePlans());
 }
 
 test("sectionContainer classifies containers", () => {
@@ -158,4 +162,112 @@ test("a missing section accepts a plain object or array only", async () => {
       confirm: true,
     });
   assert.equal(JSON.parse(ok.content[0].text).verified, true);
+});
+
+function updateSection(server) {
+  return server.tools.get("projectionlab_update_plan_section").handler;
+}
+
+test("an event section stored as {} accepts its proper events container", async () => {
+  const { server, bridge } = setupWith([
+    { id: "p1", name: "Sparse", income: {}, variables: { inflation: 2 } },
+  ]);
+  const replacement = { events: [{ name: "Salary", amount: 50000 }] };
+
+  const preview = await updateSection(server)({
+    planIdentifier: "Sparse",
+    section: "income",
+    sectionData: replacement,
+    confirm: false,
+  });
+  assert.equal(preview.isError, undefined);
+  const dry = JSON.parse(preview.content[0].text);
+  assert.equal(dry.dryRun, true);
+  assert.deepEqual(dry.diff.added, ["Salary"]);
+
+  const confirmed = await updateSection(server)({
+    planIdentifier: "Sparse",
+    section: "income",
+    sectionData: replacement,
+    confirm: true,
+  });
+  assert.equal(confirmed.isError, undefined);
+  assert.equal(JSON.parse(confirmed.content[0].text).verified, true);
+  assert.deepEqual(bridge.writes, ["plans"]);
+});
+
+test("an event section missing from the plan accepts its events container", async () => {
+  const { server, bridge } = setupWith([
+    { id: "p1", name: "Sparse", variables: { inflation: 2 } },
+  ]);
+  const ok = await updateSection(server)({
+    planIdentifier: "Sparse",
+    section: "income",
+    sectionData: { events: [{ name: "Pension" }] },
+    confirm: false,
+  });
+  assert.equal(ok.isError, undefined);
+
+  const bad = await updateSection(server)({
+    planIdentifier: "Sparse",
+    section: "income",
+    sectionData: [],
+    confirm: false,
+  });
+  assert.equal(bad.isError, true);
+  assert.match(
+    JSON.parse(bad.content[0].text).message,
+    /must be an object with an events array/,
+  );
+  assert.deepEqual(bridge.writes, []);
+});
+
+test("a milestones section missing from the plan takes an array only", async () => {
+  const { server, bridge } = setupWith([
+    { id: "p1", name: "Sparse", variables: { inflation: 2 } },
+  ]);
+  const ok = await updateSection(server)({
+    planIdentifier: "Sparse",
+    section: "milestones",
+    sectionData: [{ name: "Retire" }],
+    confirm: false,
+  });
+  assert.equal(ok.isError, undefined);
+
+  const bad = await updateSection(server)({
+    planIdentifier: "Sparse",
+    section: "milestones",
+    sectionData: { events: [] },
+    confirm: false,
+  });
+  assert.equal(bad.isError, true);
+  assert.match(
+    JSON.parse(bad.content[0].text).message,
+    /must be an array of events/,
+  );
+  assert.deepEqual(bridge.writes, []);
+});
+
+test("a section stored against the table accepts a replacement in the stored shape", async () => {
+  const { server } = setupWith([
+    { id: "p1", name: "Odd", milestones: { events: [{ name: "Retire" }] } },
+  ]);
+  const storedShape = await updateSection(server)({
+    planIdentifier: "Odd",
+    section: "milestones",
+    sectionData: { events: [{ name: "Retire" }, { name: "Medicare" }] },
+    confirm: false,
+  });
+  assert.equal(storedShape.isError, undefined);
+  const dry = JSON.parse(storedShape.content[0].text);
+  assert.deepEqual(dry.diff.added, ["Medicare"]);
+
+  const confirmed = await updateSection(server)({
+    planIdentifier: "Odd",
+    section: "milestones",
+    sectionData: { events: [{ name: "Retire" }, { name: "Medicare" }] },
+    confirm: true,
+  });
+  assert.equal(confirmed.isError, undefined);
+  assert.equal(JSON.parse(confirmed.content[0].text).verified, true);
 });

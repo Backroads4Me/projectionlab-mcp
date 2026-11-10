@@ -16,6 +16,34 @@ export const PLAN_SECTIONS = [
 
 export type PlanSection = (typeof PLAN_SECTIONS)[number];
 
+/** Sections whose members are events addressed by id or name; the
+ * settings-like sections use projectionlab_update_plan_settings instead. */
+export const EVENT_SECTIONS = [
+  "income",
+  "expenses",
+  "accounts",
+  "assets",
+  "milestones",
+  "priorities",
+] as const;
+
+/** The container each section holds, known from its name alone and not from
+ * what a plan happens to store: milestones is a direct array, the event
+ * sections are objects with an events array, and the settings-like sections
+ * are plain objects. Per DATA-MODEL.md sections 5.1 to 5.6 and the
+ * `variables`, `montecarlo` and `withdrawalStrategy` field trees. */
+export const SECTION_CONTAINERS = {
+  income: "events",
+  expenses: "events",
+  accounts: "events",
+  assets: "events",
+  milestones: "array",
+  variables: "object",
+  withdrawalStrategy: "object",
+  montecarlo: "object",
+  priorities: "events",
+} as const satisfies Record<PlanSection, "array" | "events" | "object">;
+
 /**
  * Resolve one identifier against a list of { id, name } items. Match
  * priority: exact ID, then exact name (case-insensitive), then name
@@ -238,10 +266,15 @@ const CONTAINER_WORDS = {
 } as const;
 
 /**
- * Refuse sectionData whose container shape does not match the section as it
- * stands: an omitted value would delete the section, and a container of the
- * wrong kind would store data ProjectionLab cannot read. When the plan has no
- * such section, only a plain object or an array is accepted.
+ * Refuse sectionData whose container shape does not match the section named.
+ * The expected container comes from the section's name, not from what the
+ * plan currently stores, so an event section held as {} still accepts the
+ * correct { events: [...] } replacement. One exception: when the stored
+ * section is itself a usable container that contradicts the table, a
+ * replacement in the stored shape is accepted too, so the tool never refuses
+ * to write back what it just read. An omitted value would delete the
+ * section, and a container of the wrong kind would store data ProjectionLab
+ * cannot read.
  */
 export function assertSectionShape(
   section: string,
@@ -265,12 +298,15 @@ export function assertSectionShape(
       "Send the complete section in the same shape projectionlab_get_plan_section returns: an array for milestones, an object with an events array for event sections, an object for settings-like sections",
     );
   }
+  const expected = SECTION_CONTAINERS[section as PlanSection];
+  const accepted = new Set<"array" | "events" | "object">([expected]);
   const currentShape = sectionContainer(current);
-  if (currentShape !== null && currentShape !== incomingShape) {
+  if (currentShape !== null && currentShape !== expected) accepted.add(currentShape);
+  if (!accepted.has(incomingShape)) {
     throw new ProjectionLabError(
       "INVALID_INPUT",
-      `sectionData for "${section}" of plan "${planName}" must be ${CONTAINER_WORDS[currentShape]}, because the section currently holds that shape; received ${CONTAINER_WORDS[incomingShape]}`,
-      `Read the section with projectionlab_get_plan_section and send the replacement in the same container shape`,
+      `sectionData for "${section}" of plan "${planName}" must be ${CONTAINER_WORDS[expected]}, which is how this section is stored; received ${CONTAINER_WORDS[incomingShape]}`,
+      `Read the section with projectionlab_get_plan_section and send the replacement in the container shape the section name calls for`,
     );
   }
 }

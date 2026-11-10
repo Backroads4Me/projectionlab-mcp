@@ -22,19 +22,9 @@ import {
   getEvents,
   planNotFoundError,
   requirePlans,
+  EVENT_SECTIONS,
   type PlanObj,
 } from "../plans.js";
-
-// Only event-based sections; configuration objects use
-// projectionlab_update_plan_settings.
-const EVENT_SECTIONS = [
-  "income",
-  "expenses",
-  "accounts",
-  "assets",
-  "milestones",
-  "priorities",
-] as const;
 
 const EVENT_FIELD_CONTEXT = {
   label: "event field",

@@ -228,7 +228,8 @@ test("rollback reports unverified sections when the re-read differs", async () =
     (await server.tools.get("projectionlab_rollback").handler({ snapshotId, confirm: true }))
       .content[0].text,
   );
-  assert.equal(output.success, false);
+  // success means the write was accepted; verified reports the re-read.
+  assert.equal(output.success, true);
   assert.equal(output.verified, false);
   assert.deepEqual(output.unverifiedSections, ["plans"]);
 });

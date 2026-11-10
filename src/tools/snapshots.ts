@@ -257,7 +257,9 @@ export function registerSnapshotTools(
               type: "text",
               text: toJson(
                 {
-                  success: verified,
+                  // true means the write was accepted; `verified` says
+                  // whether the re-read matched.
+                  success: true,
                   verified,
                   restoredSections,
                   ...(verified ? {} : { unverifiedSections }),

@@ -44,6 +44,7 @@ Prefer to set it up yourself? See **[Manual setup](https://github.com/Backroads4
 - **Undo.** Every confirmed change is backed up first, so it can be rolled back.
 - **No overwriting your edits.** If a plan was saved in ProjectionLab after the assistant read it, the change is refused rather than overwriting your edit.
 - **Stays on your computer.** Your API key and the connection token are stored only on your computer, and the browser connects only to the server running there.
+- **Update-aware.** Your assistant mentions it once when a newer release is available; the server reads the latest release number from npm once per start (`PL_UPDATE_CHECK=false` turns that off).
 
 Details are in the [safety model](https://github.com/Backroads4Me/projectionlab-mcp/blob/main/REFERENCE.md#safety-model) and [Privacy](https://github.com/Backroads4Me/projectionlab-mcp/blob/main/PRIVACY.md).
 

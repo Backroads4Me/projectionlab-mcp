@@ -93,7 +93,7 @@ same text from the "Notes to reviewer" field.
 | Permission | Justification |
 | --- | --- |
 | `scripting` | Runs ProjectionLab's Plugin API call (`window.projectionlabPluginAPI`) in the page's main world of the user's ProjectionLab tab and returns the result. The injected function is bundled in the extension (`src/page-main.js`); no code is fetched or evaluated. |
-| `storage` | Saves the user's settings (local server port, shared token, auto-open option) and the connection status shown on the options page. Stored locally only. |
+| `storage` | Saves the user's settings (local server port, shared token, auto-open option), the connection status shown on the options page, and the connected server's version shown there when it differs from the extension's. Stored locally only. |
 | `alarms` | Wakes the background worker periodically to reconnect to the local server, which runs only while the user's AI assistant is running. |
 | Host permission `https://app.projectionlab.com/*` | Finds the user's ProjectionLab tab (or opens one) and injects the Plugin API call into it. No other site is accessed. |
 
@@ -120,9 +120,11 @@ What the code does, verified against `src/background.js`, `src/options.js`,
 - The only page the extension opens or touches is `https://app.projectionlab.com/`.
 - There is no `fetch`, `XMLHttpRequest`, `sendBeacon`, analytics, or remote
   logging. The options page links to GitHub only when the user clicks.
-- `storage.local` holds `port`, `token`, `autoOpen`, `connectionStatus`, and
-  `lastError`. The ProjectionLab Plugin API key arrives from the local server
-  as a request argument and is never stored.
+- `storage.local` holds `port`, `token`, `autoOpen`, `connectionStatus`,
+  `lastError`, and `serverVersion` (the connected server's release, shown on
+  the options page when it differs from the extension's). The ProjectionLab
+  Plugin API key arrives from the local server as a request argument and is
+  never stored.
 
 The data that passes through the extension is the user's ProjectionLab data,
 which is financial, and it goes to the local server. The server hands it to

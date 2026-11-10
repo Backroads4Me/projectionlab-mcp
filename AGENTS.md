@@ -50,6 +50,12 @@ checks on Node 20 for every pull request and push to `main`.
 - `src/instructions.ts`: server instructions sent at initialize, and the
   loader for the agent guide.
 - `src/plans.ts`: plan, section, and event lookup helpers shared by the tools.
+- `src/versionCompare.ts`: numeric `major.minor.patch` comparison; `null` for
+  anything unparsable, which callers treat as "say nothing".
+- `src/updateCheck.ts`: the one npm-registry lookup per server process
+  (`PL_UPDATE_CHECK`), with the remembered latest version.
+- `src/versionNotices.ts`: the plain-language update notices carried by
+  `projectionlab_check_connection`.
 - `src/summary.ts`: the Current Finances summary shared by `get_summary` and
   `projectionlab://summary`.
 - `src/planVersion.ts`: plan version tokens and the `PLAN_CONFLICT` checks.

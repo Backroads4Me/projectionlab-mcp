@@ -12,7 +12,14 @@ independent and is not affiliated with or endorsed by ProjectionLab.
   `ws://127.0.0.1` (loopback), which you install and run yourself.
 - The developer runs no servers and receives no data. There is no analytics,
   telemetry, advertising, tracking, or crash reporting.
-- Nothing is sold, and nothing is shared with the developer or any third party.
+- Nothing is sold, and nothing about you or your plan data is shared with the
+  developer or any third party.
+- When the server starts, it makes one request to
+  `https://registry.npmjs.org` to read the latest release number of
+  `projectionlab-mcp`. The request contains no personal, plan, or
+  configuration data; npm sees the IP address of your computer, as it does
+  whenever `npx` installs the package. Set `PL_UPDATE_CHECK=false` to turn
+  the check off entirely.
 
 ## What the extension does
 
@@ -30,6 +37,7 @@ local server.
 | Your ProjectionLab Plugin API key | The local server, which reads it from your own configuration | Passed to the Plugin API in your ProjectionLab tab for each request. The extension never stores it. |
 | The local server's port and shared token, and the auto-open setting | You enter them on the options page | Stored in the browser's extension storage on your computer. The token is sent only to the local server, to authenticate the connection. |
 | Connection status and the last error message | The extension itself | Stored in the browser's extension storage, to show on the options page and toolbar icon |
+| The connected server's release version (`serverVersion`) | The local server's handshake reply | Stored in the browser's extension storage, to show on the options page when the two releases differ |
 
 The extension does not read your browsing history, does not access any site
 other than `https://app.projectionlab.com`, and does not read the content of

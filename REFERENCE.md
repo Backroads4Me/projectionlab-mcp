@@ -89,13 +89,14 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `PL_PRETTY_JSON` | No | `false` | Pretty-print JSON output (uses ~25–40% more tokens) |
 | `PL_READ_ONLY` | No | `true` | Write/mutation tools are disabled unless this is exactly `false` |
 | `PL_SNAPSHOT_DIR` | No | `~/.projectionlab-mcp/snapshots` | Directory for pre-mutation snapshots |
+| `PL_UPDATE_CHECK` | No | `true` | One request to `registry.npmjs.org` per start to read the latest release number; off only when this is exactly `false` |
 | `LOG_LEVEL` | No | `info` | Log verbosity (`debug`, `info`, `warn`, `error`) |
 
 ## Available tools
 
 | Tool | Description | Mutates |
 |---|---|---|
-| `projectionlab_check_connection` | Verify browser + API connectivity | No |
+| `projectionlab_check_connection` | Verify browser + API connectivity; the result also carries `versions` (server, executor, latest npm release) and `notices` (plain-language update messages) | No |
 | `projectionlab_get_bootstrap` | Return a console snippet to connect a ProjectionLab tab | No |
 | `projectionlab_describe_plugin_api` | Describe the available Plugin API surface | No |
 | `projectionlab_describe_schema` | Describe the data schema (plan names, account IDs) | No |

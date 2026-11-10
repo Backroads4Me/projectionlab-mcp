@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { executePageRequest } from "./page-main.js";
-import { makeResponseFrame } from "./wire.js";
+import { makeResponseFrame, reconnectBlockedForClose, statusMessageForClose } from "./wire.js";
 
 const DEFAULT_PORT = 8788;
 const PROTOCOL_VERSION = 1;
@@ -10,7 +10,7 @@ let socket;
 let reconnectTimer;
 let retryMs = 2_000;
 let generation = 0;
-let authBlocked = false;
+let reconnectBlocked = false;
 const inFlight = new Map();
 
 const EXTENSION_NAME = "MCP Bridge for ProjectionLab";
@@ -43,7 +43,7 @@ const setStatus = (connectionStatus, lastError = "") => {
 const codedError = (code, message) => Object.assign(new Error(message), { code });
 
 function scheduleReconnect(myGeneration) {
-  if (authBlocked || myGeneration !== generation || reconnectTimer) return;
+  if (reconnectBlocked || myGeneration !== generation || reconnectTimer) return;
   const delay = retryMs;
   retryMs = Math.min(retryMs * 2, 30_000);
   reconnectTimer = setTimeout(() => { reconnectTimer = undefined; void connect(); }, delay);
@@ -60,7 +60,7 @@ async function connect(force = false) {
     await setStatus("disconnected", "Configure the shared token to connect.");
     return;
   }
-  authBlocked = false;
+  reconnectBlocked = false;
   await setStatus("disconnected");
   const ws = new WebSocket(`ws://127.0.0.1:${config.port}`);
   socket = ws;
@@ -82,11 +82,10 @@ async function connect(force = false) {
   ws.onclose = (event) => {
     if (myGeneration !== generation) return;
     socket = undefined;
-    authBlocked = event.code === 4001 || event.code === 4002;
-    const error = event.code === 4001 ? "Authentication failed. Check the shared token."
-      : event.code === 4002 ? "Wire protocol version mismatch."
-        : event.reason || `Connection closed (${event.code}).`;
-    void setStatus("disconnected", error);
+    // 4003 REPLACED blocks reconnect like an auth failure: two executors
+    // that each reconnect when replaced would displace each other forever.
+    reconnectBlocked = reconnectBlockedForClose(event.code);
+    void setStatus("disconnected", statusMessageForClose(event));
     scheduleReconnect(myGeneration);
   };
 }
@@ -144,7 +143,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 });
 browser.action.onClicked.addListener(() => void browser.runtime.openOptionsPage());
 browser.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === RECONNECT_ALARM && !authBlocked && !socket) void connect();
+  if (alarm.name === RECONNECT_ALARM && !reconnectBlocked && !socket) void connect();
 });
 async function createReconnectAlarm() {
   // Firefox MV3 uses an event page and does not treat WebSocket traffic as

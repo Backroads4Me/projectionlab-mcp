@@ -70,9 +70,16 @@ test("a hung fetch gives up at the timeout and resolves to null", async () => {
   const started = Date.now();
   const latest = await fetchLatestVersion(
     (url, init) =>
-      new Promise((_, reject) =>
-        init.signal.addEventListener("abort", () => reject(new Error("aborted"))),
-      ),
+      new Promise((_, reject) => {
+        // AbortSignal.timeout does not keep the event loop alive, and a real
+        // fetch holds a socket open while it waits. The fake holds a timer
+        // for the same reason, released when the abort arrives.
+        const pending = setTimeout(() => {}, 10_000);
+        init.signal.addEventListener("abort", () => {
+          clearTimeout(pending);
+          reject(new Error("aborted"));
+        });
+      }),
     50,
   );
   assert.equal(latest, null);

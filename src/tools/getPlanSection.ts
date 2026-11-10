@@ -10,8 +10,8 @@ import { redactSecrets } from "../redact.js";
 import {
   PLAN_SECTIONS,
   eventLabel,
-  findEventIndex,
-  findPlan,
+  requireEventIndex,
+  requirePlan,
   getEvents,
   planNotFoundError,
   requirePlans,
@@ -59,7 +59,7 @@ export function registerGetPlanSectionTool(
           .trim()
           .min(1)
           .describe(
-            "Plan name (case-insensitive, partial match) or exact plan ID",
+            "Plan name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID",
           ),
         section: z
           .enum(PLAN_SECTIONS)
@@ -70,7 +70,7 @@ export function registerGetPlanSectionTool(
           .min(1)
           .optional()
           .describe(
-            "Return only the event whose name (case-insensitive, partial match) or ID matches. " +
+            "Return only the event whose name (case-insensitive; a partial match must identify exactly one event) or ID matches. " +
               "Only valid for event-based sections (income, expenses, accounts, assets, milestones, priorities).",
           ),
         path: z
@@ -97,7 +97,7 @@ export function registerGetPlanSectionTool(
       try {
         const data = await bridge.exportData();
         const plans = requirePlans(data);
-        const plan = findPlan(plans, planIdentifier);
+        const plan = requirePlan(plans, planIdentifier);
         if (!plan) throw planNotFoundError(plans, planIdentifier);
 
         let sectionData = plan[section];
@@ -111,7 +111,7 @@ export function registerGetPlanSectionTool(
 
         if (eventIdentifier !== undefined) {
           const events = getEvents(sectionData);
-          const index = findEventIndex(events, eventIdentifier);
+          const index = requireEventIndex(events, eventIdentifier);
           const match = index === -1 ? undefined : events[index];
           if (!match) {
             throw new ProjectionLabError(

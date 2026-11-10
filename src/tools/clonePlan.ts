@@ -10,7 +10,7 @@ import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import {
-  findPlanIndex,
+  requirePlanIndex,
   getEvents,
   planNotFoundError,
   requirePlans,
@@ -41,7 +41,7 @@ export function registerClonePlanTool(
           .trim()
           .min(1)
           .describe(
-            "Plan to copy: name (case-insensitive, partial match) or exact plan ID",
+            "Plan to copy: name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID",
           ),
         newName: z
           .string()
@@ -74,7 +74,7 @@ export function registerClonePlanTool(
 
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
-        const sourceIndex = findPlanIndex(plans, planIdentifier);
+        const sourceIndex = requirePlanIndex(plans, planIdentifier);
         if (sourceIndex === -1) throw planNotFoundError(plans, planIdentifier);
         const source = plans[sourceIndex] as PlanObj;
         const clone = buildPlanClone(source, plans, newName);

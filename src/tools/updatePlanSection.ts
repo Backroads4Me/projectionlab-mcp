@@ -21,7 +21,7 @@ import {
   assertSectionShape,
   diffFields,
   eventLabel,
-  findPlanIndex,
+  requirePlanIndex,
   getEvents,
   keyEvents,
   planNotFoundError,
@@ -135,7 +135,7 @@ export function registerUpdatePlanSectionTool(
           .trim()
           .min(1)
           .describe(
-            "Plan name (case-insensitive, partial match) or exact plan ID",
+            "Plan name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID",
           ),
         section: z
           .enum(PLAN_SECTIONS)
@@ -189,7 +189,7 @@ export function registerUpdatePlanSectionTool(
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
 
-        const planIndex = findPlanIndex(plans, planIdentifier);
+        const planIndex = requirePlanIndex(plans, planIdentifier);
         if (planIndex === -1) throw planNotFoundError(plans, planIdentifier);
 
         const plan = plans[planIndex] as PlanObj;

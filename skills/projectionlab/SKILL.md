@@ -77,9 +77,12 @@ Console). It must be pasted again after every page reload.
 
 ## Reading the plan
 
-Plans are addressed by `planIdentifier`: a plan name (case-insensitive,
-partial match) or an exact plan ID. Prefer the narrowest read that answers the
-question.
+Plans are addressed by `planIdentifier`: a plan name (case-insensitive; a
+partial match must identify exactly one plan, and an ambiguous one is refused
+with the candidates listed) or an exact plan ID. The same rule covers
+`eventIdentifier` and the `planA`/`planB` names of `projectionlab_diff`, so a
+read and the following write can never target different items. Prefer the
+narrowest read that answers the question.
 
 | Question | Tool |
 |---|---|

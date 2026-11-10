@@ -19,7 +19,7 @@ import {
 } from "../diff.js";
 import {
   PLAN_SECTIONS,
-  findPlanIndex,
+  requirePlanIndex,
   planNotFoundError,
   type PlanObj,
   type PlanSection,
@@ -204,11 +204,11 @@ export function registerDiffTool(
       pathsOnly: args.pathsOnly === true,
     });
     const { plans, readFrom } = await readPlansForPair(args.from);
-    const indexA = findPlanIndex(plans, args.planA);
+    const indexA = requirePlanIndex(plans, args.planA);
     if (indexA === -1) {
       throw planSideNotFoundError(plans, args.planA, "planA");
     }
-    const indexB = findPlanIndex(plans, args.planB);
+    const indexB = requirePlanIndex(plans, args.planB);
     if (indexB === -1) {
       throw planSideNotFoundError(plans, args.planB, "planB");
     }
@@ -330,7 +330,7 @@ export function registerDiffTool(
           .min(1)
           .optional()
           .describe(
-            "Report one plan only: plan name (case-insensitive, partial match) or exact plan ID. Points-in-time mode only; name the plans with planA and planB instead.",
+            "Report one plan only: plan name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID. Points-in-time mode only; name the plans with planA and planB instead.",
           ),
         planA: z
           .string()
@@ -338,7 +338,7 @@ export function registerDiffTool(
           .min(1)
           .optional()
           .describe(
-            "Compare two different plans instead of two points in time: the plan whose values are reported first, by plan name (case-insensitive, partial match) or exact plan ID. Supply planA and planB together, never with to or planIdentifier.",
+            "Compare two different plans instead of two points in time: the plan whose values are reported first, by plan name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID. Supply planA and planB together, never with to or planIdentifier.",
           ),
         planB: z
           .string()
@@ -498,8 +498,8 @@ export function registerDiffTool(
             );
           }
           const olderPlans = plansOf(fromSnapshot.data.plans);
-          const beforeIndex = findPlanIndex(olderPlans, planIdentifier);
-          const afterIndex = findPlanIndex(newerPlans, planIdentifier);
+          const beforeIndex = requirePlanIndex(olderPlans, planIdentifier);
+          const afterIndex = requirePlanIndex(newerPlans, planIdentifier);
           const match =
             beforeIndex !== -1
               ? olderPlans[beforeIndex]

@@ -6,7 +6,7 @@ import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
 import { redactSecrets } from "../redact.js";
 import {
-  findPlan,
+  requirePlan,
   getEvents,
   planNotFoundError,
   requirePlans,
@@ -21,14 +21,14 @@ export function registerGetPlanTool(server: McpServer, bridge: Bridge) {
         "Returns a single plan by name or ID. Much smaller than export_data. " +
         "Use this for deep analysis of a specific plan; prefer " +
         "projectionlab_get_plan_section when only one aspect is needed. " +
-        "Accepts a plan name (case-insensitive partial match) or exact plan ID.",
+        "Accepts a plan name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID.",
       inputSchema: {
         planIdentifier: z
           .string()
           .trim()
           .min(1)
           .describe(
-            "Plan name (case-insensitive, partial match) or exact plan ID",
+            "Plan name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID",
           ),
       },
       annotations: {
@@ -41,7 +41,7 @@ export function registerGetPlanTool(server: McpServer, bridge: Bridge) {
       try {
         const data = await bridge.exportData();
         const plans = requirePlans(data);
-        const plan = findPlan(plans, planIdentifier);
+        const plan = requirePlan(plans, planIdentifier);
         if (!plan) throw planNotFoundError(plans, planIdentifier);
 
         const header = {

@@ -11,7 +11,7 @@ import {
   listPlanSettings,
 } from "../planSettings.js";
 import {
-  findPlan,
+  requirePlan,
   planNotFoundError,
   requirePlans,
 } from "../plans.js";
@@ -41,7 +41,7 @@ export function registerGetPlanSettingsTool(
           .trim()
           .min(1)
           .describe(
-            "Plan name (case-insensitive, partial match) or exact plan ID",
+            "Plan name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID",
           ),
         section: z
           .enum(PLAN_SETTING_SECTIONS)
@@ -60,7 +60,7 @@ export function registerGetPlanSettingsTool(
       try {
         const data = await bridge.exportData();
         const plans = requirePlans(data);
-        const plan = findPlan(plans, planIdentifier);
+        const plan = requirePlan(plans, planIdentifier);
         if (!plan) throw planNotFoundError(plans, planIdentifier);
 
         const selected = section ? [section] : PLAN_SETTING_SECTIONS;

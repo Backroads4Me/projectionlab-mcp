@@ -16,7 +16,7 @@ process.env.PL_SNAPSHOT_DIR = join(
 );
 process.env.LOG_LEVEL = "error";
 
-const { findPlanIndex, findEventIndex } = await import("../dist/plans.js");
+const { requirePlanIndex, requireEventIndex } = await import("../dist/plans.js");
 const { registerSchemaTool } = await import("../dist/tools/schema.js");
 const { registerSummaryTool } = await import("../dist/tools/summary.js");
 const { registerRestoreTools, restoredSectionMatches } = await import(
@@ -94,10 +94,10 @@ function fakeBridge(initial) {
 test("blank identifiers match no plan or event", () => {
   const plans = samplePlans();
   for (const blank of ["", "   "]) {
-    assert.equal(findPlanIndex(plans, blank), -1);
-    assert.equal(findEventIndex([{ name: "Salary" }, { id: "x" }], blank), -1);
+    assert.equal(requirePlanIndex(plans, blank), -1);
+    assert.equal(requireEventIndex([{ name: "Salary" }, { id: "x" }], blank), -1);
   }
-  assert.equal(findPlanIndex(plans, "work"), 1);
+  assert.equal(requirePlanIndex(plans, "work"), 1);
 });
 
 test("plan tools reject a blank planIdentifier at the schema", () => {

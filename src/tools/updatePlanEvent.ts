@@ -18,8 +18,8 @@ import { redactSecrets } from "../redact.js";
 import {
   diffFields,
   eventLabel,
-  findEventIndex,
-  findPlanIndex,
+  requireEventIndex,
+  requirePlanIndex,
   getEvents,
   planNotFoundError,
   requirePlans,
@@ -96,7 +96,7 @@ export function registerUpdatePlanEventTool(
           .trim()
           .min(1)
           .describe(
-            "Plan name (case-insensitive, partial match) or exact plan ID",
+            "Plan name (case-insensitive; a partial match must identify exactly one plan) or exact plan ID",
           ),
         section: z
           .enum(EVENT_SECTIONS)
@@ -106,7 +106,7 @@ export function registerUpdatePlanEventTool(
           .trim()
           .min(1)
           .describe(
-            "Event name (case-insensitive, exact match preferred over partial) or exact event ID",
+            "Event name (case-insensitive; exact name preferred, a partial match must identify exactly one event) or exact event ID",
           ),
         patch: z
           .record(z.string(), z.unknown())
@@ -162,7 +162,7 @@ export function registerUpdatePlanEventTool(
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
 
-        const planIndex = findPlanIndex(plans, planIdentifier);
+        const planIndex = requirePlanIndex(plans, planIdentifier);
         if (planIndex === -1) throw planNotFoundError(plans, planIdentifier);
         const plan = plans[planIndex] as PlanObj;
 
@@ -176,7 +176,7 @@ export function registerUpdatePlanEventTool(
           );
         }
 
-        const eventIndex = findEventIndex(events, eventIdentifier);
+        const eventIndex = requireEventIndex(events, eventIdentifier);
         if (eventIndex === -1) {
           throw new ProjectionLabError(
             "INVALID_INPUT",

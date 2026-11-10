@@ -17,34 +17,75 @@ export const PLAN_SECTIONS = [
 export type PlanSection = (typeof PLAN_SECTIONS)[number];
 
 /**
- * Find a plan by identifier. Match priority: exact ID, exact name
- * (case-insensitive), then partial name. Exact matches win over partial so
- * plans with shared name prefixes can't be silently confused on write paths.
+ * Resolve one identifier against a list of { id, name } items. Match
+ * priority: exact ID, then exact name (case-insensitive), then name
+ * substring. Anything beyond a single match at the level reached is
+ * ambiguous: picking the first would silently target whichever item happens
+ * to come first, so the caller must refuse and ask for an exact name or ID.
  */
-export function findPlanIndex(plans: unknown[], identifier: string): number {
-  if (!identifier.trim()) return -1;
+function matchOne(
+  items: unknown[],
+  identifier: string,
+): { kind: "found"; index: number } | { kind: "none" } | { kind: "ambiguous"; indexes: number[] } {
+  if (!identifier.trim()) return { kind: "none" };
   const lower = identifier.toLowerCase();
-  let exactName = -1;
-  let partial = -1;
-
-  for (let i = 0; i < plans.length; i++) {
-    const plan = plans[i];
-    if (!plan || typeof plan !== "object") continue;
-    const obj = plan as PlanObj;
-    if (String(obj.id ?? "") === identifier) return i;
+  const exact: number[] = [];
+  const partial: number[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item || typeof item !== "object") continue;
+    const obj = item as PlanObj;
+    if (String(obj.id ?? "") === identifier) return { kind: "found", index: i };
     const name = String(obj.name ?? "").toLowerCase();
-    if (name === lower && exactName === -1) exactName = i;
-    else if (name.includes(lower) && partial === -1) partial = i;
+    if (name === lower) exact.push(i);
+    else if (name.includes(lower)) partial.push(i);
   }
-
-  return exactName !== -1 ? exactName : partial;
+  if (exact.length === 1) return { kind: "found", index: exact[0] };
+  if (exact.length > 1) return { kind: "ambiguous", indexes: exact };
+  if (partial.length === 1) return { kind: "found", index: partial[0] };
+  if (partial.length > 1) return { kind: "ambiguous", indexes: partial };
+  return { kind: "none" };
 }
 
-export function findPlan(
+function ambiguousMatchError(
+  kind: "plan" | "event",
+  identifier: string,
+  items: unknown[],
+  indexes: number[],
+): ProjectionLabError {
+  const candidates = indexes
+    .map((i) => {
+      const obj = items[i] as PlanObj;
+      return `  - "${obj.name ?? "(unnamed)"}" (ID: ${obj.id ?? "?"})`;
+    })
+    .join("\n");
+  return new ProjectionLabError(
+    "INVALID_INPUT",
+    `More than one ${kind} matches "${identifier}"`,
+    `Candidates:\n${candidates}\nSupply an exact name or one of the IDs`,
+  );
+}
+
+/**
+ * Index of the plan the identifier names, -1 when nothing matches. Throws
+ * INVALID_INPUT when several plans match the same way, so a read and the
+ * following write can never target different plans.
+ */
+export function requirePlanIndex(plans: unknown[], identifier: string): number {
+  const outcome = matchOne(plans, identifier);
+  if (outcome.kind === "ambiguous") {
+    throw ambiguousMatchError("plan", identifier, plans, outcome.indexes);
+  }
+  return outcome.kind === "found" ? outcome.index : -1;
+}
+
+/** The plan the identifier names, or null when nothing matches. Refuses
+ * ambiguous identifiers the way requirePlanIndex does. */
+export function requirePlan(
   plans: unknown[],
   identifier: string,
 ): PlanObj | null {
-  const i = findPlanIndex(plans, identifier);
+  const i = requirePlanIndex(plans, identifier);
   return i === -1 ? null : (plans[i] as PlanObj);
 }
 
@@ -112,22 +153,20 @@ function eventId(event: unknown): string | undefined {
   return undefined;
 }
 
-/** Index of the event matching `identifier`: exact id, then exact name (case-insensitive), then name substring. -1 if none. */
-export function findEventIndex(events: unknown[], identifier: string): number {
-  if (!identifier.trim()) return -1;
-  const lower = identifier.toLowerCase();
-  let exactName = -1;
-  let partial = -1;
-  for (let i = 0; i < events.length; i++) {
-    const e = events[i];
-    if (!e || typeof e !== "object") continue;
-    const obj = e as PlanObj;
-    if (String(obj.id ?? "") === identifier) return i;
-    const name = String(obj.name ?? "").toLowerCase();
-    if (name === lower && exactName === -1) exactName = i;
-    else if (name.includes(lower) && partial === -1) partial = i;
+/**
+ * Index of the event the identifier names: exact id, then exact name
+ * (case-insensitive), then name substring. -1 when nothing matches. Throws
+ * INVALID_INPUT when several events match the same way.
+ */
+export function requireEventIndex(
+  events: unknown[],
+  identifier: string,
+): number {
+  const outcome = matchOne(events, identifier);
+  if (outcome.kind === "ambiguous") {
+    throw ambiguousMatchError("event", identifier, events, outcome.indexes);
   }
-  return exactName !== -1 ? exactName : partial;
+  return outcome.kind === "found" ? outcome.index : -1;
 }
 
 export function eventLabel(event: unknown): string {

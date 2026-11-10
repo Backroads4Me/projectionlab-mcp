@@ -55,6 +55,17 @@ interface Pending {
   timer: NodeJS.Timeout;
 }
 
+/** Parses one text frame. Returns null unless it is a JSON object: valid JSON
+ * such as `null` or `42` has no `type` to read. */
+function parseFrame(raw: unknown): ClientFrame | null {
+  try {
+    const frame: unknown = JSON.parse(String(raw));
+    return frame && typeof frame === "object" ? (frame as ClientFrame) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Best-effort chmod; a file the process does not own keeps its mode. */
 function restrictMode(path: string, mode: number): void {
   try {
@@ -192,10 +203,8 @@ export class ExtensionBridge implements Bridge {
     ws.once("message", (raw) => {
       clearTimeout(timer);
       helloRead();
-      let hello: ClientFrame;
-      try {
-        hello = JSON.parse(String(raw)) as ClientFrame;
-      } catch {
+      const hello = parseFrame(raw);
+      if (!hello) {
         ws.close(CLOSE_CODES.AUTH_FAILED, "malformed hello");
         return;
       }
@@ -242,10 +251,8 @@ export class ExtensionBridge implements Bridge {
 
   private onFrame(ws: WebSocket, raw: unknown): void {
     if (this.conn !== ws) return;
-    let frame: ClientFrame;
-    try {
-      frame = JSON.parse(String(raw)) as ClientFrame;
-    } catch {
+    const frame = parseFrame(raw);
+    if (!frame) {
       log.warn("extension", "Dropping malformed frame");
       return;
     }

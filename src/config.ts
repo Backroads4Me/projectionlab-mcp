@@ -45,10 +45,12 @@ export const config = {
   // what is missing; operations that need the key reject without it.
   apiKey: process.env.PL_API_KEY || undefined,
   // Localhost WebSocket the browser extension (or bootstrap snippet) connects
-  // to. The token is a shared secret the executor must present; if unset,
-  // ExtensionBridge generates one and persists it under the snapshot dir.
+  // to. The token is a shared secret the executor must present; if unset or
+  // blank, ExtensionBridge generates one and persists it next to
+  // USER_ENV_FILE. A blank value never counts as a token: it would let any
+  // client authenticate with an empty string.
   wsPort: optionalInt("PL_WS_PORT", 8788),
-  wsToken: process.env.PL_WS_TOKEN,
+  wsToken: process.env.PL_WS_TOKEN?.trim() || undefined,
   appUrl: optional("PL_APP_URL", "https://app.projectionlab.com"),
   apiReadyTimeoutMs: optionalInt("PL_API_READY_TIMEOUT_MS", 30000),
   // How long a full export may be served from cache. Writes always invalidate,

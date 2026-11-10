@@ -21,9 +21,22 @@ also serves this guide as the MCP resource `projectionlab://guide`.
 ## Start every session with a connection check
 
 Call `projectionlab_check_connection` before any other ProjectionLab tool. It
-returns `browser`, `pageLoaded`, `apiAvailable`, `apiKeyValid`, `errors` and
-`writesEnabled`. When the first four flags are `true`, proceed. Otherwise fix
-the first failing item with the user, one step at a time, then check again.
+returns `browser`, `pageLoaded`, `apiAvailable`, `apiKeyValid`, `errors`,
+`writesEnabled`, `versions` and `notices`. When the first four flags are
+`true`, proceed. Otherwise fix the first failing item with the user, one step
+at a time, then check again.
+
+`notices` are plain sentences about releases, never connection failures. When
+the list is not empty, tell the user each one once, in plain words, then
+carry on; do not repeat them later in the session and do not refuse to work
+because of them. The two fixes: an out-of-date server is updated by fully
+quitting and reopening the AI assistant's host so `npx` fetches the new
+release (if it still reports the old version, set the server args to
+`["-y", "projectionlab-mcp@latest"]`); an out-of-date extension is updated by
+downloading the browser zip from
+`https://github.com/Backroads4Me/projectionlab-mcp/releases/latest`,
+replacing the unpacked extension folder with its contents, and reloading the
+extension from the browser's extensions page (settings are kept).
 
 | Failing item | What it means | What to do with the user |
 |---|---|---|

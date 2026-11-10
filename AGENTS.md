@@ -92,9 +92,11 @@ checks on Node 20 for every pull request and push to `main`.
 - Writes are disabled unless `PL_READ_ONLY=false`; every mutating tool checks
   `config.readOnly` before writing.
 - **Never** print, log, or persist `PL_API_KEY`. Anything written to disk
-  (snapshots) or returned as plan data goes through `redactSecrets` first:
-  snapshots value-only (restore-safe); exports, plan reads (`get_plan`,
-  `get_plan_section`, and similar), and resources aggressive (`byName`).
+  (snapshots) or returned as plan data goes through the redaction helpers in
+  `src/redact.ts` first: snapshots store the literal key as the restorable
+  `SNAPSHOT_KEY_PLACEHOLDER` (put back on every read, so rollback stays
+  exact); exports, plan reads (`get_plan`, `get_plan_section`, and similar),
+  and resources are scrubbed by name (`byName: true`) as well as by value.
 
 ## After changing code
 

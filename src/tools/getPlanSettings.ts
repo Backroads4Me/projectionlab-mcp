@@ -11,7 +11,7 @@ import {
   listPlanSettings,
 } from "../planSettings.js";
 import {
-  requirePlan,
+  resolvePlan,
   planNotFoundError,
   requirePlans,
 } from "../plans.js";
@@ -60,7 +60,7 @@ export function registerGetPlanSettingsTool(
       try {
         const data = await bridge.exportData();
         const plans = requirePlans(data);
-        const plan = requirePlan(plans, planIdentifier);
+        const plan = resolvePlan(plans, planIdentifier);
         if (!plan) throw planNotFoundError(plans, planIdentifier);
 
         const selected = section ? [section] : PLAN_SETTING_SECTIONS;

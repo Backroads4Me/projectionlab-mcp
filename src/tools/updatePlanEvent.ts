@@ -17,8 +17,8 @@ import { enumRefusalError } from "../dataModel.js";
 import { isSecretFieldName, redactSecrets } from "../redact.js";
 import {
   eventLabel,
-  requireEventIndex,
-  requirePlanIndex,
+  resolveEventIndex,
+  resolvePlanIndex,
   getEvents,
   planNotFoundError,
   requirePlans,
@@ -229,7 +229,7 @@ export function registerUpdatePlanEventTool(
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
 
-        const planIndex = requirePlanIndex(plans, planIdentifier);
+        const planIndex = resolvePlanIndex(plans, planIdentifier);
         if (planIndex === -1) throw planNotFoundError(plans, planIdentifier);
         const plan = plans[planIndex] as PlanObj;
 
@@ -243,7 +243,7 @@ export function registerUpdatePlanEventTool(
           );
         }
 
-        const eventIndex = requireEventIndex(events, eventIdentifier);
+        const eventIndex = resolveEventIndex(events, eventIdentifier);
         if (eventIndex === -1) {
           throw new ProjectionLabError(
             "INVALID_INPUT",

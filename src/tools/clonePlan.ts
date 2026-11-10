@@ -10,7 +10,7 @@ import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import {
-  requirePlanIndex,
+  resolvePlanIndex,
   getEvents,
   planNotFoundError,
   requirePlans,
@@ -74,7 +74,7 @@ export function registerClonePlanTool(
 
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
-        const sourceIndex = requirePlanIndex(plans, planIdentifier);
+        const sourceIndex = resolvePlanIndex(plans, planIdentifier);
         if (sourceIndex === -1) throw planNotFoundError(plans, planIdentifier);
         const source = plans[sourceIndex] as PlanObj;
         const clone = buildPlanClone(source, plans, newName);

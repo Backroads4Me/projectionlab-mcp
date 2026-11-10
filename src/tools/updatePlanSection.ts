@@ -21,7 +21,7 @@ import {
   assertSectionShape,
   diffFields,
   eventLabel,
-  requirePlanIndex,
+  resolvePlanIndex,
   getEvents,
   keyEvents,
   planNotFoundError,
@@ -189,7 +189,7 @@ export function registerUpdatePlanSectionTool(
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
 
-        const planIndex = requirePlanIndex(plans, planIdentifier);
+        const planIndex = resolvePlanIndex(plans, planIdentifier);
         if (planIndex === -1) throw planNotFoundError(plans, planIdentifier);
 
         const plan = plans[planIndex] as PlanObj;

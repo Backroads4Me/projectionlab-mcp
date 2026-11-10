@@ -80,11 +80,11 @@ export function restoreApiKeyFromPlaceholder<T>(value: T): T {
   return replaceInStrings(value, SNAPSHOT_KEY_PLACEHOLDER, config.apiKey);
 }
 
-/** True when any string in `value` still holds SNAPSHOT_KEY_PLACEHOLDER. */
-export function hasApiKeyPlaceholder(value: unknown): boolean {
+/** True when any string inside `value` contains `needle`. */
+export function containsText(value: unknown, needle: string): boolean {
   const seen = new WeakSet<object>();
   const walk = (v: unknown): boolean => {
-    if (typeof v === "string") return v.includes(SNAPSHOT_KEY_PLACEHOLDER);
+    if (typeof v === "string") return v.includes(needle);
     if (Array.isArray(v)) return v.some(walk);
     if (v && typeof v === "object") {
       if (seen.has(v as object)) return false;
@@ -94,6 +94,11 @@ export function hasApiKeyPlaceholder(value: unknown): boolean {
     return false;
   };
   return walk(value);
+}
+
+/** True when any string in `value` still holds SNAPSHOT_KEY_PLACEHOLDER. */
+export function hasApiKeyPlaceholder(value: unknown): boolean {
+  return containsText(value, SNAPSHOT_KEY_PLACEHOLDER);
 }
 
 export interface RedactOptions {

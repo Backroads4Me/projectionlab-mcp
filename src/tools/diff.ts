@@ -19,7 +19,7 @@ import {
 } from "../diff.js";
 import {
   PLAN_SECTIONS,
-  requirePlanIndex,
+  resolvePlanIndex,
   planNotFoundError,
   type PlanObj,
   type PlanSection,
@@ -204,11 +204,11 @@ export function registerDiffTool(
       pathsOnly: args.pathsOnly === true,
     });
     const { plans, readFrom } = await readPlansForPair(args.from);
-    const indexA = requirePlanIndex(plans, args.planA);
+    const indexA = resolvePlanIndex(plans, args.planA);
     if (indexA === -1) {
       throw planSideNotFoundError(plans, args.planA, "planA");
     }
-    const indexB = requirePlanIndex(plans, args.planB);
+    const indexB = resolvePlanIndex(plans, args.planB);
     if (indexB === -1) {
       throw planSideNotFoundError(plans, args.planB, "planB");
     }
@@ -498,8 +498,8 @@ export function registerDiffTool(
             );
           }
           const olderPlans = plansOf(fromSnapshot.data.plans);
-          const beforeIndex = requirePlanIndex(olderPlans, planIdentifier);
-          const afterIndex = requirePlanIndex(newerPlans, planIdentifier);
+          const beforeIndex = resolvePlanIndex(olderPlans, planIdentifier);
+          const afterIndex = resolvePlanIndex(newerPlans, planIdentifier);
           const match =
             beforeIndex !== -1
               ? olderPlans[beforeIndex]

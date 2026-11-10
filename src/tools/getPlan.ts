@@ -6,7 +6,7 @@ import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
 import { redactSecrets } from "../redact.js";
 import {
-  requirePlan,
+  resolvePlan,
   getEvents,
   planNotFoundError,
   requirePlans,
@@ -41,7 +41,7 @@ export function registerGetPlanTool(server: McpServer, bridge: Bridge) {
       try {
         const data = await bridge.exportData();
         const plans = requirePlans(data);
-        const plan = requirePlan(plans, planIdentifier);
+        const plan = resolvePlan(plans, planIdentifier);
         if (!plan) throw planNotFoundError(plans, planIdentifier);
 
         const header = {

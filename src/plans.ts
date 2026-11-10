@@ -71,7 +71,7 @@ function ambiguousMatchError(
  * INVALID_INPUT when several plans match the same way, so a read and the
  * following write can never target different plans.
  */
-export function requirePlanIndex(plans: unknown[], identifier: string): number {
+export function resolvePlanIndex(plans: unknown[], identifier: string): number {
   const outcome = matchOne(plans, identifier);
   if (outcome.kind === "ambiguous") {
     throw ambiguousMatchError("plan", identifier, plans, outcome.indexes);
@@ -80,12 +80,12 @@ export function requirePlanIndex(plans: unknown[], identifier: string): number {
 }
 
 /** The plan the identifier names, or null when nothing matches. Refuses
- * ambiguous identifiers the way requirePlanIndex does. */
-export function requirePlan(
+ * ambiguous identifiers the way resolvePlanIndex does. */
+export function resolvePlan(
   plans: unknown[],
   identifier: string,
 ): PlanObj | null {
-  const i = requirePlanIndex(plans, identifier);
+  const i = resolvePlanIndex(plans, identifier);
   return i === -1 ? null : (plans[i] as PlanObj);
 }
 
@@ -158,7 +158,7 @@ function eventId(event: unknown): string | undefined {
  * (case-insensitive), then name substring. -1 when nothing matches. Throws
  * INVALID_INPUT when several events match the same way.
  */
-export function requireEventIndex(
+export function resolveEventIndex(
   events: unknown[],
   identifier: string,
 ): number {

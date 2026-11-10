@@ -16,7 +16,7 @@ process.env.PL_SNAPSHOT_DIR = join(
 );
 process.env.LOG_LEVEL = "error";
 
-const { requirePlanIndex, requirePlan, requireEventIndex } = await import(
+const { resolvePlanIndex, resolvePlan, resolveEventIndex } = await import(
   "../dist/plans.js"
 );
 const { registerGetPlanTool } = await import("../dist/tools/getPlan.js");
@@ -48,9 +48,9 @@ function plans() {
 }
 
 test("a unique substring still resolves", () => {
-  assert.equal(requirePlanIndex(plans(), "work"), 2);
-  assert.equal(requirePlanIndex(plans(), "early retire"), 1);
-  assert.equal(requirePlan(plans(), "WORK FOREVER").id, "p3");
+  assert.equal(resolvePlanIndex(plans(), "work"), 2);
+  assert.equal(resolvePlanIndex(plans(), "early retire"), 1);
+  assert.equal(resolvePlan(plans(), "WORK FOREVER").id, "p3");
 });
 
 test("an exact name wins over a longer name that contains it", () => {
@@ -58,20 +58,20 @@ test("an exact name wins over a longer name that contains it", () => {
     { id: "a", name: "Retire at 55" },
     { id: "b", name: "Retire at 55 copy" },
   ];
-  assert.equal(requirePlanIndex(list, "Retire at 55"), 0);
-  assert.equal(requirePlanIndex(list, "retire at 55"), 0);
-  assert.equal(requirePlanIndex(list, "b"), 1);
+  assert.equal(resolvePlanIndex(list, "Retire at 55"), 0);
+  assert.equal(resolvePlanIndex(list, "retire at 55"), 0);
+  assert.equal(resolvePlanIndex(list, "b"), 1);
 });
 
 test("an exact ID resolves even when a name also matches", () => {
   const list = [{ id: "x", name: "whatever" }, { id: "name", name: "name" }];
-  assert.equal(requirePlanIndex(list, "name"), 1);
-  assert.equal(requirePlanIndex(list, "x"), 0);
+  assert.equal(resolvePlanIndex(list, "name"), 1);
+  assert.equal(resolvePlanIndex(list, "x"), 0);
 });
 
 test("an ambiguous substring is refused naming both candidates", () => {
   assert.throws(
-    () => requirePlanIndex(plans(), "bas"),
+    () => resolvePlanIndex(plans(), "bas"),
     (err) =>
       err.code === "INVALID_INPUT" &&
       /More than one plan matches "bas"/.test(err.message) &&
@@ -87,7 +87,7 @@ test("two items sharing an exact name are refused asking for the ID", () => {
     { id: "d2", name: "twin" },
   ];
   assert.throws(
-    () => requirePlanIndex(list, "Twin"),
+    () => resolvePlanIndex(list, "Twin"),
     (err) =>
       err.code === "INVALID_INPUT" &&
       /"Twin" \(ID: d1\)/.test(err.suggestion) &&
@@ -95,18 +95,18 @@ test("two items sharing an exact name are refused asking for the ID", () => {
   );
 });
 
-test("requireEventIndex resolves uniquely and refuses ambiguity", () => {
+test("resolveEventIndex resolves uniquely and refuses ambiguity", () => {
   const events = [
     { id: "e1", name: "Groceries" },
     { id: "e2", name: "Groceries (travel)" },
     { id: "e3", name: "Rent" },
   ];
-  assert.equal(requireEventIndex(events, "Rent"), 2);
-  assert.equal(requireEventIndex(events, "Groceries"), 0);
-  assert.equal(requireEventIndex(events, "e2"), 1);
-  assert.equal(requireEventIndex(events, "nope"), -1);
+  assert.equal(resolveEventIndex(events, "Rent"), 2);
+  assert.equal(resolveEventIndex(events, "Groceries"), 0);
+  assert.equal(resolveEventIndex(events, "e2"), 1);
+  assert.equal(resolveEventIndex(events, "nope"), -1);
   assert.throws(
-    () => requireEventIndex(events, "grocer"),
+    () => resolveEventIndex(events, "grocer"),
     (err) =>
       err.code === "INVALID_INPUT" &&
       /More than one event matches "grocer"/.test(err.message) &&

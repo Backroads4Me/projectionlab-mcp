@@ -10,8 +10,8 @@ import { redactSecrets } from "../redact.js";
 import {
   PLAN_SECTIONS,
   eventLabel,
-  requireEventIndex,
-  requirePlan,
+  resolveEventIndex,
+  resolvePlan,
   getEvents,
   planNotFoundError,
   requirePlans,
@@ -97,7 +97,7 @@ export function registerGetPlanSectionTool(
       try {
         const data = await bridge.exportData();
         const plans = requirePlans(data);
-        const plan = requirePlan(plans, planIdentifier);
+        const plan = resolvePlan(plans, planIdentifier);
         if (!plan) throw planNotFoundError(plans, planIdentifier);
 
         let sectionData = plan[section];
@@ -111,7 +111,7 @@ export function registerGetPlanSectionTool(
 
         if (eventIdentifier !== undefined) {
           const events = getEvents(sectionData);
-          const index = requireEventIndex(events, eventIdentifier);
+          const index = resolveEventIndex(events, eventIdentifier);
           const match = index === -1 ? undefined : events[index];
           if (!match) {
             throw new ProjectionLabError(

@@ -18,6 +18,7 @@ import { log } from "../logger.js";
 import { redactSecrets, findRedactedSecretPaths } from "../redact.js";
 import {
   PLAN_SECTIONS,
+  assertSectionShape,
   diffFields,
   eventLabel,
   findPlanIndex,
@@ -142,7 +143,7 @@ export function registerUpdatePlanSectionTool(
         sectionData: z
           .unknown()
           .describe(
-            "Complete replacement data for the section. Must be the full section object, not a partial patch.",
+            "Complete replacement data for the section. Must be the full section, not a partial patch, and in the section's current container shape: an array for milestones, an object with an events array for event sections, an object for variables, montecarlo and withdrawalStrategy. null, primitives and mismatched shapes are refused.",
           ),
         confirm: z
           .boolean()
@@ -193,6 +194,7 @@ export function registerUpdatePlanSectionTool(
 
         const plan = plans[planIndex] as PlanObj;
         const currentSection = plan[section];
+        assertSectionShape(section, String(plan.name), currentSection, sectionData);
         const diff = diffSection(currentSection, sectionData);
 
         if (!confirm) {

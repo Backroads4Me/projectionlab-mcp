@@ -281,7 +281,11 @@ only; supply exactly one of the patch inputs.
 Milestones: ProjectionLab always keeps a Retirement and a Life Expectancy
 milestone and disables deleting them in the app, so never remove either one.
 `projectionlab_update_plan_section` replaces the whole `milestones` array, so
-send both of them back in it.
+send both of them back in it. Its `sectionData` must also match the section's
+current container shape - an array for milestones, an object with an `events`
+array for event sections, an object for `variables`, `montecarlo` and
+`withdrawalStrategy` - or it is refused with `INVALID_INPUT`, dry runs
+included.
 
 To explore a what-if without touching the original, clone the plan first and
 patch the copy.

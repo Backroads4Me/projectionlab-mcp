@@ -174,6 +174,68 @@ function sectionIsEventBased(section: unknown): boolean {
   );
 }
 
+function isPlainSectionObject(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/** The container kind of a section value, or null when it is not a usable
+ * container (null, undefined, a primitive, or a non-plain object). */
+export function sectionContainer(
+  value: unknown,
+): "array" | "events" | "object" | null {
+  if (Array.isArray(value)) return "array";
+  if (isPlainSectionObject(value)) {
+    return Array.isArray((value as PlanObj).events) ? "events" : "object";
+  }
+  return null;
+}
+
+const CONTAINER_WORDS = {
+  array: "an array of events",
+  events: "an object with an events array",
+  object: "an object",
+} as const;
+
+/**
+ * Refuse sectionData whose container shape does not match the section as it
+ * stands: an omitted value would delete the section, and a container of the
+ * wrong kind would store data ProjectionLab cannot read. When the plan has no
+ * such section, only a plain object or an array is accepted.
+ */
+export function assertSectionShape(
+  section: string,
+  planName: string,
+  current: unknown,
+  incoming: unknown,
+): void {
+  const incomingShape = sectionContainer(incoming);
+  if (incomingShape === null) {
+    const got =
+      incoming === undefined
+        ? "missing"
+        : incoming === null
+          ? "null"
+          : Array.isArray(incoming)
+            ? "an array"
+            : typeof incoming;
+    throw new ProjectionLabError(
+      "INVALID_INPUT",
+      `sectionData for "${section}" of plan "${planName}" is ${got}; a section is ${CONTAINER_WORDS.array} or ${CONTAINER_WORDS.object}`,
+      "Send the complete section in the same shape projectionlab_get_plan_section returns: an array for milestones, an object with an events array for event sections, an object for settings-like sections",
+    );
+  }
+  const currentShape = sectionContainer(current);
+  if (currentShape !== null && currentShape !== incomingShape) {
+    throw new ProjectionLabError(
+      "INVALID_INPUT",
+      `sectionData for "${section}" of plan "${planName}" must be ${CONTAINER_WORDS[currentShape]}, because the section currently holds that shape; received ${CONTAINER_WORDS[incomingShape]}`,
+      `Read the section with projectionlab_get_plan_section and send the replacement in the same container shape`,
+    );
+  }
+}
+
 /**
  * True when every leaf value in `expected` is present and equal in `actual`.
  * Tolerates fields ProjectionLab adds on its own (e.g. generated IDs) but

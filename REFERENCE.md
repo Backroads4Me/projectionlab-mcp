@@ -146,6 +146,8 @@ Every write that replaces the plans array re-reads the plans just before writing
 
 Plan reads hide secret values: a secret-named field (`apiKey`, `token`, `password`, …) comes back as `[REDACTED]`. A payload for `projectionlab_update_plan_section` or any `restore_*` tool that still holds that sentinel under a secret-named key is refused with `INVALID_INPUT`, dry runs included, naming the offending dot paths. Supply the real value, or change single fields with `projectionlab_update_plan_event` or `projectionlab_update_plan_settings`, which patch by path and never round-trip hidden values.
 
+`projectionlab_update_plan_section` also refuses `sectionData` that does not match the section's current container shape (array for milestones, `{ events: [...] }` for event sections, plain object for `variables`, `montecarlo` and `withdrawalStrategy`), so a wrong or omitted payload can never delete a section or change its type.
+
 For a small assumptions or strategy change, first call
 `projectionlab_get_plan_settings` with the plan name. It returns the current
 `variables`, `montecarlo`, and `withdrawalStrategy` values as dot paths with

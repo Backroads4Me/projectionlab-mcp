@@ -294,6 +294,13 @@ refuses the last remaining plan. Its snapshot lets
 `projectionlab_restore_progress` and `projectionlab_restore_settings` replace
 an entire data area. Use them only when the user wants exactly that.
 
+Reads hide secret values: a secret-named field reads back as `[REDACTED]`. A
+`sectionData` or `restore_*` payload that still carries that sentinel under a
+secret-named key is refused with `INVALID_INPUT`, dry runs included, naming the
+paths. Type the real value or change single fields with
+`projectionlab_update_plan_event` or `projectionlab_update_plan_settings`,
+which patch by path and never round-trip hidden values.
+
 ### Change workflow
 
 Copy this checklist and work through it for each change:

@@ -5,9 +5,14 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
-import { ProjectionLabError, errorResult } from "../errors.js";
+import {
+  ProjectionLabError,
+  errorResult,
+  redactedSecretsError,
+} from "../errors.js";
 import { log } from "../logger.js";
 import { containsSubset } from "../plans.js";
+import { findRedactedSecretPaths } from "../redact.js";
 
 type Obj = Record<string, unknown>;
 
@@ -209,6 +214,10 @@ export function registerRestoreTools(
     async ({ currentFinances, confirm }) => {
       try {
         checkReadOnly();
+        const redactedPaths = findRedactedSecretPaths(currentFinances);
+        if (redactedPaths.length > 0) {
+          throw redactedSecretsError("currentFinances", redactedPaths);
+        }
 
         if (!confirm) {
           const topKeys = Object.keys(currentFinances);
@@ -298,6 +307,10 @@ export function registerRestoreTools(
     async ({ plans, confirm }) => {
       try {
         checkReadOnly();
+        const redactedPaths = findRedactedSecretPaths(plans);
+        if (redactedPaths.length > 0) {
+          throw redactedSecretsError("plans", redactedPaths);
+        }
 
         const exportData = await bridge.exportData({ fresh: true });
         const currentPlans = Array.isArray(exportData.plans) ? exportData.plans : [];
@@ -388,6 +401,10 @@ export function registerRestoreTools(
     async ({ progress, confirm }) => {
       try {
         checkReadOnly();
+        const redactedPaths = findRedactedSecretPaths(progress);
+        if (redactedPaths.length > 0) {
+          throw redactedSecretsError("progress", redactedPaths);
+        }
 
         if (!confirm) {
           return {
@@ -470,6 +487,10 @@ export function registerRestoreTools(
     async ({ settings, confirm }) => {
       try {
         checkReadOnly();
+        const redactedPaths = findRedactedSecretPaths(settings);
+        if (redactedPaths.length > 0) {
+          throw redactedSecretsError("settings", redactedPaths);
+        }
 
         if (!confirm) {
           return {

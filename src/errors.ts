@@ -51,6 +51,24 @@ export function toPlError(err: unknown): PlError {
   };
 }
 
+/**
+ * A whole-section or restore payload that still holds `[REDACTED]` under a
+ * secret-named key came from a redacted read; writing it back would store the
+ * sentinel in the user's data. Names the offending dot paths.
+ */
+export function redactedSecretsError(
+  payloadName: string,
+  paths: string[],
+): ProjectionLabError {
+  return new ProjectionLabError(
+    "INVALID_INPUT",
+    `${payloadName} contains redacted secret values at: ${paths.join(", ")}`,
+    "These values were hidden by the read that produced this payload, so it cannot be written back. " +
+      "Supply the real values, or change single fields with projectionlab_update_plan_event or " +
+      "projectionlab_update_plan_settings, which patch by path and never round-trip hidden values.",
+  );
+}
+
 export function errorResult(err: unknown) {
   // An error message can echo request data from the browser executor, so the
   // Plugin API key is scrubbed from it like any other tool output.

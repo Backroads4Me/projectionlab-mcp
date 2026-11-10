@@ -3,7 +3,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
-import { ProjectionLabError, errorResult } from "../errors.js";
+import {
+  ProjectionLabError,
+  errorResult,
+  redactedSecretsError,
+} from "../errors.js";
 import {
   assertPlanVersion,
   assertPlansUnchanged,
@@ -11,7 +15,7 @@ import {
 } from "../planVersion.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
-import { redactSecrets } from "../redact.js";
+import { redactSecrets, findRedactedSecretPaths } from "../redact.js";
 import {
   PLAN_SECTIONS,
   diffFields,
@@ -174,6 +178,11 @@ export function registerUpdatePlanSectionTool(
             "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
             "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
           );
+        }
+
+        const redactedPaths = findRedactedSecretPaths(sectionData);
+        if (redactedPaths.length > 0) {
+          throw redactedSecretsError("sectionData", redactedPaths);
         }
 
         const data = await bridge.exportData({ fresh: true });

@@ -13,6 +13,30 @@ export function isSecretFieldName(name: string): boolean {
   return SECRET_KEY_PATTERN.test(name);
 }
 
+/**
+ * Dot paths (array indices joined with dots) where a secret-named key holds
+ * exactly the `REDACTED` sentinel. A payload built from a redacted read
+ * carries these; writing one back would store the sentinel as real data.
+ */
+export function findRedactedSecretPaths(value: unknown, prefix = ""): string[] {
+  const paths: string[] = [];
+  const walk = (v: unknown, at: string): void => {
+    if (Array.isArray(v)) {
+      v.forEach((item, i) => walk(item, at ? `${at}.${i}` : String(i)));
+      return;
+    }
+    if (v && typeof v === "object") {
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        const path = at ? `${at}.${k}` : k;
+        if (isSecretFieldName(k) && val === REDACTED) paths.push(path);
+        else walk(val, path);
+      }
+    }
+  };
+  walk(value, prefix);
+  return paths;
+}
+
 export interface RedactOptions {
   /**
    * Also redact any field whose *name* looks like a secret (apiKey, token,

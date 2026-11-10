@@ -144,6 +144,8 @@ Write operations (`update_*`, `restore_*`, `clone_plan`, `delete_plan`) default 
 
 Every write that replaces the plans array re-reads the plans just before writing and refuses with `PLAN_CONFLICT` if any plan was added, removed, or saved in ProjectionLab since the tool read them, so an edit made in the ProjectionLab UI is never silently overwritten. `projectionlab_update_plan_section` also returns a `planVersion` in its dry run; pass it back as `expectedPlanVersion` when confirming to refuse the write if the plan was saved after the preview.
 
+Plan reads hide secret values: a secret-named field (`apiKey`, `token`, `password`, …) comes back as `[REDACTED]`. A payload for `projectionlab_update_plan_section` or any `restore_*` tool that still holds that sentinel under a secret-named key is refused with `INVALID_INPUT`, dry runs included, naming the offending dot paths. Supply the real value, or change single fields with `projectionlab_update_plan_event` or `projectionlab_update_plan_settings`, which patch by path and never round-trip hidden values.
+
 For a small assumptions or strategy change, first call
 `projectionlab_get_plan_settings` with the plan name. It returns the current
 `variables`, `montecarlo`, and `withdrawalStrategy` values as dot paths with

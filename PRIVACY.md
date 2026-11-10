@@ -48,6 +48,8 @@ The server also stores, on your computer only:
 
 - pre-change snapshots of plan data, with secrets removed, so a change can be
   undone (`~/.projectionlab-mcp/snapshots` unless you set `PL_SNAPSHOT_DIR`);
+- copies of results too large to return in the conversation, so you or the
+  assistant can read them from disk (`~/.projectionlab-mcp/exports`);
 - the shared token (`~/.projectionlab-mcp/ws-token`).
 
 ProjectionLab itself handles your account and data under its own privacy
@@ -58,8 +60,9 @@ under your own session.
 
 - Extension settings stay in your browser until you remove the extension,
   which deletes them.
-- The server deletes snapshots older than 30 days. You can delete them, or the
-  whole `~/.projectionlab-mcp/` folder, at any time.
+- The server deletes snapshots and large-result export files older than
+  30 days. You can delete them, or the whole `~/.projectionlab-mcp/` folder,
+  at any time.
 
 ## Permissions
 

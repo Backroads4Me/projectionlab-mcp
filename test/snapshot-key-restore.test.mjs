@@ -154,8 +154,15 @@ test("rollback refuses a placeholder snapshot when PL_API_KEY is unset", async (
     };
     const tools = new Map();
     registerSnapshotTools({ registerTool: (n, d, h) => tools.set(n, { definition: d, handler: h }) }, bridge, new SnapshotManager());
+    const dry = await tools.get("projectionlab_rollback").handler({ snapshotId: ${JSON.stringify(snapshot.id)} });
     const result = await tools.get("projectionlab_rollback").handler({ snapshotId: ${JSON.stringify(snapshot.id)}, confirm: true });
-    console.log(JSON.stringify({ isError: result.isError === true, payload: JSON.parse(result.content[0].text), writes: writes.length }));
+    console.log(JSON.stringify({
+      dryError: dry.isError === true,
+      dryPayload: JSON.parse(dry.content[0].text),
+      isError: result.isError === true,
+      payload: JSON.parse(result.content[0].text),
+      writes: writes.length,
+    }));
   `;
   const out = execFileSync(
     process.execPath,
@@ -165,6 +172,9 @@ test("rollback refuses a placeholder snapshot when PL_API_KEY is unset", async (
   const reported = JSON.parse(out.trim().split("\n").pop());
   assert.equal(reported.isError, true);
   assert.equal(reported.payload.error, "API_KEY_MISSING");
+  assert.equal(reported.dryError, true, "the dry run must refuse like the confirmed call");
+  assert.equal(reported.dryPayload.error, "API_KEY_MISSING");
+  assert.equal(reported.dryPayload.dryRun, undefined);
   assert.equal(reported.writes, 0);
 });
 
@@ -179,6 +189,13 @@ test("rollback refuses a pre-placeholder snapshot with [REDACTED] in settings", 
 
   const server = fakeServer();
   registerSnapshotTools(server, bridge, snapshots);
+  const dry = await server.tools
+    .get("projectionlab_rollback")
+    .handler({ snapshotId: legacy.id });
+  assert.equal(dry.isError, true, "the dry run must refuse like the confirmed call");
+  const dryOutput = JSON.parse(dry.content[0].text);
+  assert.equal(dryOutput.error, "INVALID_INPUT");
+  assert.equal(dryOutput.dryRun, undefined);
   const result = await server.tools
     .get("projectionlab_rollback")
     .handler({ snapshotId: legacy.id, confirm: true });

@@ -136,6 +136,28 @@ export function registerSnapshotTools(
           beforeTime,
         });
 
+        // A placeholder that SnapshotManager.get could not restore means no
+        // PL_API_KEY is configured; writing it would store the placeholder.
+        if (hasApiKeyPlaceholder(snapshot.data)) {
+          throw new ProjectionLabError(
+            "API_KEY_MISSING",
+            `Snapshot ${snapshot.id} holds the Plugin API key placeholder and PL_API_KEY is not set, so the real key cannot be restored`,
+            "Set PL_API_KEY to the Plugin API key the exported state carried, then roll back again",
+          );
+        }
+        // Snapshots written before the placeholder existed hold [REDACTED]
+        // where the key was; restoring that settings data would store the
+        // sentinel as if it were the value. These refusals run before the
+        // dry-run preview so the preview fails exactly like the confirmed
+        // call would.
+        if (containsText(snapshot.data.settings, REDACTED)) {
+          throw new ProjectionLabError(
+            "INVALID_INPUT",
+            `Snapshot ${snapshot.id} holds the ${REDACTED} marker inside its settings data, which would be restored in place of the Plugin API key`,
+            "Roll back to a snapshot created by the current server version, or replace settings with projectionlab_restore_settings using values typed in full",
+          );
+        }
+
         if (!confirm) {
           return {
             content: [
@@ -155,26 +177,6 @@ export function registerSnapshotTools(
               },
             ],
           };
-        }
-
-        // A placeholder that SnapshotManager.get could not restore means no
-        // PL_API_KEY is configured; writing it would store the placeholder.
-        if (hasApiKeyPlaceholder(snapshot.data)) {
-          throw new ProjectionLabError(
-            "API_KEY_MISSING",
-            `Snapshot ${snapshot.id} holds the Plugin API key placeholder and PL_API_KEY is not set, so the real key cannot be restored`,
-            "Set PL_API_KEY to the Plugin API key the exported state carried, then roll back again",
-          );
-        }
-        // Snapshots written before the placeholder existed hold [REDACTED]
-        // where the key was; restoring that settings data would store the
-        // sentinel as if it were the value.
-        if (containsText(snapshot.data.settings, REDACTED)) {
-          throw new ProjectionLabError(
-            "INVALID_INPUT",
-            `Snapshot ${snapshot.id} holds the ${REDACTED} marker inside its settings data, which would be restored in place of the Plugin API key`,
-            "Roll back to a snapshot created by the current server version, or replace settings with projectionlab_restore_settings using values typed in full",
-          );
         }
 
         // Snapshot current state before rolling back

@@ -7,7 +7,9 @@
  *
  * Transport: JSON text frames over ws://127.0.0.1:<port>. The browser side is
  * always the WebSocket client. The server accepts one active executor
- * connection at a time (newest wins).
+ * connection at a time. The incumbent keeps it: a second authenticated
+ * executor is refused with 4004 and retries until the incumbent goes away,
+ * unless it requests takeover or repeats the incumbent's instanceId.
  */
 
 /** Bumped on any breaking change to frame shapes or semantics. */
@@ -47,6 +49,21 @@ export interface HelloFrame {
   protocolVersion: number;
   /** "extension/<version>" or "bootstrap/<version>", the release version from package.json */
   executor: string;
+  /**
+   * Stable id of this executor installation (one UUID per extension
+   * installation, one per page load for the snippet). Additive: absent from
+   * 1.1.0 executors, and the server treats it as absent unless it is a
+   * string of 1 to 64 characters. A hello whose instanceId equals the
+   * connected executor's replaces that connection, so an executor is never
+   * locked out by its own stale socket.
+   */
+  instanceId?: string;
+  /**
+   * Ask the server to switch to this executor now, closing the incumbent
+   * with 4003. Additive: only exactly `true` counts. The extension sends it
+   * when the user presses Save on the options page.
+   */
+  takeover?: boolean;
 }
 
 /** Server acknowledges a valid hello. Requests only flow after this. */
@@ -109,6 +126,8 @@ export const CLOSE_CODES = {
   AUTH_FAILED: 4001,
   /** Protocol version mismatch. */
   VERSION_MISMATCH: 4002,
-  /** A newer executor connected and replaced this one. */
+  /** A takeover replaced this executor; retry slowly, the next attempt normally gets BUSY. */
   REPLACED: 4003,
+  /** Another executor holds the connection; retry later. */
+  BUSY: 4004,
 } as const;

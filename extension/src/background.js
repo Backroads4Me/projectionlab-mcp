@@ -88,7 +88,13 @@ async function connect(force = false) {
     let frame;
     try { frame = JSON.parse(event.data); }
     catch { void setStatus("connected", "Server sent invalid JSON."); return; }
-    if (frame.type === "helloAck") { retryMs = 2_000; void setStatus("authed"); }
+    if (frame.type === "helloAck") {
+      retryMs = 2_000;
+      // The options page shows a line when the two releases differ; an
+      // absent field (older server) stores "" so no stale value lingers.
+      void browser.storage.local.set({ serverVersion: frame.serverVersion ?? "" });
+      void setStatus("authed");
+    }
     else if (frame.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
     else if (frame.type === "request") void handleRequest(frame, ws);
   };

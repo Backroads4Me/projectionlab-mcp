@@ -9,7 +9,7 @@ h1{font-size:1.5rem;margin:0 0 .25rem}
 .panel{background:var(--panel);border-radius:8px;padding:.75rem 1rem;margin-bottom:1.5rem}
 .status{font-weight:600;margin:0}
 .status[data-state=authed]{color:var(--ok)}.status[data-state=connected]{color:var(--warn)}.status[data-state=disconnected]{color:var(--bad)}
-#hint{margin:.25rem 0 0}#error{color:var(--bad);margin:.25rem 0 0}#error:empty{display:none}
+#hint{margin:.25rem 0 0}#error{color:var(--bad);margin:.25rem 0 0}#error:empty{display:none}#update{color:var(--warn);margin:.25rem 0 0}#update:empty{display:none}
 label{display:block;margin:1rem 0 .25rem;font-weight:600}
 .help{color:var(--muted);font-size:.9rem;margin:.25rem 0 0}
 input[type=number],input[type=password],input[type=text]{box-sizing:border-box;padding:.55rem;width:100%;color:var(--fg);background:var(--bg);border:1px solid var(--border);border-radius:6px;font:inherit}
@@ -29,6 +29,7 @@ footer a{margin-right:1rem}
   <p class="status" id="status" data-state="disconnected">Not connected</p>
   <p id="hint"></p>
   <p id="error"></p>
+  <p id="update"></p>
 </div>
 
 <form id="settings">

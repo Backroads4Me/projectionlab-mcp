@@ -37,6 +37,65 @@ export function findRedactedSecretPaths(value: unknown, prefix = ""): string[] {
   return paths;
 }
 
+/**
+ * Snapshot-only stand-in for the Plugin API key. Unlike REDACTED it is
+ * restorable: snapshot files hold it in place of the key, and every read
+ * path (SnapshotManager.get) puts the current config.apiKey back, so a
+ * rollback writes the real key while no snapshot file ever holds it.
+ */
+export const SNAPSHOT_KEY_PLACEHOLDER = "[[PL_API_KEY]]";
+
+/** Deep copy with `find` replaced by `replace` inside every string. */
+function replaceInStrings<T>(value: T, find: string, replace: string): T {
+  if (!find) return value;
+  const seen = new WeakSet<object>();
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") return v.includes(find) ? v.split(find).join(replace) : v;
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") {
+      if (seen.has(v as object)) return v; // guard cycles
+      seen.add(v as object);
+      const out: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        out[k] = walk(val);
+      }
+      return out;
+    }
+    return v;
+  };
+  return walk(value) as T;
+}
+
+/** Snapshot-write direction: every occurrence of the Plugin API key inside
+ * any string becomes SNAPSHOT_KEY_PLACEHOLDER. */
+export function redactApiKeyToPlaceholder<T>(value: T): T {
+  return replaceInStrings(value, config.apiKey ?? "", SNAPSHOT_KEY_PLACEHOLDER);
+}
+
+/** Snapshot-read direction: SNAPSHOT_KEY_PLACEHOLDER inside any string
+ * becomes the current Plugin API key. Without a configured key the value is
+ * returned unchanged, so callers can detect placeholder-bound writes. */
+export function restoreApiKeyFromPlaceholder<T>(value: T): T {
+  if (!config.apiKey) return value;
+  return replaceInStrings(value, SNAPSHOT_KEY_PLACEHOLDER, config.apiKey);
+}
+
+/** True when any string in `value` still holds SNAPSHOT_KEY_PLACEHOLDER. */
+export function hasApiKeyPlaceholder(value: unknown): boolean {
+  const seen = new WeakSet<object>();
+  const walk = (v: unknown): boolean => {
+    if (typeof v === "string") return v.includes(SNAPSHOT_KEY_PLACEHOLDER);
+    if (Array.isArray(v)) return v.some(walk);
+    if (v && typeof v === "object") {
+      if (seen.has(v as object)) return false;
+      seen.add(v as object);
+      return Object.values(v as Record<string, unknown>).some(walk);
+    }
+    return false;
+  };
+  return walk(value);
+}
+
 export interface RedactOptions {
   /**
    * Also redact any field whose *name* looks like a secret (apiKey, token,

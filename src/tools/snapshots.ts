@@ -5,6 +5,7 @@ import type { Bridge } from "../bridge.js";
 import { resolveSnapshot, type SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
+import { REDACTED, hasApiKeyPlaceholder } from "../redact.js";
 import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { restoredSectionMatches } from "./restore.js";
@@ -14,6 +15,22 @@ function getExportSection(
   section: string,
 ): unknown {
   return section === "currentFinances" ? data.today : data[section];
+}
+
+/** True when any string inside `value` contains `needle`. */
+function containsText(value: unknown, needle: string): boolean {
+  const seen = new WeakSet<object>();
+  const walk = (v: unknown): boolean => {
+    if (typeof v === "string") return v.includes(needle);
+    if (Array.isArray(v)) return v.some(walk);
+    if (v && typeof v === "object") {
+      if (seen.has(v as object)) return false;
+      seen.add(v as object);
+      return Object.values(v as Record<string, unknown>).some(walk);
+    }
+    return false;
+  };
+  return walk(value);
 }
 
 export function registerSnapshotTools(
@@ -138,6 +155,26 @@ export function registerSnapshotTools(
               },
             ],
           };
+        }
+
+        // A placeholder that SnapshotManager.get could not restore means no
+        // PL_API_KEY is configured; writing it would store the placeholder.
+        if (hasApiKeyPlaceholder(snapshot.data)) {
+          throw new ProjectionLabError(
+            "API_KEY_MISSING",
+            `Snapshot ${snapshot.id} holds the Plugin API key placeholder and PL_API_KEY is not set, so the real key cannot be restored`,
+            "Set PL_API_KEY to the Plugin API key the exported state carried, then roll back again",
+          );
+        }
+        // Snapshots written before the placeholder existed hold [REDACTED]
+        // where the key was; restoring that settings data would store the
+        // sentinel as if it were the value.
+        if (containsText(snapshot.data.settings, REDACTED)) {
+          throw new ProjectionLabError(
+            "INVALID_INPUT",
+            `Snapshot ${snapshot.id} holds the ${REDACTED} marker inside its settings data, which would be restored in place of the Plugin API key`,
+            "Roll back to a snapshot created by the current server version, or replace settings with projectionlab_restore_settings using values typed in full",
+          );
         }
 
         // Snapshot current state before rolling back

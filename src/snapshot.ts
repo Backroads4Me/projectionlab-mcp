@@ -3,7 +3,7 @@ import { join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { ProjectionLabError } from "./errors.js";
-import { redactSecrets } from "./redact.js";
+import { redactApiKeyToPlaceholder, restoreApiKeyFromPlaceholder } from "./redact.js";
 import { secureMkdir, secureWriteFile } from "./secureFs.js";
 import { log } from "./logger.js";
 import type { Snapshot } from "./types/projectionlab.js";
@@ -131,9 +131,11 @@ export class SnapshotManager {
       timestamp: new Date().toISOString(),
       operation,
       sections,
-      // Value-only redaction: scrubs the literal API key if it ever appears in
-      // the state without altering any financial data, so rollback stays exact.
-      data: redactSecrets(data),
+      // The Plugin API key is stored as SNAPSHOT_KEY_PLACEHOLDER, so the file
+      // on disk never holds it; SnapshotManager.get puts the current
+      // config.apiKey back on every read, which keeps a rollback exact while
+      // the key itself stays out of the snapshot files.
+      data: redactApiKeyToPlaceholder(data),
     };
 
     const filePath = join(this.dir, `${snapshot.id}.json`);
@@ -204,7 +206,11 @@ export class SnapshotManager {
     }
     try {
       const raw = await readFile(filePath, "utf-8");
-      return JSON.parse(raw) as Snapshot;
+      const snapshot = JSON.parse(raw) as Snapshot;
+      // Undo the on-disk key placeholder (see create) so every reader sees
+      // the real key wherever the exported state carried it.
+      snapshot.data = restoreApiKeyFromPlaceholder(snapshot.data);
+      return snapshot;
     } catch {
       throw new ProjectionLabError(
         "SNAPSHOT_NOT_FOUND",

@@ -276,11 +276,6 @@ export function assertSectionShape(
 }
 
 /**
- * True when every leaf value in `expected` is present and equal in `actual`.
- * Tolerates fields ProjectionLab adds on its own (e.g. generated IDs) but
- * catches dropped or changed values. Arrays must match in length and order.
- */
-/**
  * True when every value in `expected` is present and equal in `actual`.
  * Objects may carry extra keys; arrays must match in length and order.
  */

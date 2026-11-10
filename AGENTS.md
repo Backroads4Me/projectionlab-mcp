@@ -27,7 +27,7 @@ The extension has its own package; check it from `extension/`:
 cd extension
 npm ci
 npm run check                     # syntax checks + node --test over test/*.test.mjs
-npm run build                     # esbuild -> dist/chrome, dist/firefox
+npm run build                     # esbuild -> dist/chromium, dist/firefox
 ```
 
 The browser side connects via the extension (see `extension/README.md`) or the

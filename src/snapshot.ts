@@ -1,4 +1,4 @@
-import { readdir, readFile, unlink } from "node:fs/promises";
+import { readdir, readFile, stat, unlink } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
@@ -107,11 +107,12 @@ export class SnapshotManager {
     for (const file of files) {
       if (!file.endsWith(".json")) continue;
       try {
-        const raw = await readFile(join(this.dir, file), "utf-8");
-        const snap = JSON.parse(raw) as Snapshot;
-        if (new Date(snap.timestamp).getTime() < cutoff) {
-          await unlink(join(this.dir, file));
-          log.info("snapshot", `Pruned expired snapshot ${snap.id}`);
+        // mtime is the write time; snapshot files are never rewritten.
+        const filePath = join(this.dir, file);
+        const { mtimeMs } = await stat(filePath);
+        if (mtimeMs < cutoff) {
+          await unlink(filePath);
+          log.info("snapshot", `Pruned expired snapshot ${file}`);
         }
       } catch {
         // Skip unreadable files

@@ -25,8 +25,9 @@ process.env.LOG_LEVEL = "error";
 const { ExtensionBridge } = await import("../dist/extensionBridge.js");
 const { PROTOCOL_VERSION, CLOSE_CODES } = await import("../dist/types/wire.js");
 
-/** Minimal scriptable executor: answers requests via the supplied handler. */
-function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, executor = "fake/1.0", handler } = {}) {
+/** Minimal scriptable executor: answers requests via the supplied handler.
+ * `hello` adds extra hello fields (takeover, instanceId). */
+function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, executor = "fake/1.0", handler, hello = {} } = {}) {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   const events = { closed: null, acked: false };
   const done = new Promise((resolve) => {
@@ -36,7 +37,7 @@ function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, ex
     });
   });
   ws.on("open", () => {
-    ws.send(JSON.stringify({ type: "hello", token, protocolVersion, executor }));
+    ws.send(JSON.stringify({ type: "hello", token, protocolVersion, executor, ...hello }));
   });
   ws.on("message", (raw) => {
     const frame = JSON.parse(String(raw));
@@ -162,10 +163,10 @@ test("executor wire errors map to ProjectionLabError codes", async () => {
   await exec.done;
 });
 
-test("newest executor wins; old socket closed with REPLACED", async () => {
+test("a takeover replaces the incumbent; old socket closed with REPLACED", async () => {
   const first = connectExecutor({ handler: healthyHandler });
   await first.ready;
-  const second = connectExecutor({ handler: healthyHandler });
+  const second = connectExecutor({ handler: healthyHandler, hello: { takeover: true } });
   await second.ready;
   const { closed } = await first.done;
   assert.equal(closed, CLOSE_CODES.REPLACED);

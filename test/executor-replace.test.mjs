@@ -31,8 +31,10 @@ after(() => bridge.close());
 /**
  * A fake executor over a real WebSocket. It answers pings; exportData
  * replies with `payload`, or is ignored when payload is "ignore".
+ * `extra` adds hello fields (takeover, instanceId); a live incumbent is only
+ * replaced when the hello asks for takeover or repeats its instance id.
  */
-function executor(label, payload) {
+function executor(label, payload, extra = {}) {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   const requests = [];
   let acked;
@@ -44,6 +46,7 @@ function executor(label, payload) {
         token: TOKEN,
         protocolVersion: PROTOCOL_VERSION,
         executor: label,
+        ...extra,
       }),
     ),
   );
@@ -98,7 +101,7 @@ test("a request on the replaced executor rejects promptly with EXTENSION_NOT_CON
   );
   await waitFor(() => hanging.sawRequest("exportData"), "the request to reach executor 1");
 
-  const replacement = executor("fake/replacement", { marker: "second" });
+  const replacement = executor("fake/replacement", { marker: "second" }, { takeover: true });
   await replacement.acked;
 
   const settled = await Promise.race([
@@ -123,7 +126,7 @@ test("a replaced executor's cached export is not served by the new one", async (
   // The cache holds X now; a plain read is served from it.
   assert.equal((await bridge.exportData()).marker, "X");
 
-  const second = executor("fake/second", { marker: "Y" });
+  const second = executor("fake/second", { marker: "Y" }, { takeover: true });
   await second.acked;
 
   assert.equal(

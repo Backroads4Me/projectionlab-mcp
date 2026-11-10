@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import { buildBootstrapSnippet } from "./bootstrap.js";
 import type { Bridge, ConnectionStatus } from "./bridge.js";
 import { config, USER_ENV_FILE } from "./config.js";
@@ -80,6 +80,7 @@ export class ExtensionBridge implements Bridge {
   private wss: WebSocketServer | null = null;
   private conn: WebSocket | null = null;
   private connExecutor = "";
+  private connInstanceId = "";
   private readonly pending = new Map<string, Pending>();
   private nextId = 1;
   private heartbeat: NodeJS.Timeout | null = null;
@@ -222,12 +223,53 @@ export class ExtensionBridge implements Bridge {
         ws.close(CLOSE_CODES.VERSION_MISMATCH, "protocol version mismatch");
         return;
       }
-      this.adopt(ws, hello.executor);
+      // Only authenticated hellos reach the connection decision, so an
+      // unauthenticated client can neither displace an executor nor learn
+      // that one is connected.
+      const instanceId =
+        typeof hello.instanceId === "string" &&
+        hello.instanceId.length >= 1 &&
+        hello.instanceId.length <= 64
+          ? hello.instanceId
+          : "";
+      this.admit(ws, hello.executor, instanceId, hello.takeover === true);
     });
   }
 
-  /** Promote an authenticated socket to the active connection (newest wins). */
-  private adopt(ws: WebSocket, executor: string): void {
+  /**
+   * Decide whether an authenticated hello becomes the active executor. The
+   * incumbent keeps the connection: a newcomer is refused with BUSY unless it
+   * requests takeover, or repeats the incumbent's instance id (an executor
+   * must never be locked out by its own stale socket). An incumbent whose
+   * socket is not open is dead and gets dropped first; the heartbeat is what
+   * clears a crashed incumbent that still looks open.
+   */
+  private admit(
+    ws: WebSocket,
+    executor: string,
+    instanceId: string,
+    takeover: boolean,
+  ): void {
+    const incumbent = this.conn;
+    if (!incumbent || incumbent.readyState !== WebSocket.OPEN) {
+      if (incumbent) this.dropConnection("dropping a dead executor connection");
+      this.adopt(ws, executor, instanceId);
+      return;
+    }
+    if (takeover || (instanceId !== "" && instanceId === this.connInstanceId)) {
+      this.adopt(ws, executor, instanceId);
+      return;
+    }
+    log.info(
+      "extension",
+      `Refusing ${executor} with BUSY: ${this.connExecutor} holds the connection`,
+    );
+    ws.close(CLOSE_CODES.BUSY, "another executor holds the connection");
+  }
+
+  /** Promote an authenticated socket to the active connection. Replacing a
+   * live incumbent (takeover or same instance id) closes it with 4003. */
+  private adopt(ws: WebSocket, executor: string, instanceId: string): void {
     if (this.conn && this.conn !== ws) {
       log.info("extension", `Replacing ${this.connExecutor} with ${executor}`);
       this.conn.close(CLOSE_CODES.REPLACED, "replaced by newer connection");
@@ -242,6 +284,7 @@ export class ExtensionBridge implements Bridge {
     }
     this.conn = ws;
     this.connExecutor = executor;
+    this.connInstanceId = instanceId;
     log.info("extension", `Executor connected: ${executor}`);
     ws.send(JSON.stringify({ type: "helloAck", protocolVersion: PROTOCOL_VERSION, serverVersion: VERSION }));
 
@@ -365,6 +408,7 @@ export class ExtensionBridge implements Bridge {
     }
     this.conn = null;
     this.connExecutor = "";
+    this.connInstanceId = "";
     this.awaitingPong = false;
     this.exportCache = null;
     if (this.heartbeat) {

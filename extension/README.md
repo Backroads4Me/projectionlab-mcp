@@ -47,4 +47,4 @@ Configure that port and token, log in to ProjectionLab, and watch the harness pr
 
 The manifest requests `scripting`, `storage`, and `alarms`, plus the `https://app.projectionlab.com/*` host permission. The alarm wakes a disconnected MV3 worker once per minute so it can reconnect when the MCP server starts later. When another browser holds the server's single executor slot, this one shows **Standing by** and retries at least 30 seconds apart, connecting on its own when that browser goes away; pressing Save on the options page takes the slot over deliberately.
 
-Store listing text, permission justifications, data disclosures, and the AMO source-review build instructions are in [`STORE.md`](STORE.md). The privacy policy is [`PRIVACY.md`](../PRIVACY.md).
+The privacy policy is [`PRIVACY.md`](../PRIVACY.md).

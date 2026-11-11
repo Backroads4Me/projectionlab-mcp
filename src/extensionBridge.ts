@@ -43,7 +43,7 @@ const MAX_PRE_HELLO_BYTES = 64 * 1024;
 const PORT_RETRY_MS = 3_000;
 const EXTENSION_HELP =
   "Install the MCP Bridge for ProjectionLab extension from the Chrome Web Store " +
-  "(https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf) " +
+  "(https://chromewebstore.google.com/detail/mcp-bridge-for-projection/njgjmcihabchffonldcgfjiocjalpoaf) " +
   "or Firefox Add-ons (https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/); " +
   "the store keeps it up to date. Then enter the token from " +
   "~/.projectionlab-mcp/ws-token on its options page, and open https://app.projectionlab.com. " +

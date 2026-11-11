@@ -69,7 +69,7 @@ Recommended, persistent: the **MCP Bridge for ProjectionLab** browser extension.
 
 1. Have the user add **MCP Bridge for ProjectionLab** from their browser's
    store; you cannot click the install button for them. Chrome, Edge or Brave:
-   https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf
+   https://chromewebstore.google.com/detail/mcp-bridge-for-projection/njgjmcihabchffonldcgfjiocjalpoaf
    then **Add to Chrome** (Edge asks once to allow extensions from other
    stores). Firefox 140+:
    https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/

@@ -7,7 +7,7 @@ This Manifest V3 extension connects a normal ProjectionLab browser tab to the lo
 Most people install from their browser's store. The store keeps the extension
 up to date, and an installed copy survives a browser restart:
 
-- **Chrome, Edge, or Brave:** [Chrome Web Store](https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf), then **Add to Chrome**. Edge asks once whether to allow extensions from other stores.
+- **Chrome, Edge, or Brave:** [Chrome Web Store](https://chromewebstore.google.com/detail/mcp-bridge-for-projection/njgjmcihabchffonldcgfjiocjalpoaf), then **Add to Chrome**. Edge asks once whether to allow extensions from other stores.
 - **Firefox 140+:** [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/), then **Install Add-on**.
 
 Then open the options page (click the toolbar icon) and enter the WebSocket

@@ -12,7 +12,7 @@ const SERVER_FIX =
 
 const EXTENSION_FIX =
   "The browser's extension store normally updates it on its own: MCP Bridge for ProjectionLab is on " +
-  "the Chrome Web Store (https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf) " +
+  "the Chrome Web Store (https://chromewebstore.google.com/detail/mcp-bridge-for-projection/njgjmcihabchffonldcgfjiocjalpoaf) " +
   "and Firefox Add-ons (https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/). " +
   "Ask the user to check for updates on the browser's extensions page, or to install it from the " +
   "store above if it was never installed there. If an older unpacked or temporary copy was loaded manually, " +

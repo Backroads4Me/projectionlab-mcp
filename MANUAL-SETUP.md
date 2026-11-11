@@ -45,7 +45,7 @@ from your browser's store. There is nothing to download, and the store keeps
 the extension up to date.
 
 - **Chrome, Edge, or Brave:** open the
-  [Chrome Web Store listing](https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf)
+  [Chrome Web Store listing](https://chromewebstore.google.com/detail/mcp-bridge-for-projection/njgjmcihabchffonldcgfjiocjalpoaf)
   and choose **Add to Chrome**. Edge asks once whether to allow extensions
   from other stores.
 - **Firefox:** open the

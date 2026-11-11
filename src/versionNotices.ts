@@ -9,10 +9,11 @@ const SERVER_FIX =
   "if the old version is still reported afterwards, set the server args in the host " +
   "configuration to -y projectionlab-mcp@latest.";
 const EXTENSION_FIX =
-  "To update it, download the zip for the browser from " +
-  "https://github.com/Backroads4Me/projectionlab-mcp/releases/latest, replace the unpacked " +
-  "extension folder with its contents, and reload the extension from the browser's extensions " +
-  "page. Settings are kept.";
+  "The browser's extension store normally updates it on its own: MCP Bridge for ProjectionLab is on " +
+  "the Chrome Web Store (https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf) " +
+  "and Firefox Add-ons (https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/). " +
+  "Ask the user to check for updates on the browser's extensions page, or to install it from the " +
+  "store above if it was never installed there. Settings are kept.";
 
 export interface VersionInfo {
   /** The server's own release. */

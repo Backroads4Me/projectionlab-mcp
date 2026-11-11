@@ -1,8 +1,21 @@
 # MCP Bridge for ProjectionLab extension
 
-This unpacked Manifest V3 extension connects a normal ProjectionLab browser tab to the localhost WebSocket listener provided by `projectionlab-mcp`. It never stores or logs a ProjectionLab API key or exported financial data.
+This Manifest V3 extension connects a normal ProjectionLab browser tab to the localhost WebSocket listener provided by `projectionlab-mcp`. It never stores or logs a ProjectionLab API key or exported financial data.
 
-## Build and load
+## Install
+
+Most people install from their browser's store. The store keeps the extension
+up to date, and an installed copy survives a browser restart:
+
+- **Chrome, Edge, or Brave:** [Chrome Web Store](https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf), then **Add to Chrome**. Edge asks once whether to allow extensions from other stores.
+- **Firefox 140+:** [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/), then **Install Add-on**.
+
+Then open the options page (click the toolbar icon) and enter the WebSocket
+port and the shared token, as described below. Install from one source only:
+an unpacked copy alongside a store copy gives the browser two extensions
+competing for the server's single connection, and the loser stands by.
+
+## Build and load (development)
 
 Requires Node.js 20 or newer.
 

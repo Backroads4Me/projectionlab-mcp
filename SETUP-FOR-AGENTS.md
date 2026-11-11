@@ -25,10 +25,10 @@ The config location varies by host; see [Adding the server to your MCP host](htt
 
 **4. Connect the browser.** The server reaches ProjectionLab through the user's own browser. Pick the path that fits:
 
-- **Recommended: the browser extension** (persists across restarts). Download the zip for the user's browser from the [latest release](https://github.com/Backroads4Me/projectionlab-mcp/releases/latest) and unzip it. Then walk the user through loading it (this is a click-by-click browser task; describe exactly what they'll see):
-  - **Chrome / Edge / Brave:** open `chrome://extensions`, turn on "Developer mode" (top-right), click "Load unpacked", and choose the unzipped Chromium folder.
-  - **Firefox (140+):** open `about:debugging` → "This Firefox" → "Load Temporary Add-on", and choose `manifest.json` in the unzipped Firefox folder. Firefox removes temporary add-ons when it restarts.
-  Then have them open the extension's **options page** and enter the WebSocket **port** (default `8788`) and the **shared token** from `~/.projectionlab-mcp/ws-token`.
+- **Recommended: the browser extension** (persists across restarts, and the store keeps it updated). Have the user add **MCP Bridge for ProjectionLab** from their browser's store. Opening the page is yours to do; clicking the install button is theirs:
+  - **Chrome / Edge / Brave:** the [Chrome Web Store listing](https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf) → **Add to Chrome**. Edge asks once whether to allow extensions from other stores.
+  - **Firefox (140+):** the [Firefox Add-ons listing](https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/) → **Install Add-on**.
+  Then have them open the extension's **options page** (click its toolbar icon) and enter the WebSocket **port** (default `8788`) and the **shared token** from `~/.projectionlab-mcp/ws-token`.
 
 - **Quick alternative: no install.** Call the `projectionlab_get_bootstrap` tool, then have the user paste the returned snippet into their ProjectionLab tab's developer console (F12 → Console). It works the same way but must be re-pasted if they reload the page. Good for a first test drive.
 

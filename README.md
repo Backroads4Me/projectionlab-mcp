@@ -26,10 +26,10 @@ Paste this into your AI assistant:
 > package) for me. Follow the setup instructions at
 > `https://github.com/Backroads4Me/projectionlab-mcp/blob/main/SETUP-FOR-AGENTS.md`.
 > I'm not technical, so walk me through anything you need from me (like my
-> ProjectionLab Plugin API key and loading the browser extension) one step at
+> ProjectionLab Plugin API key and installing the browser extension) one step at
 > a time. Keep it in read-only mode until I say otherwise.
 
-Your assistant installs the server, asks for your ProjectionLab Plugin API key, and walks you through a couple of short steps in your browser: loading a small helper extension and entering a connection code in its settings. When it's done, start asking questions about your plan.
+Your assistant installs the server, asks for your ProjectionLab Plugin API key, and walks you through a couple of short steps in your browser: adding a small helper extension from your browser's extension store and entering a connection code in its settings. When it's done, start asking questions about your plan.
 
 If anything gets stuck, tell your assistant what you see on screen; it can troubleshoot from there.
 

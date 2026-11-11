@@ -41,13 +41,14 @@ const MAX_PRE_HELLO_BYTES = 64 * 1024;
 /** How often to retry the WebSocket port while another instance holds it. */
 const PORT_RETRY_MS = 3_000;
 const EXTENSION_HELP =
-  "Install the MCP Bridge for ProjectionLab extension (zips on the GitHub Releases page of " +
-  "https://github.com/Backroads4Me/projectionlab-mcp), enter the token from " +
+  "Install the MCP Bridge for ProjectionLab extension from the Chrome Web Store " +
+  "(https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf) " +
+  "or Firefox Add-ons (https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/); " +
+  "the store keeps it up to date. Then enter the token from " +
   "~/.projectionlab-mcp/ws-token on its options page, and open https://app.projectionlab.com. " +
   "Or call projectionlab_get_bootstrap and paste the snippet into the ProjectionLab tab's console. " +
-  "If this worked before in Firefox, Firefox removed the temporary add-on when it restarted: load " +
-  "it again from about:debugging (This Firefox > Load Temporary Add-on > manifest.json in the same " +
-  "folder) and re-enter the port and token if its options page is empty.";
+  "Install the extension from one source only: an unpacked copy alongside a store copy leaves the " +
+  "browser with two extensions competing for the server's single connection, and one of them stands by.";
 const REQUEST_TIMEOUT_MS = 60_000;
 
 interface Pending {

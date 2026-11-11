@@ -40,7 +40,16 @@ test("rule 2: the extension lags the server", () => {
   assert.equal(notices.length, 1);
   assert.match(notices[0], /extension is version 1\.3\.0/);
   assert.match(notices[0], /older than the server \(1\.4\.0\)/);
-  assert.match(notices[0], /releases\/latest/);
+  assert.match(notices[0], /Chrome Web Store/);
+  assert.match(
+    notices[0],
+    /chromewebstore\.google\.com\/detail\/mcp-bridge-for-projectionl\/njgjmcihabchffonldcgfjiocjalpoaf/,
+  );
+  assert.match(
+    notices[0],
+    /addons\.mozilla\.org\/en-US\/firefox\/addon\/mcp-bridge-for-projectionlab/,
+  );
+  assert.match(notices[0], /check for updates/);
   assert.match(notices[0], /Settings are kept\./);
 });
 

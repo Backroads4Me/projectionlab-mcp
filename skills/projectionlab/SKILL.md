@@ -33,16 +33,20 @@ because of them. The two fixes: an out-of-date server is updated by fully
 quitting and reopening the AI assistant's host so `npx` fetches the new
 release (if it still reports the old version, set the server args to
 `["-y", "projectionlab-mcp@latest"]`); an out-of-date extension is updated by
-downloading the browser zip from
-`https://github.com/Backroads4Me/projectionlab-mcp/releases/latest`,
-replacing the unpacked extension folder with its contents, and reloading the
-extension from the browser's extensions page (settings are kept).
+the browser's extension store, which updates it on its own: MCP Bridge for
+ProjectionLab is on the Chrome Web Store
+(`https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf`)
+and Firefox Add-ons
+(`https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/`).
+Ask the user to check for updates on the browser's extensions page, or to
+install it from the store above if it was never installed there (settings are
+kept).
 
 | Failing item | What it means | What to do with the user |
 |---|---|---|
 | `API_KEY_MISSING` in `errors` | The server has no Plugin API key | See "Setting the API key" |
 | `browser: false`, port held by another instance | Another agent on this machine runs the server and has the extension | Wait for that agent to exit (this server takes over within about a minute), or give this one its own `PL_WS_PORT` and point the extension at it |
-| `browser: false` otherwise | No extension or snippet is connected | See "Connecting the browser"; on Firefox after a restart, only reload the add-on |
+| `browser: false` otherwise | No extension or snippet is connected | See "Connecting the browser" |
 | `pageLoaded: false` | No ProjectionLab tab is open | Ask the user to open https://app.projectionlab.com and log in |
 | `apiAvailable: false` | Plugins are off, or the user is logged out | ProjectionLab -> Account Settings -> Plugins -> enable plugins |
 | `apiKeyValid: false` | The key does not match the account | Ask the user to copy the key again from Account Settings -> Plugins |
@@ -65,13 +69,16 @@ If you write the file for the user, do not repeat the value back.
 
 Recommended, persistent: the **MCP Bridge for ProjectionLab** browser extension.
 
-1. Download the zip for the user's browser (`chromium` or `firefox`) from
-   https://github.com/Backroads4Me/projectionlab-mcp/releases/latest and unzip
-   it.
-2. Chrome, Edge or Brave: open `chrome://extensions`, enable **Developer mode**,
-   choose **Load unpacked**, and select the unzipped folder. Firefox 140+: open
-   `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**,
-   and select `manifest.json` (Firefox removes temporary add-ons on restart).
+1. Have the user add **MCP Bridge for ProjectionLab** from their browser's
+   store; you cannot click the install button for them. Chrome, Edge or Brave:
+   https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf
+   then **Add to Chrome** (Edge asks once to allow extensions from other
+   stores). Firefox 140+:
+   https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/
+   then **Install Add-on**. The store keeps the extension updated.
+2. Install it from one source only. An unpacked copy alongside a store copy
+   gives the browser two extensions competing for the server's single
+   connection, and the loser stands by.
 3. Open the extension's options page (click its toolbar icon). Enter the port
    (`8788` unless `PL_WS_PORT` is set) and the token from
    `~/.projectionlab-mcp/ws-token`, which the server creates on first start.
@@ -83,11 +90,6 @@ If another browser is already connected to the server, the status reads
 **Standing by** instead: that extension connects on its own when the other
 browser disconnects, and pressing Save on the options page makes this
 browser the active one now.
-
-A Firefox user whose setup worked before only needs step 2 again after
-restarting Firefox: load `manifest.json` from the same folder, and re-enter
-the port and token if the options page is empty. Do not repeat the rest of
-the setup.
 
 Quick, no install: call `projectionlab_get_bootstrap` and have the user paste
 the returned snippet into the ProjectionLab tab's developer console (F12 ->

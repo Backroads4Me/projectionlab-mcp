@@ -5,6 +5,25 @@ This file is the material for listing the extension on the Chrome Web Store
 data-use answers, assets to capture, and AMO source-review instructions. The
 privacy policy is [`PRIVACY.md`](../PRIVACY.md) at the repository root.
 
+## Published listings
+
+Both listings are live, published from the `v1.0.1` tag:
+
+| Store | URL | Item id / guid | Published version |
+| --- | --- | --- | --- |
+| Chrome Web Store | https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf | `njgjmcihabchffonldcgfjiocjalpoaf` | 1.0.1 |
+| Firefox Add-ons (AMO) | https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/ | `projectionlab-mcp-bridge@backroads4me.github.io` | 1.0.1 |
+
+A store updates an installed copy on its own, so a release reaches users only
+once the store has approved the uploaded build. Every new version is reviewed
+again and a version number can never be reused, so a changed build needs a
+higher version in the root `package.json` before it can be packaged.
+
+Upload `npm run package` output for the release you want shipped:
+`dist/projectionlab-mcp-chromium-<version>.zip` to Chrome (Edge accepts the
+same zip) and `dist/projectionlab-mcp-firefox-<version>.zip` to AMO, with the
+`git archive` source zip below for the AMO source review.
+
 Policy references, as of November 2026:
 
 - CWS: [Program policies](https://developer.chrome.com/docs/webstore/program-policies/policies),

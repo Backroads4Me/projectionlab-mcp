@@ -39,20 +39,20 @@ For Claude Code and other assistants, see
 **4. Restart your assistant.** It starts the server, which creates the browser
 connection token on first start at `~/.projectionlab-mcp/ws-token`.
 
-**5. Install the browser extension.** Download the zip for your browser from
-the [latest release](https://github.com/Backroads4Me/projectionlab-mcp/releases/latest)
-and unzip it.
+**5. Install the browser extension.** Add **MCP Bridge for ProjectionLab**
+from your browser's store. There is nothing to download, and the store keeps
+the extension up to date.
 
-- **Chrome, Edge, or Brave:** open `chrome://extensions`, turn on "Developer
-  mode" (top right), click "Load unpacked", and choose the unzipped Chromium
-  folder.
-- **Firefox:** open `about:debugging` → "This Firefox" → "Load Temporary
-  Add-on", and choose `manifest.json` in the unzipped Firefox folder. Firefox
-  removes temporary add-ons when it restarts, so load it again after a
-  restart.
+- **Chrome, Edge, or Brave:** open the
+  [Chrome Web Store listing](https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf)
+  and choose **Add to Chrome**. Edge asks once whether to allow extensions
+  from other stores.
+- **Firefox:** open the
+  [Firefox Add-ons listing](https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/)
+  and choose **Install Add-on**.
 
-Open the extension's options page and enter port `8788` and the token from
-`~/.projectionlab-mcp/ws-token`.
+Then click the extension's toolbar icon to open its options page and enter
+port `8788` and the token from `~/.projectionlab-mcp/ws-token`.
 
 **6. Check the connection.** Open ProjectionLab in that browser and log in.
 Then ask your assistant to run `projectionlab_check_connection`. When every

@@ -2,6 +2,9 @@ name: Publish to npm
 
 # Publishes with npm provenance when a GitHub Release is published.
 # Requires an NPM_TOKEN secret (automation token) in the repo settings.
+# Runs for every release except extension releases (extension-v<version>),
+# which extension-release.yml handles; the tag must be v followed by the
+# version in the root package.json.
 on:
   release:
     types: [published]
@@ -12,6 +15,7 @@ permissions:
 
 jobs:
   publish:
+    if: ${{ !startsWith(github.event.release.tag_name, 'extension-v') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

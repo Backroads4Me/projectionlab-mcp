@@ -2,6 +2,9 @@ name: Attach extension zips to release
 
 # Builds the browser extension and uploads the Chromium and Firefox zips to the
 # GitHub Release, so users can install it without cloning the repository.
+# Runs for extension releases only: the tag is extension-v followed by the
+# version in extension/package.json. Server releases (v<version>) are handled
+# by publish.yml.
 on:
   release:
     types: [published]
@@ -11,6 +14,7 @@ permissions:
 
 jobs:
   extension:
+    if: startsWith(github.event.release.tag_name, 'extension-v')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -20,11 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Check the release tag matches package.json
+      - name: Check the release tag matches extension/package.json
         run: |
-          expected="v$(node -p 'require("../package.json").version')"
+          expected="extension-v$(node -p 'require("./package.json").version')"
           if [ "$TAG" != "$expected" ]; then
-            echo "::error::Release tag $TAG does not match package.json version ($expected)"
+            echo "::error::Release tag $TAG does not match extension/package.json version ($expected)"
             exit 1
           fi
         env:

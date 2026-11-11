@@ -136,8 +136,12 @@ requiring lockstep version parity, allowing the server to release independently
 without forcing extension updates. Compatibility on the wire is governed by
 `PROTOCOL_VERSION` (`src/types/wire.ts`).
 
-Publishing is gated to CI on a GitHub Release: `.github/workflows/publish.yml`
-publishes to npm with provenance, and `.github/workflows/extension-release.yml`
-attaches the extension zips to the release. Both fail unless the release tag is
-`v` followed by the `package.json` version. Do not publish, tag, or bump the
+Publishing is gated to CI on a GitHub Release, and the two release
+independently, each under its own tag. A server release is tagged `v` followed
+by the root `package.json` version: `.github/workflows/publish.yml` publishes
+it to npm with provenance. An extension release is tagged `extension-v`
+followed by the `extension/package.json` version:
+`.github/workflows/extension-release.yml` attaches the extension zips to it.
+Each workflow skips the other's tags and fails when its own tag does not match
+its version. Do not publish, tag, or bump the
 version as part of routine work. That's an explicit, human-initiated step.

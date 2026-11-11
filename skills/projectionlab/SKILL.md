@@ -26,21 +26,15 @@ returns `browser`, `pageLoaded`, `apiAvailable`, `apiKeyValid`, `errors`,
 `true`, proceed. Otherwise fix the first failing item with the user, one step
 at a time, then check again.
 
-`notices` are plain sentences about releases, never connection failures. When
-the list is not empty, tell the user each one once, in plain words, then
-carry on; do not repeat them later in the session and do not refuse to work
-because of them. The two fixes: an out-of-date server is updated by fully
-quitting and reopening the AI assistant's host so `npx` fetches the new
-release (if it still reports the old version, set the server args to
-`["-y", "projectionlab-mcp@latest"]`); an out-of-date extension is updated by
-the browser's extension store, which updates it on its own: MCP Bridge for
-ProjectionLab is on the Chrome Web Store
-(`https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf`)
-and Firefox Add-ons
-(`https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/`).
-Ask the user to check for updates on the browser's extensions page, or to
-install it from the store above if it was never installed there (settings are
-kept).
+`notices` are plain sentences about the server's release, never connection
+failures. When the list is not empty, tell the user each one once, in plain
+words, then carry on; do not repeat them later in the session and do not refuse
+to work because of them. The fix for an out-of-date server is quitting and
+reopening the AI assistant's host so `npx` fetches the new release; if it still
+reports the old version, set the server args to
+`["-y", "projectionlab-mcp@latest"]`. The extension's release is not compared
+with the server's: the browser's store keeps it current on its own, and a
+pairing either speaks the same wire protocol or the extension cannot connect.
 
 | Failing item | What it means | What to do with the user |
 |---|---|---|

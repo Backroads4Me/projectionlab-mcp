@@ -1,6 +1,8 @@
-// versionNotices turns the three version fields into plain sentences:
-// each rule fires on its own inputs, stays quiet on unparsable versions,
-// and rule 3 yields to rule 1.
+// versionNotices turns the three version fields into plain sentences: each
+// rule fires on its own inputs, stays quiet on unparsable versions, and the
+// server-behind-extension rule yields to the npm rule. A lagging extension
+// says nothing, because the bridge admits an executor only on a wire-protocol
+// match and the browser's store keeps the extension current on its own.
 //
 // Run: node --test test/version-notices.test.mjs
 
@@ -35,25 +37,18 @@ test("rule 1: npm has a newer server release", () => {
   assert.match(notices[0], /-y projectionlab-mcp@latest/);
 });
 
-test("rule 2: the extension lags the server", () => {
-  const notices = versionNotices({ server: CURRENT, executor: "extension/1.3.0", latest: CURRENT });
-  assert.equal(notices.length, 1);
-  assert.match(notices[0], /extension is version 1\.3\.0/);
-  assert.match(notices[0], /older than the server \(1\.4\.0\)/);
-  assert.match(notices[0], /Chrome Web Store/);
-  assert.match(
-    notices[0],
-    /chromewebstore\.google\.com\/detail\/mcp-bridge-for-projectionl\/njgjmcihabchffonldcgfjiocjalpoaf/,
+test("a lagging extension says nothing", () => {
+  assert.deepEqual(
+    versionNotices({ server: CURRENT, executor: "extension/1.3.0", latest: CURRENT }),
+    [],
   );
-  assert.match(
-    notices[0],
-    /addons\.mozilla\.org\/en-US\/firefox\/addon\/mcp-bridge-for-projectionlab/,
-  );
-  assert.match(notices[0], /check for updates/);
-  assert.match(notices[0], /Settings are kept\./);
+  // npm having a newer server still speaks for itself; the extension gap stays silent.
+  const npmNewer = versionNotices({ server: CURRENT, executor: "extension/1.3.0", latest: "1.5.0" });
+  assert.equal(npmNewer.length, 1);
+  assert.match(npmNewer[0], /available on npm/);
 });
 
-test("rule 3: the server lags the extension, unless npm is already newer", () => {
+test("rule 2: the server lags the extension, unless npm is already newer", () => {
   const only = versionNotices({ server: CURRENT, executor: "extension/1.5.0", latest: CURRENT });
   assert.equal(only.length, 1);
   assert.match(only[0], /server is version 1\.4\.0/);
@@ -65,7 +60,7 @@ test("rule 3: the server lags the extension, unless npm is already newer", () =>
   assert.match(withNpmNewer[0], /available on npm/);
 });
 
-test("rule 4: a bootstrap snippet from a different release", () => {
+test("rule 3: a bootstrap snippet from a different release", () => {
   const notices = versionNotices({ server: CURRENT, executor: "bootstrap/1.3.0", latest: null });
   assert.equal(notices.length, 1);
   assert.match(notices[0], /bootstrap snippet/);

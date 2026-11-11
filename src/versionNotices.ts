@@ -8,12 +8,6 @@ const SERVER_FIX =
   "To update it, fully quit and reopen the AI assistant's host so npx fetches the new release; " +
   "if the old version is still reported afterwards, set the server args in the host " +
   "configuration to -y projectionlab-mcp@latest.";
-const EXTENSION_FIX =
-  "The browser's extension store normally updates it on its own: MCP Bridge for ProjectionLab is on " +
-  "the Chrome Web Store (https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf) " +
-  "and Firefox Add-ons (https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/). " +
-  "Ask the user to check for updates on the browser's extensions page, or to install it from the " +
-  "store above if it was never installed there. Settings are kept.";
 
 export interface VersionInfo {
   /** The server's own release. */
@@ -41,12 +35,13 @@ export function versionNotices(info: VersionInfo): string[] {
     const kind = slash === -1 ? "" : info.executor.slice(0, slash);
     const version = slash === -1 ? "" : info.executor.slice(slash + 1);
     const cmp = compareVersions(version, info.server);
-    if (kind === "extension" && cmp === -1) {
-      notices.push(
-        `The ProjectionLab browser extension is version ${version}, older than the server ` +
-          `(${info.server}). ${EXTENSION_FIX}`,
-      );
-    } else if (kind === "extension" && cmp === 1 && !serverOutOfDate) {
+    // The extension's release is deliberately not compared with the server's.
+    // The bridge admits an executor only when its wire protocol matches (the
+    // hello check in extensionBridge.ts, PROTOCOL_VERSION in types/wire.ts), so
+    // a differing release number is not by itself a fault, and the browser's
+    // store updates the extension on its own. A release that genuinely needs a
+    // matching extension raises PROTOCOL_VERSION instead.
+    if (kind === "extension" && cmp === 1 && !serverOutOfDate) {
       // Only worth saying when npm has nothing newer to offer as well.
       notices.push(
         `The ProjectionLab MCP server is version ${info.server}, older than the browser ` +

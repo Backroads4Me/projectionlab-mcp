@@ -297,11 +297,10 @@ test("check_connection carries versions and notices, and validates against its o
     executor: "extension/0.0.1",
     latest: "99.0.0",
   });
-  // Rule 1 (npm newer) and rule 2 (extension older) fire; rule 3 is quiet
-  // because rule 1 already covers the server being behind.
-  assert.equal(result.structuredContent.notices.length, 2);
+  // Only rule 1 (npm newer) speaks: a lagging extension says nothing, and the
+  // server-behind-extension rule yields to rule 1.
+  assert.equal(result.structuredContent.notices.length, 1);
   assert.match(result.structuredContent.notices[0], /available on npm/);
-  assert.match(result.structuredContent.notices[1], /browser extension is version 0\.0\.1/);
   z.object(definition.outputSchema).parse(result.structuredContent);
   assert.deepEqual(
     JSON.parse(result.content[0].text),

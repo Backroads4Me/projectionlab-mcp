@@ -1,8 +1,8 @@
 import { build } from "esbuild";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-// One version names a release of the server and the extension: the root
-// package.json version, written into each built manifest.
-const { version } = JSON.parse(await readFile("../package.json", "utf8"));
+// The extension's own release version, from extension/package.json, written into
+// each built manifest.
+const { version } = JSON.parse(await readFile("package.json", "utf8"));
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist/chromium", { recursive: true });
 await mkdir("dist/firefox", { recursive: true });

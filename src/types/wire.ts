@@ -15,6 +15,13 @@
 /** Bumped on any breaking change to frame shapes or semantics. */
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * Minimum extension release required by this server version.
+ * Extensions below this version lack features required by the server (e.g.
+ * standby, takeover, instanceId).
+ */
+export const MIN_EXTENSION_VERSION = "1.2.0";
+
 /** Default listen port; override with PL_WS_PORT / the extension options page. */
 export const DEFAULT_WS_PORT = 8788;
 
@@ -72,10 +79,15 @@ export interface HelloAckFrame {
   protocolVersion: number;
   /**
    * The server's release version (package.json). Additive: executors that
-   * ignore it keep working, and older servers simply omit it. The extension
-   * shows a line when its own version differs.
+   * ignore it keep working, and older servers simply omit it.
    */
   serverVersion?: string;
+  /**
+   * Minimum extension release required by this server version. Additive:
+   * older servers omit it. When present and the extension's release is older,
+   * the options page shows an update notice.
+   */
+  minExtensionVersion?: string;
 }
 
 export interface RequestFrame {

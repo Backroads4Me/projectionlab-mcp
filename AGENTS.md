@@ -126,11 +126,12 @@ npm run build   # then restart Claude Code / your MCP host
 
 ## Releasing
 
-One version, the `version` field of the root `package.json`, names a release
-of both the server and the extension. The server reports it to MCP hosts, the
-extension build writes it into both manifests and the zip names, and both
-executors send it in `hello`. Compatibility between the two is the wire
-`PROTOCOL_VERSION` (`src/types/wire.ts`), not the release version.
+The server release version is in root `package.json`. The extension release
+version is in `extension/package.json`. The server enforces a minimum required
+extension version (`MIN_EXTENSION_VERSION` in `src/types/wire.ts`) rather than
+requiring lockstep version parity, allowing the server to release independently
+without forcing extension updates. Compatibility on the wire is governed by
+`PROTOCOL_VERSION` (`src/types/wire.ts`).
 
 Publishing is gated to CI on a GitHub Release: `.github/workflows/publish.yml`
 publishes to npm with provenance, and `.github/workflows/extension-release.yml`

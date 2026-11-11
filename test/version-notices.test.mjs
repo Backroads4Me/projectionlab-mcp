@@ -1,8 +1,7 @@
 // versionNotices turns the three version fields into plain sentences: each
-// rule fires on its own inputs, stays quiet on unparsable versions, and the
-// server-behind-extension rule yields to the npm rule. A lagging extension
-// says nothing, because the bridge admits an executor only on a wire-protocol
-// match and the browser's store keeps the extension current on its own.
+// rule fires on its own inputs and stays quiet on unparsable versions.
+// The server and extension versions are decoupled: the extension says nothing
+// as long as it meets or exceeds MIN_EXTENSION_VERSION.
 //
 // Run: node --test test/version-notices.test.mjs
 
@@ -10,12 +9,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { versionNotices } = await import("../dist/versionNotices.js");
+const { MIN_EXTENSION_VERSION } = await import("../dist/types/wire.js");
 
 const CURRENT = "1.4.0";
 
 test("nothing to say when everything is current or unknown", () => {
   assert.deepEqual(
-    versionNotices({ server: CURRENT, executor: `extension/${CURRENT}`, latest: CURRENT }),
+    versionNotices({ server: CURRENT, executor: `extension/${MIN_EXTENSION_VERSION}`, latest: CURRENT }),
     [],
   );
   assert.deepEqual(
@@ -23,7 +23,7 @@ test("nothing to say when everything is current or unknown", () => {
     [],
   );
   assert.deepEqual(
-    versionNotices({ server: CURRENT, executor: `extension/${CURRENT}`, latest: null }),
+    versionNotices({ server: CURRENT, executor: `extension/${MIN_EXTENSION_VERSION}`, latest: null }),
     [],
   );
 });
@@ -37,27 +37,39 @@ test("rule 1: npm has a newer server release", () => {
   assert.match(notices[0], /-y projectionlab-mcp@latest/);
 });
 
-test("a lagging extension says nothing", () => {
+test("an extension at or above MIN_EXTENSION_VERSION says nothing", () => {
+  // Same as MIN
   assert.deepEqual(
-    versionNotices({ server: CURRENT, executor: "extension/1.3.0", latest: CURRENT }),
+    versionNotices({ server: CURRENT, executor: `extension/${MIN_EXTENSION_VERSION}`, latest: CURRENT }),
     [],
   );
-  // npm having a newer server still speaks for itself; the extension gap stays silent.
-  const npmNewer = versionNotices({ server: CURRENT, executor: "extension/1.3.0", latest: "1.5.0" });
-  assert.equal(npmNewer.length, 1);
-  assert.match(npmNewer[0], /available on npm/);
+  // Higher than MIN, even if server is higher or lower
+  assert.deepEqual(
+    versionNotices({ server: "2.0.0", executor: "extension/1.2.1", latest: "2.0.0" }),
+    [],
+  );
+  assert.deepEqual(
+    versionNotices({ server: "1.1.0", executor: "extension/1.2.1", latest: "1.1.0" }),
+    [],
+  );
 });
 
-test("rule 2: the server lags the extension, unless npm is already newer", () => {
-  const only = versionNotices({ server: CURRENT, executor: "extension/1.5.0", latest: CURRENT });
-  assert.equal(only.length, 1);
-  assert.match(only[0], /server is version 1\.4\.0/);
-  assert.match(only[0], /older than the browser extension \(1\.5\.0\)/);
-  assert.match(only[0], /-y projectionlab-mcp@latest/);
+test("rule 2: extension older than MIN_EXTENSION_VERSION emits update notice", () => {
+  const notices = versionNotices({ server: CURRENT, executor: "extension/1.0.1", latest: CURRENT });
+  assert.equal(notices.length, 1);
+  assert.match(notices[0], /extension is version 1\.0\.1/);
+  assert.match(notices[0], new RegExp(`older than the minimum required version \\(${MIN_EXTENSION_VERSION}\\)`));
+  assert.match(notices[0], /Chrome Web Store/);
+  assert.match(notices[0], /Firefox Add-ons/);
+  assert.match(notices[0], /check for updates/);
+  assert.match(notices[0], /ws-token/);
+});
 
-  const withNpmNewer = versionNotices({ server: CURRENT, executor: "extension/1.5.0", latest: "1.6.0" });
-  assert.equal(withNpmNewer.length, 1, "rule 1 alone covers the server being behind");
-  assert.match(withNpmNewer[0], /available on npm/);
+test("npm newer and extension older both speak", () => {
+  const notices = versionNotices({ server: CURRENT, executor: "extension/1.0.1", latest: "1.5.0" });
+  assert.equal(notices.length, 2);
+  assert.match(notices[0], /available on npm/);
+  assert.match(notices[1], /older than the minimum required version/);
 });
 
 test("rule 3: a bootstrap snippet from a different release", () => {
@@ -72,7 +84,7 @@ test("rule 3: a bootstrap snippet from a different release", () => {
 
 test("unparsable versions say nothing", () => {
   assert.deepEqual(
-    versionNotices({ server: "v1.0.0", executor: "extension/1.0.0", latest: "2.0.0" }),
+    versionNotices({ server: "v1.0.0", executor: `extension/${MIN_EXTENSION_VERSION}`, latest: "2.0.0" }),
     [],
   );
   assert.deepEqual(

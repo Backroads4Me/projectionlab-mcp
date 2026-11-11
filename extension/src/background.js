@@ -118,9 +118,12 @@ async function connect(force = false) {
       // close code and not by this value.
       retryMs = 2_000;
       authed = true;
-      // The options page shows a line when the two releases differ; an
-      // absent field (older server) stores "" so no stale value lingers.
-      void browser.storage.local.set({ serverVersion: frame.serverVersion ?? "" });
+      // The options page shows a notice when the extension is older than the
+      // server's required minimum; absent fields store "" so no stale values linger.
+      void browser.storage.local.set({
+        serverVersion: frame.serverVersion ?? "",
+        minExtensionVersion: frame.minExtensionVersion ?? "",
+      });
       void setStatus("authed");
     }
     else if (frame.type === "ping") ws.send(JSON.stringify({ type: "pong" }));

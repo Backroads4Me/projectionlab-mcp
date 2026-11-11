@@ -52,6 +52,11 @@ the extension up to date.
   [Firefox Add-ons listing](https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/)
   and choose **Install Add-on**.
 
+> **Upgrading from an unpacked zip?** Remove the unpacked extension from
+> your browser's extensions page (`chrome://extensions` or `about:addons`)
+> before adding the store version. Browsers isolate extension settings by
+> extension ID, so enter the port and token into the new extension's options page.
+
 Then click the extension's toolbar icon to open its options page and enter
 port `8788` and the token from `~/.projectionlab-mcp/ws-token`.
 

@@ -142,18 +142,14 @@ function compareVersions(a, b) {
   return 0;
 }
 
-export const RELEASES_URL =
-  "https://github.com/Backroads4Me/projectionlab-mcp/releases/latest";
-
 /**
- * The options-page line about the connected server's release, or "" when
- * there is nothing to say: equal versions, a missing value (an older server
- * sends no serverVersion), or an unparsable version.
+ * The options-page line about the connected server's minimum extension requirement,
+ * or "" when the extension is current or minExtensionVersion is missing/unparsable.
  */
-export function updateLineForVersions(extensionVersion, serverVersion) {
-  const cmp = compareVersions(extensionVersion, serverVersion);
-  if (cmp === 0 || cmp === null) return "";
-  if (cmp < 0)
-    return `This extension is ${extensionVersion}; the server is ${serverVersion}. Download the matching extension from the releases page.`;
-  return `The server is ${serverVersion}; this extension is ${extensionVersion}. Restart your AI assistant to update the server.`;
+export function updateLineForVersions(extensionVersion, minExtensionVersion) {
+  const cmp = compareVersions(extensionVersion, minExtensionVersion);
+  if (cmp === -1) {
+    return `This extension is version ${extensionVersion}, older than the server's minimum required version (${minExtensionVersion}). Check your browser's extensions page for updates.`;
+  }
+  return "";
 }

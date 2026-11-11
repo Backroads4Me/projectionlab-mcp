@@ -32,9 +32,13 @@ words, then carry on; do not repeat them later in the session and do not refuse
 to work because of them. The fix for an out-of-date server is quitting and
 reopening the AI assistant's host so `npx` fetches the new release; if it still
 reports the old version, set the server args to
-`["-y", "projectionlab-mcp@latest"]`. The extension's release is not compared
-with the server's: the browser's store keeps it current on its own, and a
-pairing either speaks the same wire protocol or the extension cannot connect.
+`["-y", "projectionlab-mcp@latest"]`. The extension's release is not locked
+to the server's release: the browser's store keeps it current on its own, and
+the server speaks only if the connected extension is older than its minimum
+required version. When guiding a user to install the store version over an older
+unpacked copy, have them remove the unpacked extension from `chrome://extensions`
+and copy the token from `~/.projectionlab-mcp/ws-token` into the new extension's
+options page (browsers isolate extension storage by ID, so settings do not transfer).
 
 | Failing item | What it means | What to do with the user |
 |---|---|---|

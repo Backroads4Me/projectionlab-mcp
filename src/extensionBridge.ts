@@ -12,6 +12,7 @@ import { VERSION } from "./version.js";
 import {
   CLOSE_CODES,
   HEARTBEAT_INTERVAL_MS,
+  MIN_EXTENSION_VERSION,
   PROTOCOL_VERSION,
   type ClientFrame,
   type RequestFrame,
@@ -287,7 +288,14 @@ export class ExtensionBridge implements Bridge {
     this.connExecutor = executor;
     this.connInstanceId = instanceId;
     log.info("extension", `Executor connected: ${executor}`);
-    ws.send(JSON.stringify({ type: "helloAck", protocolVersion: PROTOCOL_VERSION, serverVersion: VERSION }));
+    ws.send(
+      JSON.stringify({
+        type: "helloAck",
+        protocolVersion: PROTOCOL_VERSION,
+        serverVersion: VERSION,
+        minExtensionVersion: MIN_EXTENSION_VERSION,
+      }),
+    );
 
     ws.on("message", (raw) => this.onFrame(ws, raw));
     ws.on("close", () => {

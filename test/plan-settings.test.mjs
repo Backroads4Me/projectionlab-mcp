@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -271,6 +272,7 @@ test("update settings tool dry-runs, snapshots before mutation, and verifies", a
     async exportData() {
       return state;
     },
+    restorePlansIfUnchanged,
     async restorePlans(plans) {
       actions.push("restore");
       state = { plans };
@@ -337,6 +339,7 @@ test("update settings tool respects PL_READ_ONLY before reading or writing", asy
       bridgeCalled = true;
       throw new Error("must not read");
     },
+    restorePlansIfUnchanged,
     async restorePlans() {
       bridgeCalled = true;
       throw new Error("must not restore");

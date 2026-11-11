@@ -10,6 +10,12 @@
  * connection at a time. The incumbent keeps it: a second authenticated
  * executor is refused with 4004 and retries until the incumbent goes away,
  * unless it requests takeover or repeats the incumbent's instanceId.
+ *
+ * Server instances share the port the same way: one holds it, others wait.
+ * A waiting instance that has work connects to the port and sends a yield
+ * frame; the holder finishes its queued operations, releases the port, drops
+ * its executor with an ordinary close (so the executor reconnects within
+ * seconds, to the new holder), and closes the yield socket with 4005.
  */
 
 /** Bumped on any breaking change to frame shapes or semantics. */
@@ -128,7 +134,18 @@ export interface PongFrame {
   type: "pong";
 }
 
-export type ClientFrame = HelloFrame | ResponseFrame | PongFrame;
+/**
+ * Sent instead of a hello by another server instance that wants the port.
+ * Only a socket with no Origin header and the shared token may send it; the
+ * holder answers by closing the socket with 4005 once the port is released.
+ * Servers that predate it close the socket with 4001.
+ */
+export interface YieldFrame {
+  type: "yield";
+  token: string;
+}
+
+export type ClientFrame = HelloFrame | ResponseFrame | PongFrame | YieldFrame;
 export type ServerFrame = HelloAckFrame | RequestFrame | PingFrame;
 export type WireFrame = ClientFrame | ServerFrame;
 
@@ -142,4 +159,12 @@ export const CLOSE_CODES = {
   REPLACED: 4003,
   /** Another executor holds the connection; retry later. */
   BUSY: 4004,
+  /** Sent on a yield socket only: the holder released the port. */
+  YIELDED: 4005,
+  /**
+   * The server handed the port to another server instance. A standard code
+   * (RFC 6455 7.4.1 range, IANA "Service Restart"), not 4003 or 4004, so
+   * executors reconnect on their fast schedule and reach the new holder.
+   */
+  HANDED_OVER: 1012,
 } as const;

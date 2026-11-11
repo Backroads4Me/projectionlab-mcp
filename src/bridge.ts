@@ -28,6 +28,12 @@ export interface Bridge {
   ): Promise<void>;
   restoreCurrentFinances(state: unknown): Promise<void>;
   restorePlans(plans: unknown[]): Promise<void>;
+  /**
+   * Writes `plans` unless a plan was added, removed, or saved since `read`
+   * was taken, in which case it throws PLAN_CONFLICT and writes nothing. The
+   * re-read and the write are atomic: no other operation runs between them.
+   */
+  restorePlansIfUnchanged(read: unknown[], plans: unknown[]): Promise<void>;
   restoreProgress(progress: unknown): Promise<void>;
   restoreSettings(settings: unknown): Promise<void>;
   invalidateCache(): void;

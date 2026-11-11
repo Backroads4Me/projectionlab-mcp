@@ -179,21 +179,26 @@ export function registerSnapshotTools(
         );
 
         // restorePlans replaces every plan, so refuse when a plan was saved
-        // in ProjectionLab since the read above.
+        // in ProjectionLab since the read above. This early check refuses
+        // before any section is applied; the plans write below checks again,
+        // atomically with the write.
+        const exportedPlans = (currentData as Record<string, unknown>).plans;
+        const currentPlans = Array.isArray(exportedPlans) ? exportedPlans : [];
         if (
           snapshot.sections.includes("plans") &&
           snapshot.data.plans !== undefined
         ) {
-          const currentPlans = (currentData as Record<string, unknown>).plans;
-          await assertPlansUnchanged(
-            bridge,
-            Array.isArray(currentPlans) ? currentPlans : [],
-          );
+          await assertPlansUnchanged(bridge, currentPlans);
         }
 
         // Apply the rollback
         const restoredSections: string[] = [];
-        for (const section of snapshot.sections) {
+        // Plans go first: their conflict check compares against the read
+        // above, and a refusal then leaves every section untouched.
+        const ordered = [...snapshot.sections].sort(
+          (a, b) => Number(b === "plans") - Number(a === "plans"),
+        );
+        for (const section of ordered) {
           const sectionData = snapshot.data[section];
           if (sectionData === undefined) continue;
 
@@ -202,7 +207,10 @@ export function registerSnapshotTools(
               await bridge.restoreCurrentFinances(sectionData);
               break;
             case "plans":
-              await bridge.restorePlans(sectionData as unknown[]);
+              await bridge.restorePlansIfUnchanged(
+                currentPlans,
+                sectionData as unknown[],
+              );
               break;
             case "progress":
               await bridge.restoreProgress(sectionData);

@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -82,6 +83,7 @@ function fakeBridge(initial) {
     async exportData() {
       return structuredClone(state);
     },
+    restorePlansIfUnchanged,
     async restorePlans(plans) {
       bridge.writes++;
       state.plans = structuredClone(plans).map((p) => ({ ...p, lastUpdated: ++stamp }));

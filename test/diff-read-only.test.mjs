@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -74,6 +75,7 @@ test("diff runs with PL_READ_ONLY=true and saves nothing", async () => {
     async exportData() {
       return structuredClone(state);
     },
+    restorePlansIfUnchanged,
     async restorePlans(plans) {
       bridge.writes.push("plans");
       state.plans = structuredClone(plans);

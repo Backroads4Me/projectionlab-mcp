@@ -4,7 +4,6 @@ import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
-import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import { redactSecrets } from "../redact.js";
@@ -137,8 +136,7 @@ export function registerUpdatePlanSettingsTool(
           "updatePlanSettings",
           `Patching ${Object.keys(changes).length} setting(s) in "${section}" of plan "${plan.name}"`,
         );
-        await assertPlansUnchanged(bridge, plans);
-        await bridge.restorePlans(updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
 
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (

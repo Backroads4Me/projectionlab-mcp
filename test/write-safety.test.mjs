@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,6 +71,7 @@ function fakeBridge(initial) {
     async exportData() {
       return structuredClone(state);
     },
+    restorePlansIfUnchanged,
     async restorePlans(plans) {
       bridge.writes.push("plans");
       // ProjectionLab saves each plan and re-stamps it.

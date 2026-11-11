@@ -4,7 +4,6 @@ import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
-import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
@@ -318,13 +317,12 @@ export function registerUpdatePlanEventTool(
         const updatedPlans = [...plans];
         updatedPlans[planIndex] = updatedPlan;
 
-        await assertPlansUnchanged(bridge, plans);
         log.info(
           "updatePlanEvent",
           `Patching event "${eventLabel(event)}" in "${section}" of plan "${plan.name}" (${Object.keys(changes).length} fields)`,
         );
 
-        await bridge.restorePlans(updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
 
         // Verify the patched fields on a fresh read
         let verified = false;

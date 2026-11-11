@@ -43,7 +43,10 @@ options page (browsers isolate extension storage by ID, so settings do not trans
 | Failing item | What it means | What to do with the user |
 |---|---|---|
 | `API_KEY_MISSING` in `errors` | The server has no Plugin API key | See "Setting the API key" |
-| `browser: false`, port held by another instance | Another agent on this machine runs the server and has the extension | Wait for that agent to exit (this server takes over within about a minute), or give this one its own `PL_WS_PORT` and point the extension at it |
+| `browser: false`, port held by another process that did not hand it over | Another agent or session on this machine runs an older server that cannot hand the port over, or one with a different `PL_WS_TOKEN` | Ask the user to close that session or quit its MCP host (or update its projectionlab-mcp); this server takes over within seconds |
+| `browser: false`, holder still busy with its own operations | Another instance is mid-operation and did not release the port in time | Wait a moment and run `projectionlab_check_connection` again |
+| `browser: false`, port held by a program that is not projectionlab-mcp | Some other program is listening on the WebSocket port | Ask the user to stop that program, or set `PL_WS_PORT` to a free port for this server and enter the same port on the extension's options page |
+| `browser: false`, handing the port over did not complete | Another instance holds the port and the browser did not reconnect here in time | Run `projectionlab_check_connection` again; if it keeps failing, ask the user to close the other agent's session |
 | `browser: false` otherwise | No extension or snippet is connected | See "Connecting the browser" |
 | `pageLoaded: false` | No ProjectionLab tab is open | Ask the user to open https://app.projectionlab.com and log in |
 | `apiAvailable: false` | Plugins are off, or the user is logged out | ProjectionLab -> Account Settings -> Plugins -> enable plugins |
@@ -368,8 +371,9 @@ Change progress:
   `projectionlab_list_snapshots` shows them, including the pre-rollback
   snapshot a confirmed rollback saves, so a rollback is undone by rolling
   back once more with `nBack: 1`.
-- **`PLAN_CONFLICT`** means a plan was saved in ProjectionLab after the tool
-  read it, so the write was refused to avoid overwriting that edit. Re-run the
+- **`PLAN_CONFLICT`** means a plan was saved after the tool read it, in
+  ProjectionLab or by another agent, so the write was refused to avoid
+  overwriting that change. Re-run the
   dry run to pick up the latest data, show the user the new preview, and
   confirm again. When confirming `projectionlab_update_plan_section`, pass the
   dry run's `planVersion` as `expectedPlanVersion`.

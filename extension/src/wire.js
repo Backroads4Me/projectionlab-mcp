@@ -15,6 +15,9 @@ export function makeResponseFrame(requestId, response) {
  * restarts only repeats a refused handshake. 4003 (replaced by a takeover)
  * and 4004 (another executor holds the connection) do not block; the
  * incumbent may go away at any time, so a slow retry reconnects on its own.
+ * 1012 means the server handed its port to another server instance; like
+ * any other code it takes the ordinary fast retry, which reaches the new
+ * holder.
  * The block is persisted in browser.storage.session so a service-worker
  * restart honors it.
  */

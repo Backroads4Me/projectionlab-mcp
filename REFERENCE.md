@@ -37,7 +37,7 @@ mcp_servers:
     enabled: true
 ```
 
-Only one server instance can hold the WebSocket port. When a second host starts the server while another instance holds it, the second retries every few seconds and takes over when the first exits; `projectionlab_check_connection` explains the state in the meantime. To run both at once, give one of them its own `PL_WS_PORT` in its `env` block.
+Only one server instance holds the WebSocket port at a time, and the browser connects to that one. Hosts that start a server per session or window (Claude Desktop keeps one running for every open session) can have several on the same port. The instance in use takes the port: when a waiting instance gets a tool call, it asks the holder to hand over, the holder finishes the operations it has already queued and releases the port, and the browser reconnects to the new holder within a few seconds. Two agents working at once trade the connection back and forth, with that delay on each switch. A waiting instance also takes the port within a few seconds of the holder exiting. Holders older than this mechanism cannot hand over; `projectionlab_check_connection` says so, and closing that session or quitting its host frees the port. It also says when the port is held by a program that is not projectionlab-mcp, in which case set `PL_WS_PORT` to a free port and enter the same port on the extension's options page.
 
 ## Agent instructions
 
@@ -143,7 +143,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 
 Write operations (`update_*`, `restore_*`, `clone_plan`, `delete_plan`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Writes are disabled entirely unless `PL_READ_ONLY=false`.
 
-Every write that replaces the plans array re-reads the plans just before writing and refuses with `PLAN_CONFLICT` if any plan was added, removed, or saved in ProjectionLab since the tool read them, so an edit made in the ProjectionLab UI is never silently overwritten. `projectionlab_update_plan_section` also returns a `planVersion` in its dry run; pass it back as `expectedPlanVersion` when confirming to refuse the write if the plan was saved after the preview.
+Every write that replaces the plans array re-reads the plans just before writing and refuses with `PLAN_CONFLICT` if any plan was added, removed, or saved in ProjectionLab since the tool read them, so an edit made in the ProjectionLab UI, or a write by another agent's server instance, is never silently overwritten. `projectionlab_update_plan_section` also returns a `planVersion` in its dry run; pass it back as `expectedPlanVersion` when confirming to refuse the write if the plan was saved after the preview.
 
 Plan reads hide secret values: a secret-named field (`apiKey`, `token`, `password`, …) comes back as `[REDACTED]`. A payload for `projectionlab_update_plan_section` or any `restore_*` tool that still holds that sentinel under a secret-named key is refused with `INVALID_INPUT`, dry runs included, naming the offending dot paths. Supply the real value, or change single fields with `projectionlab_update_plan_event` or `projectionlab_update_plan_settings`, which patch by path and never round-trip hidden values.
 

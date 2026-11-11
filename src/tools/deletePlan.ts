@@ -6,7 +6,6 @@ import { config } from "../config.js";
 import { selectPlanForDeletion, verifyPlanDeletion, withoutPlan } from "../deletePlan.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { log } from "../logger.js";
-import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import { getEvents, requirePlans, type PlanObj } from "../plans.js";
 
@@ -94,10 +93,8 @@ export function registerDeletePlanTool(
         const snapshot = await snapshots.create("deletePlan", ["plans"], {
           plans,
         });
-        await assertPlansUnchanged(bridge, plans);
-
         log.info("deletePlan", `Deleting plan "${String(target.name)}"`);
-        await bridge.restorePlans(withoutPlan(plans, String(target.id)));
+        await bridge.restorePlansIfUnchanged(plans, withoutPlan(plans, String(target.id)));
 
         const verifyData = await bridge.exportData({ fresh: true });
         const after = Array.isArray(verifyData.plans) ? verifyData.plans : [];

@@ -7,7 +7,6 @@ import { config } from "../config.js";
 import { currentFinancesProblems } from "../currentFinances.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { log } from "../logger.js";
-import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import {
   resolvePlanIndex,
@@ -113,13 +112,11 @@ export function registerClonePlanTool(
         const snapshot = await snapshots.create("clonePlan", ["plans"], {
           plans,
         });
-        await assertPlansUnchanged(bridge, plans);
-
         log.info(
           "clonePlan",
           `Copying plan "${String(source.name)}" to "${String(clone.name)}"`,
         );
-        await bridge.restorePlans([...plans, clone]);
+        await bridge.restorePlansIfUnchanged(plans, [...plans, clone]);
 
         const verifyData = await bridge.exportData({ fresh: true });
         const after = Array.isArray(verifyData.plans) ? verifyData.plans : [];

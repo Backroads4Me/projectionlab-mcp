@@ -7,6 +7,7 @@ import type { Bridge, ConnectionStatus } from "./bridge.js";
 import { config, USER_ENV_FILE } from "./config.js";
 import { ProjectionLabError } from "./errors.js";
 import { log } from "./logger.js";
+import { planChanges, planConflictError } from "./planVersion.js";
 import type { ExportedData } from "./types/projectionlab.js";
 import { VERSION } from "./version.js";
 import {
@@ -41,6 +42,27 @@ const HELLO_TIMEOUT_MS = 5_000;
 const MAX_PRE_HELLO_BYTES = 64 * 1024;
 /** How often to retry the WebSocket port while another instance holds it. */
 const PORT_RETRY_MS = 3_000;
+/** After the holder yields, how long and how often to retry the bind. The
+ * extension reconnects about 2 seconds after an ordinary close, so the port
+ * must be bound well before then. */
+const TAKEOVER_BIND_MS = 2_000;
+const TAKEOVER_RETRY_MS = 100;
+/** After taking the port over, how long an operation waits for the executor
+ * to reconnect (the extension retries at about 2, 6, then 14 seconds). */
+const EXECUTOR_WAIT_MS = 15_000;
+/** How long to wait for the holder to yield. The holder first finishes its
+ * queued operations, each of which can take up to REQUEST_TIMEOUT_MS. */
+const YIELD_TIMEOUT_MS = 75_000;
+/** How long the holder has to answer the WebSocket upgrade on a yield socket.
+ * A process that does not is not projectionlab-mcp. */
+const YIELD_HANDSHAKE_MS = 5_000;
+/** How many times one operation asks for the port. Another waiting instance
+ * can win the bind after a yield; the next round asks that instance. */
+const TAKEOVER_ROUNDS = 3;
+
+/** Why a yield request got no port: the holder refused it (4001), did not
+ * release the port within YIELD_TIMEOUT_MS, or does not speak WebSocket. */
+type YieldFailure = "refused" | "slow" | "foreign";
 const EXTENSION_HELP =
   "Install the MCP Bridge for ProjectionLab extension from the Chrome Web Store " +
   "(https://chromewebstore.google.com/detail/mcp-bridge-for-projection/njgjmcihabchffonldcgfjiocjalpoaf) " +
@@ -90,6 +112,16 @@ export class ExtensionBridge implements Bridge {
   private readonly token: string;
   private portBusy = false;
   private retryTimer: NodeJS.Timeout | null = null;
+  /** While non-zero, bind retries run every TAKEOVER_RETRY_MS until this time. */
+  private fastBindUntil = 0;
+  /** Why the last yield request failed; "" when none has. */
+  private yieldFailure: YieldFailure | "" = "";
+  /** The socket of a yield request in flight. */
+  private yieldPeer: WebSocket | null = null;
+  /** When this instance last released the port to another instance. */
+  private yieldedAt = 0;
+  /** Callbacks run whenever the connection or port state changes. */
+  private readonly stateWaiters = new Set<() => void>();
   private closed = false;
 
   // Serialize all operations and cache the last full export until a write
@@ -125,11 +157,26 @@ export class ExtensionBridge implements Bridge {
     return token;
   }
 
+  private notifyState(): void {
+    for (const waiter of [...this.stateWaiters]) waiter();
+  }
+
+  private scheduleListen(delayMs: number): void {
+    if (this.closed || this.retryTimer) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.listen();
+    }, delayMs);
+    this.retryTimer.unref();
+  }
+
   /** Binds the WebSocket port. While another instance (another agent on
-   * this machine) holds it, retries every PORT_RETRY_MS and takes over once
-   * that instance exits; the extension reconnects on its own schedule. */
+   * this machine) holds it, retries every PORT_RETRY_MS, so it takes over
+   * once that instance exits; an operation arriving meanwhile asks the
+   * holder to yield (requestPort). Executors reconnect on their own
+   * schedule. */
   private listen(): void {
-    if (this.closed) return;
+    if (this.closed || this.wss) return;
     const wss = new WebSocketServer({
       host: "127.0.0.1",
       port: config.wsPort,
@@ -140,7 +187,12 @@ export class ExtensionBridge implements Bridge {
         log.info("extension", `Port ${config.wsPort} is free; took over the listener`);
       }
       this.portBusy = false;
+      this.fastBindUntil = 0;
+      this.yieldFailure = "";
+      // A yield request still out is moot once this instance holds the port.
+      this.yieldPeer?.terminate();
       log.info("extension", `Listening on ws://127.0.0.1:${config.wsPort}`);
+      this.notifyState();
     });
     wss.on("error", (err: NodeJS.ErrnoException) => {
       if (err.code === "EADDRINUSE") {
@@ -148,17 +200,19 @@ export class ExtensionBridge implements Bridge {
           log.warn(
             "extension",
             `Port ${config.wsPort} is held by another process (usually another agent's ` +
-              `projectionlab-mcp). Retrying every ${PORT_RETRY_MS / 1000}s until it is free.`,
+              `projectionlab-mcp). Retrying every ${PORT_RETRY_MS / 1000}s; an operation arriving ` +
+              "here asks the holder to hand the port over.",
           );
         }
         this.portBusy = true;
         if (this.wss === wss) this.wss = null;
         wss.close();
-        this.retryTimer = setTimeout(() => {
-          this.retryTimer = null;
-          this.listen();
-        }, PORT_RETRY_MS);
-        this.retryTimer.unref();
+        const fast = this.fastBindUntil > Date.now();
+        if (!fast && this.fastBindUntil !== 0) {
+          this.fastBindUntil = 0;
+          this.notifyState();
+        }
+        this.scheduleListen(fast ? TAKEOVER_RETRY_MS : PORT_RETRY_MS);
         return;
       }
       log.error("extension", `WebSocket server error: ${err.message}`);
@@ -191,15 +245,20 @@ export class ExtensionBridge implements Bridge {
         }
       };
       socket.on("data", countPreHelloBytes);
-      this.awaitHello(ws, origin ?? "(no origin)", () =>
-        socket.off("data", countPreHelloBytes),
-      );
+      this.awaitHello(ws, wss, origin, () => socket.off("data", countPreHelloBytes));
     });
   }
 
-  /** New sockets must send a valid hello before anything else. `helloRead`
-   * runs once the first message arrives, whatever it holds. */
-  private awaitHello(ws: WebSocket, origin: string, helloRead: () => void): void {
+  /** New sockets must send a valid hello (or, from another server instance,
+   * a yield) before anything else. `helloRead` runs once the first message
+   * arrives, whatever it holds. */
+  private awaitHello(
+    ws: WebSocket,
+    wss: WebSocketServer,
+    rawOrigin: string | undefined,
+    helloRead: () => void,
+  ): void {
+    const origin = rawOrigin ?? "(no origin)";
     const timer = setTimeout(() => {
       ws.close(CLOSE_CODES.AUTH_FAILED, "hello timeout");
     }, HELLO_TIMEOUT_MS);
@@ -210,6 +269,17 @@ export class ExtensionBridge implements Bridge {
       const hello = parseFrame(raw);
       if (!hello) {
         ws.close(CLOSE_CODES.AUTH_FAILED, "malformed hello");
+        return;
+      }
+      if (hello.type === "yield") {
+        // Only another server process sends a yield; a browser always sends
+        // an Origin header, so a socket carrying one is refused outright.
+        if (rawOrigin !== undefined || hello.token !== this.token) {
+          log.warn("extension", `Refused a yield request from ${origin}`);
+          ws.close(CLOSE_CODES.AUTH_FAILED, "yield refused");
+          return;
+        }
+        this.yieldPort(ws);
         return;
       }
       if (hello.type !== "hello" || hello.token !== this.token) {
@@ -223,6 +293,13 @@ export class ExtensionBridge implements Bridge {
           `Protocol mismatch: executor ${hello.executor} speaks v${hello.protocolVersion}, server v${PROTOCOL_VERSION}`,
         );
         ws.close(CLOSE_CODES.VERSION_MISMATCH, "protocol version mismatch");
+        return;
+      }
+      // A socket accepted before this instance released the port must not
+      // become its executor: the browser belongs to the new holder. The
+      // ordinary close sends the executor there.
+      if (this.wss !== wss) {
+        ws.close(CLOSE_CODES.HANDED_OVER, "port handed over");
         return;
       }
       // Only authenticated hellos reach the connection decision, so an
@@ -308,6 +385,158 @@ export class ExtensionBridge implements Bridge {
       log.warn("extension", `Socket error from ${executor}: ${err.message}`);
     });
     this.startHeartbeat();
+    this.notifyState();
+  }
+
+  /**
+   * Hand the port to the server instance that sent a yield frame on `peer`.
+   * Runs on the operation chain, so an operation already sent to the
+   * browser finishes before the executor is dropped. The executor is closed
+   * with HANDED_OVER, an ordinary code, so it reconnects within seconds and
+   * reaches the new holder. This instance then waits for the port like any
+   * other, and asks for it back when its next operation arrives.
+   */
+  private yieldPort(peer: WebSocket): void {
+    log.info("extension", "Another projectionlab-mcp instance asked for the port");
+    void this.serialize(async () => {
+      const wss = this.wss;
+      if (this.closed || !wss || peer.readyState !== WebSocket.OPEN) {
+        // This instance no longer holds the port (it yielded to someone
+        // else meanwhile, or is shutting down), so the port is released as
+        // far as this peer is concerned.
+        peer.close(CLOSE_CODES.YIELDED, "port released");
+        return;
+      }
+      this.wss = null;
+      wss.close();
+      this.dropConnection(
+        "handed the connection to another projectionlab-mcp instance",
+        CLOSE_CODES.HANDED_OVER,
+      );
+      this.portBusy = true;
+      this.yieldedAt = Date.now();
+      peer.close(CLOSE_CODES.YIELDED, "port released");
+      log.info("extension", `Released port ${config.wsPort} to another projectionlab-mcp instance`);
+      this.scheduleListen(PORT_RETRY_MS);
+      this.notifyState();
+    });
+  }
+
+  /**
+   * Ask the instance holding the port to yield it. Resolves "yielded" when
+   * it closes the socket with YIELDED, and "free" when nothing accepts the
+   * connection or the holder drops it (it just exited). Otherwise resolves
+   * the failure: "refused" when the holder answers 4001 (a server that
+   * predates yield frames, or one with a different token), "slow" when a
+   * holder that accepted the socket does not release the port within
+   * YIELD_TIMEOUT_MS, and "foreign" when the holder does not complete a
+   * WebSocket upgrade (a process that is not projectionlab-mcp).
+   */
+  private requestPort(): Promise<"yielded" | "free" | YieldFailure> {
+    return new Promise((resolve) => {
+      const peer = new WebSocket(`ws://127.0.0.1:${config.wsPort}`);
+      this.yieldPeer = peer;
+      let failure: YieldFailure | "" = "";
+      const giveUp = (why: YieldFailure) => {
+        failure = why;
+        peer.terminate();
+      };
+      const handshakeTimer = setTimeout(() => giveUp("foreign"), YIELD_HANDSHAKE_MS);
+      const timer = setTimeout(() => giveUp("slow"), YIELD_TIMEOUT_MS);
+      handshakeTimer.unref();
+      timer.unref();
+      peer.on("open", () => {
+        clearTimeout(handshakeTimer);
+        peer.send(JSON.stringify({ type: "yield", token: this.token }));
+      });
+      peer.on("unexpected-response", () => giveUp("foreign"));
+      peer.on("error", (err) => {
+        log.debug("extension", `Yield request socket error: ${err.message}`);
+      });
+      peer.on("close", (code) => {
+        clearTimeout(handshakeTimer);
+        clearTimeout(timer);
+        if (this.yieldPeer === peer) this.yieldPeer = null;
+        if (code === CLOSE_CODES.YIELDED) resolve("yielded");
+        else if (code === CLOSE_CODES.AUTH_FAILED) resolve("refused");
+        else resolve(failure || "free");
+      });
+    });
+  }
+
+  /** Resolves once `done()` holds, rechecked on every state change, or
+   * after `timeoutMs`. */
+  private waitForState(done: () => boolean, timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        this.stateWaiters.delete(check);
+        resolve();
+      };
+      const check = () => {
+        if (done()) finish();
+      };
+      const timer = setTimeout(finish, timeoutMs);
+      this.stateWaiters.add(check);
+      check();
+    });
+  }
+
+  /**
+   * The connected executor's socket. While another instance holds the port,
+   * asks it to yield, binds the port, and waits for the executor to
+   * reconnect here. When another waiting instance wins the bind instead, the
+   * next round asks that instance. Runs on the operation chain, so
+   * concurrent operations send one yield between them.
+   */
+  private async executorSocket(): Promise<WebSocket> {
+    for (
+      let round = 0;
+      round < TAKEOVER_ROUNDS && !this.conn && this.portBusy && !this.closed;
+      round++
+    ) {
+      // Right after yielding, the new holder may not have bound the port
+      // yet; asking now would find it free and race that instance for it.
+      // Waiting out its bind window means the request reaches the new
+      // holder and becomes an ordinary yield.
+      const sinceYield = Date.now() - this.yieldedAt;
+      if (sinceYield < TAKEOVER_BIND_MS) {
+        await new Promise((r) => setTimeout(r, TAKEOVER_BIND_MS - sinceYield));
+      }
+      // The bind retry may have taken the port during that wait; a yield
+      // sent then would reach this instance's own listener.
+      if (this.portBusy && !this.closed) {
+        const outcome = await this.requestPort();
+        if (outcome !== "yielded" && outcome !== "free") {
+          this.yieldFailure = outcome;
+          break;
+        }
+        if (this.portBusy && !this.closed) {
+          log.info("extension", `Taking over port ${config.wsPort}`);
+          this.yieldFailure = "";
+          this.fastBindUntil = Date.now() + TAKEOVER_BIND_MS;
+          if (this.retryTimer) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = null;
+          }
+          // An attempt in flight retries on the fast schedule from its error
+          // handler; otherwise start one now.
+          this.listen();
+        }
+      }
+      await this.waitForState(
+        () => this.conn !== null || this.closed || (this.portBusy && this.fastBindUntil === 0),
+        EXECUTOR_WAIT_MS,
+      );
+    }
+    if (!this.conn) {
+      throw new ProjectionLabError(
+        "EXTENSION_NOT_CONNECTED",
+        "No browser-side executor is connected",
+        this.notConnectedReason(),
+      );
+    }
+    return this.conn;
   }
 
   private onFrame(ws: WebSocket, raw: unknown): void {
@@ -407,11 +636,14 @@ export class ExtensionBridge implements Bridge {
     this.pending.clear();
   }
 
-  private dropConnection(reason: string): void {
+  /** Forget the executor. With `closeCode`, the socket gets a close frame
+   * carrying that code; otherwise it is terminated. */
+  private dropConnection(reason: string, closeCode?: number): void {
     // Close the socket if it's still live - wss.close() waits for all
     // clients, so leaving it open would hang shutdown.
     try {
-      this.conn?.terminate();
+      if (closeCode === undefined) this.conn?.terminate();
+      else this.conn?.close(closeCode, reason);
     } catch {
       // Already gone.
     }
@@ -425,6 +657,7 @@ export class ExtensionBridge implements Bridge {
       this.heartbeat = null;
     }
     this.abandonRequests(reason);
+    this.notifyState();
   }
 
   private serialize<T>(fn: () => Promise<T>): Promise<T> {
@@ -435,12 +668,33 @@ export class ExtensionBridge implements Bridge {
 
   /** Why no executor can be reached, with the fix, for error messages. */
   private notConnectedReason(): string {
+    if (this.portBusy && this.yieldFailure === "refused") {
+      return (
+        `Port ${config.wsPort} is held by another process that did not hand it over. Usually that ` +
+        "is an older projectionlab-mcp started by another agent or session on this machine (older " +
+        "versions cannot hand the port over), or one started with a different PL_WS_TOKEN. Close " +
+        "that session or quit its MCP host (or update its projectionlab-mcp); this server takes " +
+        "over within seconds of the port coming free."
+      );
+    }
+    if (this.portBusy && this.yieldFailure === "slow") {
+      return (
+        `Port ${config.wsPort} is held by another projectionlab-mcp instance that is still busy ` +
+        "with its own operations and did not release the port in time. Try again shortly."
+      );
+    }
+    if (this.portBusy && this.yieldFailure === "foreign") {
+      return (
+        `Port ${config.wsPort} is held by a program that is not projectionlab-mcp. Stop that ` +
+        "program, or set PL_WS_PORT to a free port for this server and enter the same port on " +
+        "the extension's options page."
+      );
+    }
     if (this.portBusy) {
       return (
-        `Port ${config.wsPort} is held by another projectionlab-mcp instance (another agent on this ` +
-        "machine is using ProjectionLab), so the browser extension is connected to that one. This " +
-        "server takes over automatically within a minute of that instance exiting. To run both at " +
-        "once, set PL_WS_PORT to a free port here and point the extension at it."
+        `Port ${config.wsPort} is held by another projectionlab-mcp instance, and handing it over ` +
+        "to this one did not complete. Try again; if it keeps failing, close the other agent's " +
+        "session or quit its MCP host."
       );
     }
     return `No browser-side executor is connected to ws://127.0.0.1:${config.wsPort}. ${EXTENSION_HELP}`;
@@ -458,19 +712,13 @@ export class ExtensionBridge implements Bridge {
     return config.apiKey;
   }
 
-  private request(
+  /** Send one request to the executor. Call only from the operation chain. */
+  private async request(
     method: WireMethod,
     params: unknown[],
     timeoutMs = REQUEST_TIMEOUT_MS,
   ): Promise<unknown> {
-    const conn = this.conn;
-    if (!conn) {
-      throw new ProjectionLabError(
-        "EXTENSION_NOT_CONNECTED",
-        "No browser-side executor is connected",
-        this.notConnectedReason(),
-      );
-    }
+    const conn = await this.executorSocket();
     const id = String(this.nextId++);
     const frame: RequestFrame = { type: "request", id, method, params };
     return new Promise((resolve, reject) => {
@@ -515,7 +763,9 @@ export class ExtensionBridge implements Bridge {
           result.errors.push(`${e.code}: ${e.message}. ${e.suggestion}`);
         }
       }
-      if (!this.conn) {
+      try {
+        await this.executorSocket();
+      } catch {
         result.errors.push(`EXTENSION_NOT_CONNECTED: ${this.notConnectedReason()}`);
         return result;
       }
@@ -621,6 +871,21 @@ export class ExtensionBridge implements Bridge {
     await this.restoreCall("restorePlans", plans);
   }
 
+  /** Re-reads the plans and writes `plans` as one entry on the operation
+   * chain, so neither a hand-over to another instance nor another operation
+   * of this one can run between the conflict check and the write. */
+  async restorePlansIfUnchanged(read: unknown[], plans: unknown[]): Promise<void> {
+    await this.serialize(async () => {
+      const key = this.requireApiKey();
+      const data = (await this.request("exportData", [{ key }])) as ExportedData;
+      const changes = planChanges(read, Array.isArray(data.plans) ? data.plans : []);
+      if (changes.length > 0) throw planConflictError(changes);
+      log.info("extension", "Calling restorePlans");
+      await this.request("restorePlans", [plans, { key }]);
+    });
+    this.invalidateCache();
+  }
+
   async restoreProgress(progress: unknown): Promise<void> {
     await this.restoreCall("restoreProgress", progress);
   }
@@ -635,6 +900,8 @@ export class ExtensionBridge implements Bridge {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
+    this.notifyState();
+    this.yieldPeer?.terminate();
     this.dropConnection("server shutting down");
     if (this.wss) {
       log.info("extension", "Closing WebSocket server");

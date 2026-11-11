@@ -98,8 +98,11 @@ checks on Node 20 for every pull request and push to `main`.
   (`SnapshotManager.create`) so `projectionlab_rollback` can undo it.
 - Plan writes replace the whole plans array, so each confirmed plan write
   re-reads the plans and refuses with `PLAN_CONFLICT` if any changed since the
-  tool read them (`assertPlansUnchanged`, plus `expectedPlanVersion` on
-  `update_plan_section`). A plan saved in ProjectionLab meanwhile is never
+  tool read them (`Bridge.restorePlansIfUnchanged`, plus `expectedPlanVersion`
+  on `update_plan_section`). The re-read and the write are one entry on the
+  bridge's operation chain, so neither a port hand-over to another server
+  instance nor another operation can run between them; never split them into
+  separate bridge calls. A plan saved in ProjectionLab meanwhile is never
   overwritten.
 - Writes refuse payloads carrying the redaction sentinel (`[REDACTED]`) under
   sensitive field names, preventing accidental overwrite with redacted reads.

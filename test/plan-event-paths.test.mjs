@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,6 +96,7 @@ test("event path changes preserve nested siblings, snapshot, and verify", async 
     async exportData() {
       return state;
     },
+    restorePlansIfUnchanged,
     async restorePlans(plans) {
       actions.push("restore");
       state = { plans };

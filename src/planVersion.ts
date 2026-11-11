@@ -49,10 +49,12 @@ export function planConflictError(changes: string[]): ProjectionLabError {
 }
 
 /**
- * Re-read plans immediately before a whole-array restorePlans write and refuse
- * when any plan was added, removed, or saved since `read`. restorePlans
- * replaces every plan, so writing from a stale read would silently discard an
- * edit made in the ProjectionLab UI in the meantime.
+ * Re-read plans and refuse when any plan was added, removed, or saved since
+ * `read`. restorePlans replaces every plan, so writing from a stale read
+ * would silently discard an edit made in the meantime. Other operations can
+ * run between this check and a later write, so the write itself goes through
+ * Bridge.restorePlansIfUnchanged; this check is for refusing early, before a
+ * multi-section write applies anything.
  */
 export async function assertPlansUnchanged(
   bridge: Bridge,

@@ -50,6 +50,14 @@ test("4003 and 4004 keep retrying slowly; only auth refusals block", () => {
   assert.equal(reconnectBlockedForClose(1006), false);
   assert.equal(reconnectBlockedForClose(1000), false);
 
+  // 1012 is the server handing its port to another server instance, which
+  // binds it at once: the server relies on a retry after 2 seconds, never
+  // the standby schedule or a block.
+  assert.equal(reconnectBlockedForClose(1012), false);
+  assert.equal(isStandbyClose(1012), false);
+  assert.equal(retryDelayForClose(2_000, 1012), 2_000);
+  assert.equal(connectionStatusForClose(1012), "disconnected");
+
   assert.equal(retryDelayForClose(2_000, 4004), 30_000);
   assert.equal(retryDelayForClose(4_000, 4003), 30_000);
   assert.equal(retryDelayForClose(2_000, 1006), 2_000);

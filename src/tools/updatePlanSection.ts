@@ -10,7 +10,6 @@ import {
 } from "../errors.js";
 import {
   assertPlanVersion,
-  assertPlansUnchanged,
   planVersion,
 } from "../planVersion.js";
 import { toJson } from "../json.js";
@@ -229,13 +228,12 @@ export function registerUpdatePlanSectionTool(
         const updatedPlans = [...plans];
         updatedPlans[planIndex] = updatedPlan;
 
-        await assertPlansUnchanged(bridge, plans);
         log.info(
           "updatePlanSection",
           `Updating "${section}" of plan "${plan.name}" (${diff.currentCount} → ${diff.newCount} items)`,
         );
 
-        await bridge.restorePlans(updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
 
         // Verify by re-reading; match by plan id since order may change.
         // Compares submitted content (not just counts) so a rejected,

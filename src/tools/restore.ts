@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { assertPlansUnchanged } from "../planVersion.js";
 import { toJson } from "../json.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
@@ -341,8 +340,7 @@ export function registerRestoreTools(
           plans: exportData.plans,
         });
 
-        await assertPlansUnchanged(bridge, currentPlans);
-        await bridge.restorePlans(plans);
+        await bridge.restorePlansIfUnchanged(currentPlans, plans);
 
         const { verified, detail } = await verify(bridge, "plans", plans);
 

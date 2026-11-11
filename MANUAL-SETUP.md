@@ -5,7 +5,8 @@ assistant and it does these steps with you. Follow this page to set things up
 yourself instead.
 
 You need **Node.js 20 or newer** ([nodejs.org](https://nodejs.org)) and
-Chrome, Edge, Brave, or Firefox 140 or newer.
+Chrome or Firefox 140 or newer; both are tested with this server. Edge and
+Brave run the same builds as Chrome and Firefox and are unverified.
 
 **1. Turn on plugins and copy your API key.** In
 [ProjectionLab](https://app.projectionlab.com), open **Account Settings →

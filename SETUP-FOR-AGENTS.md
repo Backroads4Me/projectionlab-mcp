@@ -29,6 +29,9 @@ The config location varies by host; see [Adding the server to your MCP host](htt
   - **Chrome / Edge / Brave:** the [Chrome Web Store listing](https://chromewebstore.google.com/detail/mcp-bridge-for-projectionl/njgjmcihabchffonldcgfjiocjalpoaf) → **Add to Chrome**. Edge asks once whether to allow extensions from other stores.
   - **Firefox (140+):** the [Firefox Add-ons listing](https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/) → **Install Add-on**.
   Then have them open the extension's **options page** (click its toolbar icon) and enter the WebSocket **port** (default `8788`) and the **shared token** from `~/.projectionlab-mcp/ws-token`.
+  Chrome and Firefox are tested with this server; Edge and Brave run the same
+  builds and are unverified, so steer the user to Chrome or Firefox when they
+  have a choice, and treat a Brave or Edge report as unverified until reproduced.
 
 - **Quick alternative: no install.** Call the `projectionlab_get_bootstrap` tool, then have the user paste the returned snippet into their ProjectionLab tab's developer console (F12 → Console). It works the same way but must be re-pasted if they reload the page. Good for a first test drive.
 

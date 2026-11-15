@@ -351,38 +351,62 @@ test("refuses diff across different layouts with LAYOUT_MISMATCH", async () => {
     to: { snapshotId: v5Snapshot.id },
   });
   assert.equal(err3.error, "LAYOUT_MISMATCH");
+});
 
-  // 4. plan-to-plan diff across layouts
+test("v4 regression: plans list with schema: 5 and kind string diffed without layout uses v4 keying and does not throw", () => {
   const budget = createDiffBudget({});
-  const v4Plan = { id: "v4", name: "V4 Plan", income: { events: [] } };
-  const v5Plan = {
-    schema: 5,
-    id: "v5",
-    name: "V5 Plan",
-    income: { events: [] },
-  };
 
-  assert.throws(
-    () => diffPlanPair(v4Plan, v5Plan, budget),
-    (err) => err.code === "LAYOUT_MISMATCH",
-  );
+  const beforePlans = [
+    {
+      schema: 5,
+      id: "p1",
+      name: "Retire Early",
+      income: {
+        events: [
+          {
+            id: "e1",
+            schema: 5,
+            kind: "income",
+            name: "Old Salary",
+            amount: 80000,
+          },
+        ],
+      },
+    },
+  ];
 
-  // 5. diffPlanList across layouts
-  assert.throws(
-    () => diffPlanList([v4Plan], [v5Plan], budget),
-    (err) => err.code === "LAYOUT_MISMATCH",
-  );
+  const afterPlans = [
+    {
+      schema: 5,
+      id: "p1",
+      name: "Retire Early",
+      income: {
+        events: [
+          {
+            id: "e1",
+            schema: 5,
+            kind: "income",
+            name: "New Salary",
+            amount: 80000,
+          },
+        ],
+      },
+    },
+  ];
 
-  // 6. diffCurrentFinances across layouts
-  assert.throws(
-    () =>
-      diffCurrentFinances(
-        { investmentAccounts: [{ id: "i1", name: "Inv" }] },
-        { schema: 5, accounts: { a1: { id: "a1", name: "Inv" } } },
-        budget,
-      ),
-    (err) => err.code === "LAYOUT_MISMATCH",
-  );
+  // Must not throw even with schema: 5 and kind string present
+  const result = diffPlanList(beforePlans, afterPlans, budget);
+
+  assert.equal(result.changed, true);
+  const planDiff = result.changedPlans[0];
+  const incomeDiff = planDiff.sections.income;
+
+  // With v4 name-plus-occurrence keying, renaming an event means old is removed and new is added
+  assert.equal(incomeDiff.addedCount, 1);
+  assert.deepEqual(incomeDiff.added, ["New Salary"]);
+  assert.equal(incomeDiff.removedCount, 1);
+  assert.deepEqual(incomeDiff.removed, ["Old Salary"]);
+  assert.equal(incomeDiff.modifiedCount, 0);
 });
 
 test("v4 regression check: points-in-time and plan-to-plan behave as before on v4", async () => {

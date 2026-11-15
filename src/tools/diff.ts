@@ -171,6 +171,7 @@ export function registerDiffTool(
   async function readPlansForPair(from?: SnapshotSelectorArgs): Promise<{
     plans: unknown[];
     readFrom: Record<string, unknown>;
+    layout: ExportLayout;
   }> {
     if (from) {
       const snapshot = await resolveSnapshot(snapshots, from, "from snapshot");
@@ -182,7 +183,11 @@ export function registerDiffTool(
           "Drop from to compare the plans in ProjectionLab now, or pick a snapshot whose sections include plans; projectionlab_list_snapshots shows what each snapshot holds",
         );
       }
-      return { plans: stored, readFrom: describeSnapshot(snapshot) };
+      return {
+        plans: stored,
+        readFrom: describeSnapshot(snapshot),
+        layout: snapshot.layout ?? "v4",
+      };
     }
     const live = await bridge.exportData({ fresh: true });
     const plans = exportSections(live).plans;
@@ -200,6 +205,7 @@ export function registerDiffTool(
         readAt: new Date().toISOString(),
         note: "both plans read from ProjectionLab when this diff ran",
       },
+      layout: detectLayout(live),
     };
   }
 
@@ -208,7 +214,7 @@ export function registerDiffTool(
     const budget = createDiffBudget({
       pathsOnly: args.pathsOnly === true,
     });
-    const { plans, readFrom } = await readPlansForPair(args.from);
+    const { plans, readFrom, layout } = await readPlansForPair(args.from);
     const indexA = resolvePlanIndex(plans, args.planA);
     if (indexA === -1) {
       throw planSideNotFoundError(plans, args.planA, "planA");
@@ -230,6 +236,7 @@ export function registerDiffTool(
       plans[indexB] as PlanObj,
       budget,
       args.section,
+      { layout },
     );
     const result = {
       mode: "plans" as const,

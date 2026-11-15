@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { contractOf } from "./helpers/contract.mjs";
 
 const KEY = "pl-key-9f3a-test";
 const HOME = mkdtempSync(join(tmpdir(), "plmcp-key-home-"));
@@ -48,6 +49,7 @@ function fakeBridge(initial) {
     state,
     writes: [],
     payloads: [],
+    async apiContract() { return contractOf(state); },
     async exportData() {
       return structuredClone(state);
     },
@@ -149,6 +151,7 @@ test("rollback refuses a placeholder snapshot when PL_API_KEY is unset", async (
     const state = { settings: {}, plans: [], today: {} };
     const writes = [];
     const bridge = {
+      async apiContract() { return contractOf(state); },
       async exportData() { return structuredClone(state); },
       async restoreSettings(s) { writes.push(s); state.settings = s; },
     };

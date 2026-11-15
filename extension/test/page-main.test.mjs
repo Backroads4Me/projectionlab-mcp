@@ -86,3 +86,31 @@ test("the contract 2 account methods reach the API", async () => {
     result: { accountId: "a1" },
   });
 });
+
+test("a write runs only when the page's API version equals expectApiVersion", async () => {
+  const calls = [];
+  const api = (version) => ({ version, restorePlans: async (plans) => { calls.push(plans); } });
+
+  globalThis.window = { projectionlabPluginAPI: api(2) };
+  assert.deepEqual(await executePageRequest({ method: "restorePlans", params: [["a"]], expectApiVersion: 2 }), { ok: true, result: undefined });
+
+  // A page without api.version reads as null.
+  globalThis.window = { projectionlabPluginAPI: api(undefined) };
+  assert.equal((await executePageRequest({ method: "restorePlans", params: [["b"]], expectApiVersion: null })).ok, true);
+  assert.deepEqual(calls, [["a"], ["b"]]);
+
+  for (const [version, expected] of [[2, null], [undefined, 2], [3, 2], ["2", 2]]) {
+    globalThis.window = { projectionlabPluginAPI: api(version) };
+    const response = await executePageRequest({ method: "restorePlans", params: [["c"]], expectApiVersion: expected });
+    assert.equal(response.ok, false);
+    assert.equal(response.error.code, "CONTRACT_CHANGED");
+  }
+  assert.deepEqual(calls, [["a"], ["b"]], "a refused write never reaches the API");
+});
+
+test("a request without expectApiVersion runs whatever the page's version", async () => {
+  let called = false;
+  globalThis.window = { projectionlabPluginAPI: { version: 2, restorePlans: async () => { called = true; } } };
+  assert.equal((await executePageRequest({ method: "restorePlans", params: [[]] })).ok, true);
+  assert.equal(called, true);
+});

@@ -19,6 +19,7 @@ import {
 import type { PlanObj } from "../plans.js";
 import { isSecretFieldName, redactSecrets } from "../redact.js";
 import { detectLayout } from "../layout.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
 const ACCOUNT_FIELD_CONTEXT = {
   label: "Current Finances account field",
@@ -200,6 +201,7 @@ export function registerUpdateAccountTool(
           );
         }
 
+        await assertWritesSupported(bridge, ["updateAccount"]);
         const exportData = await bridge.exportData({ fresh: true });
         const today = requireCurrentFinances(exportData.today);
         const entry = findCurrentFinanceEntry(today, accountId);

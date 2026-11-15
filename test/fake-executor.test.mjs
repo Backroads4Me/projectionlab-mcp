@@ -356,6 +356,79 @@ test("every write is refused on contract 2 before anything is sent", async () =>
   await exec.done;
 });
 
+const WRITE_METHODS = ["updateAccount", "restoreCurrentFinances", "restorePlans", "restoreProgress", "restoreSettings"];
+
+/** healthyHandler on a ProjectionLab 4 page (api.version absent), recording
+ * every request frame. `onWrite` may answer a write instead. */
+function recordingV4Handler(frames, onWrite) {
+  return (frame) => {
+    frames.push(frame);
+    if (frame.method === "apiVersion") return { ok: true, result: null };
+    if (onWrite && WRITE_METHODS.includes(frame.method)) return onWrite(frame);
+    return healthyHandler(frame);
+  };
+}
+
+test("each write carries the checked API version to an executor that honors it", async () => {
+  const frames = [];
+  const exec = connectExecutor({
+    hello: { features: ["expectApiVersion"] },
+    handler: recordingV4Handler(frames),
+  });
+  await exec.ready;
+  await bridge.updateAccount("a", { balance: 1 });
+  await bridge.restorePlansIfUnchanged([], []);
+  await bridge.restoreCurrentFinances({});
+  await bridge.restoreProgress({});
+  await bridge.restoreSettings({});
+  const writes = frames.filter((f) => WRITE_METHODS.includes(f.method));
+  assert.deepEqual(writes.map((f) => f.method), ["updateAccount", "restorePlans", "restoreCurrentFinances", "restoreProgress", "restoreSettings"]);
+  for (const f of writes) {
+    assert.equal(Object.hasOwn(f, "expectApiVersion"), true, f.method);
+    assert.equal(f.expectApiVersion, null, f.method);
+  }
+  // Reads, including the conflict check's export, are never guarded.
+  for (const f of frames.filter((f) => !WRITE_METHODS.includes(f.method))) {
+    assert.equal(Object.hasOwn(f, "expectApiVersion"), false, f.method);
+  }
+  exec.ws.close();
+  await exec.done;
+});
+
+test("an executor that does not list the feature gets no expectApiVersion", async () => {
+  const frames = [];
+  const exec = connectExecutor({ handler: recordingV4Handler(frames) });
+  await exec.ready;
+  await bridge.updateAccount("a", { balance: 1 });
+  await bridge.restorePlansIfUnchanged([], []);
+  const writes = frames.filter((f) => WRITE_METHODS.includes(f.method));
+  assert.equal(writes.length, 2);
+  for (const f of writes) assert.equal(Object.hasOwn(f, "expectApiVersion"), false, f.method);
+  exec.ws.close();
+  await exec.done;
+});
+
+test("a write the page refuses with CONTRACT_CHANGED rejects with that code", async () => {
+  const frames = [];
+  const exec = connectExecutor({
+    hello: { features: ["expectApiVersion"] },
+    handler: recordingV4Handler(frames, () => ({
+      ok: false,
+      error: { code: "CONTRACT_CHANGED", message: "Plugin API version is 2, not the null the server checked" },
+    })),
+  });
+  await exec.ready;
+  for (const write of [() => bridge.updateAccount("a", { balance: 1 }), () => bridge.restorePlansIfUnchanged([], [])]) {
+    await assert.rejects(write(), (err) => {
+      assert.equal(err.code, "CONTRACT_CHANGED");
+      assert.match(err.suggestion, /Nothing was written/);
+      return true;
+    });
+  }
+  exec.ws.close();
+  await exec.done;
+});
+
 test("an executor without apiVersion falls back to the member list", async () => {
   // healthyHandler rejects apiVersion and lists no version member: contract 1.
   const exec = connectExecutor({ handler: healthyHandler });

@@ -107,11 +107,11 @@ test("blocked and the slow schedule gate alarm and startup connects, Save never 
   assert.equal(shouldAttemptReconnect({ blocked: false, force: false, lastAttemptAt: 0, now: 10_000, minDelayMs: 30_000 }), true);
 });
 
-test("the hello carries instanceId and takeover only when they are real", () => {
+test("the hello carries features always and instanceId and takeover only when they are real", () => {
   const base = { token: "t", protocolVersion: 1, executor: "extension/1.2.0" };
-  assert.deepEqual(buildHelloFrame(base), { type: "hello", token: "t", protocolVersion: 1, executor: "extension/1.2.0" });
-  assert.deepEqual(buildHelloFrame({ ...base, instanceId: "", takeover: false }), { type: "hello", token: "t", protocolVersion: 1, executor: "extension/1.2.0" });
-  assert.deepEqual(buildHelloFrame({ ...base, instanceId: "abc", takeover: true }), { type: "hello", token: "t", protocolVersion: 1, executor: "extension/1.2.0", instanceId: "abc", takeover: true });
+  assert.deepEqual(buildHelloFrame(base), { type: "hello", token: "t", protocolVersion: 1, executor: "extension/1.2.0", features: ["expectApiVersion"] });
+  assert.deepEqual(buildHelloFrame({ ...base, instanceId: "", takeover: false }), { type: "hello", token: "t", protocolVersion: 1, executor: "extension/1.2.0", features: ["expectApiVersion"] });
+  assert.deepEqual(buildHelloFrame({ ...base, instanceId: "abc", takeover: true }), { type: "hello", token: "t", protocolVersion: 1, executor: "extension/1.2.0", features: ["expectApiVersion"], instanceId: "abc", takeover: true });
   // Only exactly true asks for a takeover.
   assert.equal(buildHelloFrame({ ...base, takeover: "true" }).takeover, undefined);
   assert.equal(buildHelloFrame({ ...base, instanceId: 7 }).instanceId, undefined);

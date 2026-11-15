@@ -10,6 +10,16 @@ import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { restoredSectionMatches } from "./restore.js";
 import { assertSnapshotLayout, detectLayout, exportSections, sectionOf } from "../layout.js";
+import type { WireMethod } from "../types/wire.js";
+import { assertWritesSupported } from "./writeGuard.js";
+
+/** The Plugin API method that writes each snapshot section back. */
+const RESTORE_METHODS: Partial<Record<string, WireMethod>> = {
+  currentFinances: "restoreCurrentFinances",
+  plans: "restorePlans",
+  progress: "restoreProgress",
+  settings: "restoreSettings",
+};
 
 export function registerSnapshotTools(
   server: McpServer,
@@ -141,6 +151,10 @@ export function registerSnapshotTools(
         const currentData = await bridge.exportData({ fresh: true });
         const liveLayout = detectLayout(currentData);
         assertSnapshotLayout(snapshot.layout, liveLayout);
+        await assertWritesSupported(
+          bridge,
+          snapshot.sections.flatMap((section) => RESTORE_METHODS[section] ?? []),
+        );
 
         if (!confirm) {
           return {

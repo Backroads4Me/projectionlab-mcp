@@ -94,12 +94,15 @@ export function isForcedConnectChange(changes, { authed = false } = {}) {
   return differs(changes.connectRequestedAt) && !authed;
 }
 
+/** The optional behaviors this executor supports (src/types/wire.ts HelloFrame.features). */
+export const EXECUTOR_FEATURES = ["expectApiVersion"];
+
 /**
  * The hello frame. instanceId and takeover are omitted when absent or not
- * exactly true, so a 1.1.0 server sees exactly the old frame shape.
+ * exactly true. features is always sent; servers that predate it ignore it.
  */
 export function buildHelloFrame({ token, protocolVersion, executor, instanceId, takeover }) {
-  const frame = { type: "hello", token, protocolVersion, executor };
+  const frame = { type: "hello", token, protocolVersion, executor, features: [...EXECUTOR_FEATURES] };
   if (typeof instanceId === "string" && instanceId) frame.instanceId = instanceId;
   if (takeover === true) frame.takeover = true;
   return frame;

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { v5Export } from "./fixtures/v5-export.mjs";
+import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_READ_ONLY = "false";
@@ -111,6 +112,7 @@ function fakeServer() {
 function fakeBridge(data) {
   const bridge = {
     writes: [],
+    async apiContract() { return contractOf(data); },
     async exportData() {
       return structuredClone(data);
     },

@@ -6,7 +6,13 @@ import { buildBootstrapSnippet } from "./bootstrap.js";
 import type { Bridge, ConnectionStatus } from "./bridge.js";
 import { config, USER_ENV_FILE } from "./config.js";
 import { ProjectionLabError } from "./errors.js";
-import { CONTRACT_2_WRITES, contractFromVersion, exportSections, type ApiContract } from "./layout.js";
+import {
+  contractFromVersion,
+  exportSections,
+  writeNotSupportedError,
+  writeSupported,
+  type ApiContract,
+} from "./layout.js";
 import { log } from "./logger.js";
 import { planChanges, planConflictError } from "./planVersion.js";
 import type { ExportedData } from "./types/projectionlab.js";
@@ -108,6 +114,21 @@ function parseFrame(raw: unknown): ClientFrame | null {
   }
 }
 
+/** What a write's request is checked against: the raw Plugin API version
+ * assertWriteSupported read, and the socket it was read on. */
+interface WriteGuard {
+  apiVersion: unknown;
+  socket: WebSocket;
+}
+
+function contractChangedError(message: string): ProjectionLabError {
+  return new ProjectionLabError(
+    "CONTRACT_CHANGED",
+    message,
+    "The ProjectionLab page changed between the version check and the write. Nothing was written. Run projectionlab_check_connection, then retry.",
+  );
+}
+
 /** Best-effort chmod; a file the process does not own keeps its mode. */
 function restrictMode(path: string, mode: number): void {
   try {
@@ -122,6 +143,8 @@ export class ExtensionBridge implements Bridge {
   private conn: WebSocket | null = null;
   private connExecutor = "";
   private connInstanceId = "";
+  /** Whether the connected executor honors RequestFrame.expectApiVersion. */
+  private connGuardsApiVersion = false;
   /** The contract from the last successful contract read (knownApiContract). */
   private lastContract: ApiContract | undefined;
   private readonly pending = new Map<string, Pending>();
@@ -330,7 +353,9 @@ export class ExtensionBridge implements Bridge {
         hello.instanceId.length <= 64
           ? hello.instanceId
           : "";
-      this.admit(ws, hello.executor, instanceId, hello.takeover === true);
+      const guardsApiVersion =
+        Array.isArray(hello.features) && hello.features.includes("expectApiVersion");
+      this.admit(ws, hello.executor, instanceId, hello.takeover === true, guardsApiVersion);
     });
   }
 
@@ -347,15 +372,16 @@ export class ExtensionBridge implements Bridge {
     executor: string,
     instanceId: string,
     takeover: boolean,
+    guardsApiVersion: boolean,
   ): void {
     const incumbent = this.conn;
     if (!incumbent || incumbent.readyState !== WebSocket.OPEN) {
       if (incumbent) this.dropConnection("dropping a dead executor connection");
-      this.adopt(ws, executor, instanceId);
+      this.adopt(ws, executor, instanceId, guardsApiVersion);
       return;
     }
     if (takeover || (instanceId !== "" && instanceId === this.connInstanceId)) {
-      this.adopt(ws, executor, instanceId);
+      this.adopt(ws, executor, instanceId, guardsApiVersion);
       return;
     }
     log.info(
@@ -367,7 +393,12 @@ export class ExtensionBridge implements Bridge {
 
   /** Promote an authenticated socket to the active connection. Replacing a
    * live incumbent (takeover or same instance id) closes it with 4003. */
-  private adopt(ws: WebSocket, executor: string, instanceId: string): void {
+  private adopt(
+    ws: WebSocket,
+    executor: string,
+    instanceId: string,
+    guardsApiVersion: boolean,
+  ): void {
     if (this.conn && this.conn !== ws) {
       log.info("extension", `Replacing ${this.connExecutor} with ${executor}`);
       this.conn.close(CLOSE_CODES.REPLACED, "replaced by newer connection");
@@ -383,6 +414,7 @@ export class ExtensionBridge implements Bridge {
     this.conn = ws;
     this.connExecutor = executor;
     this.connInstanceId = instanceId;
+    this.connGuardsApiVersion = guardsApiVersion;
     log.info("extension", `Executor connected: ${executor}`);
     ws.send(
       JSON.stringify({
@@ -617,6 +649,8 @@ export class ExtensionBridge implements Bridge {
           message,
           "The ProjectionLab page did not respond in time - check the tab and try again",
         );
+      case "CONTRACT_CHANGED":
+        return contractChangedError(message);
       default:
         return new ProjectionLabError(
           "UNKNOWN",
@@ -671,6 +705,7 @@ export class ExtensionBridge implements Bridge {
     this.conn = null;
     this.connExecutor = "";
     this.connInstanceId = "";
+    this.connGuardsApiVersion = false;
     this.awaitingPong = false;
     this.exportCache = null;
     if (this.heartbeat) {
@@ -733,15 +768,33 @@ export class ExtensionBridge implements Bridge {
     return config.apiKey;
   }
 
-  /** Send one request to the executor. Call only from the operation chain. */
+  /**
+   * Send one request to the executor. Call only from the operation chain.
+   *
+   * A write passes the guard from assertWriteSupported. An executor that
+   * honors expectApiVersion checks the page's version in the same page turn
+   * as the call. An executor that does not is trusted only on the socket the
+   * guard's version was read from: a write that would reach another one is
+   * refused, since that executor could be on another ProjectionLab version.
+   */
   private async request(
     method: WireMethod,
     params: unknown[],
     timeoutMs = REQUEST_TIMEOUT_MS,
+    guard?: WriteGuard,
   ): Promise<unknown> {
     const conn = await this.executorSocket();
     const id = String(this.nextId++);
     const frame: RequestFrame = { type: "request", id, method, params };
+    if (guard) {
+      if (this.connGuardsApiVersion) {
+        frame.expectApiVersion = guard.apiVersion;
+      } else if (conn !== guard.socket) {
+        throw contractChangedError(
+          "The browser executor changed after the Plugin API version was checked",
+        );
+      }
+    }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
@@ -847,9 +900,19 @@ export class ExtensionBridge implements Bridge {
    * the executor cannot report is refused rather than assumed to be contract 1.
    */
   private async fetchContract(): Promise<ApiContract> {
+    return (await this.readContract()).contract;
+  }
+
+  /** fetchContract, with the raw version and the socket it was read on. */
+  private async readContract(): Promise<{
+    contract: ApiContract;
+    apiVersion: unknown;
+    socket: WebSocket;
+  }> {
+    const socket = await this.executorSocket();
     let version: unknown;
     try {
-      version = await this.request("apiVersion", []);
+      version = (await this.request("apiVersion", [])) ?? null;
     } catch (err) {
       if (!(err instanceof ProjectionLabError) || err.code !== "UNKNOWN") throw err;
       const members = (await this.request("describeApi", [])) as Record<string, string>;
@@ -861,23 +924,21 @@ export class ExtensionBridge implements Bridge {
         );
       }
       this.lastContract = 1;
-      return 1;
+      return { contract: 1, apiVersion: null, socket };
     }
     this.lastContract = contractFromVersion(version);
-    return this.lastContract;
+    return { contract: this.lastContract, apiVersion: version, socket };
   }
 
-  /** Refuses a write the page's contract does not support yet. Call only
-   * from the operation chain, in the same entry as the write it guards. */
-  private async assertWriteSupported(method: WireMethod): Promise<void> {
-    const contract = await this.fetchContract();
-    if (contract === 2 && !CONTRACT_2_WRITES.has(method)) {
-      throw new ProjectionLabError(
-        "WRITE_NOT_SUPPORTED",
-        `${method} is not supported on ProjectionLab 5 yet`,
-        "This server reads ProjectionLab 5 data but does not write it yet. Make the change in the ProjectionLab app. Nothing was written.",
-      );
-    }
+  /**
+   * Refuses a write the page's contract does not support yet, and returns
+   * the guard to pass to the write's request. Call only from the operation
+   * chain, in the same entry as the write it guards.
+   */
+  private async assertWriteSupported(method: WireMethod): Promise<WriteGuard> {
+    const { contract, apiVersion, socket } = await this.readContract();
+    if (!writeSupported(contract, method)) throw writeNotSupportedError(method);
+    return { apiVersion, socket };
   }
 
   async describePluginApi(): Promise<Record<string, string>> {
@@ -927,8 +988,8 @@ export class ExtensionBridge implements Bridge {
       );
       const opts: { key: string; force?: string } = { key: this.requireApiKey() };
       if (force) opts.force = "true";
-      await this.assertWriteSupported("updateAccount");
-      await this.request("updateAccount", [accountId, data, opts]);
+      const guard = await this.assertWriteSupported("updateAccount");
+      await this.request("updateAccount", [accountId, data, opts], REQUEST_TIMEOUT_MS, guard);
     });
     this.invalidateCache();
   }
@@ -936,9 +997,9 @@ export class ExtensionBridge implements Bridge {
   private async restoreCall(method: WireMethod, payload: unknown): Promise<void> {
     await this.serialize(async () => {
       const key = this.requireApiKey();
-      await this.assertWriteSupported(method);
+      const guard = await this.assertWriteSupported(method);
       log.info("extension", `Calling ${method}`);
-      await this.request(method, [payload, { key }]);
+      await this.request(method, [payload, { key }], REQUEST_TIMEOUT_MS, guard);
     });
     this.invalidateCache();
   }
@@ -957,12 +1018,12 @@ export class ExtensionBridge implements Bridge {
   async restorePlansIfUnchanged(read: unknown[], plans: unknown[]): Promise<void> {
     await this.serialize(async () => {
       const key = this.requireApiKey();
-      await this.assertWriteSupported("restorePlans");
+      const guard = await this.assertWriteSupported("restorePlans");
       const data = await this.request("exportData", [{ key }]);
       const changes = planChanges(read, exportSections(data).plans);
       if (changes.length > 0) throw planConflictError(changes);
       log.info("extension", "Calling restorePlans");
-      await this.request("restorePlans", [plans, { key }]);
+      await this.request("restorePlans", [plans, { key }], REQUEST_TIMEOUT_MS, guard);
     });
     this.invalidateCache();
   }

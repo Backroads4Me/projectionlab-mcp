@@ -282,6 +282,56 @@ async function snippetCloseScenario(closeCode) {
   return { hellos, logs, retryDelays, sandbox, wss };
 }
 
+test("the snippet lists expectApiVersion and refuses a write on another API version", async () => {
+  const port = await freePort();
+  const wss = new WebSocketServer({ host: "127.0.0.1", port });
+  await new Promise((resolve) => wss.once("listening", resolve));
+  const calls = [];
+  const sandbox = {
+    window: { projectionlabPluginAPI: { restorePlans: async (plans) => { calls.push(plans); } } },
+    WebSocket,
+    crypto: { randomUUID: () => "sandbox-instance-id" },
+    console: { log: () => {} },
+    setTimeout: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      t.unref();
+      return t;
+    },
+    clearTimeout,
+  };
+  const responses = new Map();
+  let hello;
+  const done = new Promise((resolve) => {
+    wss.on("connection", (ws) => {
+      ws.on("message", (raw) => {
+        const frame = JSON.parse(String(raw));
+        if (frame.type === "hello") {
+          hello = frame;
+          ws.send(JSON.stringify({ type: "helloAck", protocolVersion: frame.protocolVersion }));
+          ws.send(JSON.stringify({ type: "request", id: "1", method: "restorePlans", params: [["a"]], expectApiVersion: 2 }));
+          ws.send(JSON.stringify({ type: "request", id: "2", method: "restorePlans", params: [["b"]], expectApiVersion: null }));
+        } else if (frame.type === "response") {
+          responses.set(frame.id, frame);
+          if (responses.size === 2) resolve();
+        }
+      });
+    });
+  });
+  vm.createContext(sandbox);
+  vm.runInContext(buildBootstrapSnippet(port, "test-token"), sandbox);
+  try {
+    await done;
+    assert.deepEqual(hello.features, ["expectApiVersion"]);
+    assert.equal(responses.get("1").ok, false);
+    assert.equal(responses.get("1").error.code, "CONTRACT_CHANGED");
+    assert.equal(responses.get("2").ok, true);
+    // JSON round-trip: the plans array was parsed inside the vm realm.
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [["b"]]);
+  } finally {
+    await cleanupScenario(sandbox, wss);
+  }
+});
+
 async function cleanupScenario(sandbox, wss) {
   sandbox.WebSocket = class {
     send() {}

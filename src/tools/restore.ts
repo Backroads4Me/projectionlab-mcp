@@ -13,6 +13,7 @@ import { detectLayout, exportSections, sectionOf } from "../layout.js";
 import { log } from "../logger.js";
 import { containsSubset } from "../plans.js";
 import { findRedactedSecretPaths } from "../redact.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
 type Obj = Record<string, unknown>;
 
@@ -209,6 +210,7 @@ export function registerRestoreTools(
           throw redactedSecretsError("currentFinances", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restoreCurrentFinances"]);
         if (!confirm) {
           const topKeys = Object.keys(currentFinances);
           return {
@@ -302,6 +304,7 @@ export function registerRestoreTools(
           throw redactedSecretsError("plans", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restorePlans"]);
         const exportData = await bridge.exportData({ fresh: true });
         const currentPlans = exportSections(exportData).plans;
         const diff = diffPlans(currentPlans, plans);
@@ -395,6 +398,7 @@ export function registerRestoreTools(
           throw redactedSecretsError("progress", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restoreProgress"]);
         if (!confirm) {
           return {
             content: [
@@ -481,6 +485,7 @@ export function registerRestoreTools(
           throw redactedSecretsError("settings", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restoreSettings"]);
         if (!confirm) {
           return {
             content: [

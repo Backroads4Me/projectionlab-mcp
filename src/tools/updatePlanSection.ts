@@ -29,6 +29,7 @@ import {
   type PlanObj,
 } from "../plans.js";
 import { detectLayout } from "../layout.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
 interface DiffResult {
   currentCount: number;
@@ -186,6 +187,7 @@ export function registerUpdatePlanSectionTool(
           throw redactedSecretsError("sectionData", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restorePlans"]);
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
 

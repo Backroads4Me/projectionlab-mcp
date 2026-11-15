@@ -3,6 +3,7 @@ import test from "node:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_READ_ONLY = "false";
@@ -60,6 +61,7 @@ function initialState() {
 test("get Current Finances targets one account and lists redacted typed paths", async () => {
   const server = fakeServer();
   const bridge = {
+    async apiContract() { return contractOf(initialState()); },
     async exportData() {
       return initialState();
     },
@@ -96,6 +98,7 @@ test("Current Finances path patch validates dry-run, preserves siblings, snapsho
   let state = initialState();
   const actions = [];
   const bridge = {
+    async apiContract() { return contractOf(state); },
     async exportData() {
       return state;
     },
@@ -175,6 +178,7 @@ test("Current Finances updates reject unsafe input before snapshot or mutation",
   const server = fakeServer();
   let exportCalls = 0;
   const bridge = {
+    async apiContract() { return contractOf(initialState()); },
     async exportData() {
       exportCalls++;
       return initialState();
@@ -221,6 +225,10 @@ test("Current Finances updates respect PL_READ_ONLY before reading", async () =>
   const server = fakeServer();
   let bridgeCalled = false;
   const bridge = {
+    async apiContract() {
+      bridgeCalled = true;
+      return contractOf(initialState());
+    },
     async exportData() {
       bridgeCalled = true;
       return initialState();

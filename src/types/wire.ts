@@ -85,6 +85,12 @@ export interface HelloFrame {
    * when the user presses Save on the options page.
    */
   takeover?: boolean;
+  /**
+   * Optional behaviors this executor supports. Additive: absent from 1.2.x
+   * executors, and the server ignores names it does not know.
+   * - "expectApiVersion": the executor honors RequestFrame.expectApiVersion.
+   */
+  features?: string[];
 }
 
 /** Server acknowledges a valid hello. Requests only flow after this. */
@@ -110,6 +116,17 @@ export interface RequestFrame {
   id: string;
   method: WireMethod;
   params: unknown[];
+  /**
+   * The Plugin API version (`projectionlabPluginAPI.version`, undefined read
+   * as null) the server checked before sending this request. Sent only to an
+   * executor whose hello lists the "expectApiVersion" feature, and only on
+   * writes. When the property is present, the executor runs a Plugin API
+   * method only if the page's version is strictly equal to it, and otherwise
+   * answers CONTRACT_CHANGED without calling the API. The check and the call
+   * run in the same page turn, so a reload onto another ProjectionLab version
+   * between the server's check and the write cannot slip the write through.
+   */
+  expectApiVersion?: unknown;
 }
 
 export type WireErrorCode =
@@ -121,6 +138,8 @@ export type WireErrorCode =
   | "API_KEY_INVALID"
   /** Executor-side timeout waiting on the page. */
   | "TIMEOUT"
+  /** The page's Plugin API version differs from RequestFrame.expectApiVersion; nothing was called. */
+  | "CONTRACT_CHANGED"
   | "UNKNOWN";
 
 export interface ResponseFrame {

@@ -9,6 +9,7 @@ import { log } from "../logger.js";
 import { toJson } from "../json.js";
 import { getEvents, requirePlans, type PlanObj } from "../plans.js";
 import { detectLayout } from "../layout.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
 export function registerDeletePlanTool(
   server: McpServer,
@@ -58,6 +59,7 @@ export function registerDeletePlanTool(
           );
         }
 
+        await assertWritesSupported(bridge, ["restorePlans"]);
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
         const target = selectPlanForDeletion(plans, planId);

@@ -9,6 +9,7 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_READ_ONLY = "false";
@@ -55,6 +56,7 @@ function fakeBridge(initial) {
   const bridge = {
     state,
     writes: [],
+    async apiContract() { return contractOf(state); },
     async exportData() {
       return structuredClone(state);
     },

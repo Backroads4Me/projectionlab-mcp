@@ -21,9 +21,24 @@ export type ExportLayout = "v4" | "v5";
 /**
  * Write methods allowed on contract 2. Each is added only once its v5
  * semantics are verified against a live ProjectionLab 5 account; until then
- * the bridge refuses the write. Contract 1 allows every write method.
+ * the write tools and the bridge refuse the write. Contract 1 allows every
+ * write method.
  */
 export const CONTRACT_2_WRITES: ReadonlySet<WireMethod> = new Set<WireMethod>();
+
+/** Whether `method` may write to a page offering `contract`. */
+export function writeSupported(contract: ApiContract, method: WireMethod): boolean {
+  return contract !== 2 || CONTRACT_2_WRITES.has(method);
+}
+
+/** The refusal for a write the page's contract does not support yet. */
+export function writeNotSupportedError(method: WireMethod): ProjectionLabError {
+  return new ProjectionLabError(
+    "WRITE_NOT_SUPPORTED",
+    `${method} is not supported on ProjectionLab 5 yet`,
+    "This server reads ProjectionLab 5 data but does not write it yet. Make the change in the ProjectionLab app. Nothing was written.",
+  );
+}
 
 /** The contract named by a Plugin API `version` value. */
 export function contractFromVersion(version: unknown): ApiContract {

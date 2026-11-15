@@ -20,6 +20,7 @@ export async function executePageRequest(request) {
 
   function classifyError(error) {
     if (error?.code === "API_NOT_AVAILABLE") return "API_NOT_AVAILABLE";
+    if (error?.code === "CONTRACT_CHANGED") return "CONTRACT_CHANGED";
     const message = error instanceof Error ? error.message : String(error);
     return /api.?key|invalid key|unauthori[sz]ed|forbidden|\b401\b|\b403\b/i.test(message) ? "API_KEY_INVALID" : "UNKNOWN";
   }
@@ -47,6 +48,14 @@ export async function executePageRequest(request) {
         object = Object.getPrototypeOf(object);
       }
     } else {
+      // A write carries the Plugin API version the server checked; a page
+      // that reloaded onto another version since then is not written to.
+      if (Object.prototype.hasOwnProperty.call(request, "expectApiVersion")) {
+        const actual = api.version ?? null;
+        if (actual !== request.expectApiVersion) {
+          throw Object.assign(new Error(`Plugin API version is ${JSON.stringify(actual)}, not the ${JSON.stringify(request.expectApiVersion)} the server checked`), { code: "CONTRACT_CHANGED" });
+        }
+      }
       const operation = api[request.method];
       if (typeof operation !== "function") throw new Error(`Plugin API method is unavailable: ${request.method}`);
       result = await operation.apply(api, request.params);

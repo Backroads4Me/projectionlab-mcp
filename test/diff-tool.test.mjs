@@ -8,6 +8,7 @@ import test from "node:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_READ_ONLY = "false";
@@ -36,6 +37,7 @@ function fakeBridge(state) {
   const bridge = {
     state,
     exportCalls: 0,
+    async apiContract() { return contractOf(bridge.state); },
     async exportData() {
       bridge.exportCalls++;
       return structuredClone(bridge.state);

@@ -163,6 +163,19 @@ test("executor wire errors map to ProjectionLabError codes", async () => {
   await exec.done;
 });
 
+test("a connection-check error line ends its message with exactly one period", async () => {
+  // The extension's NO_TAB messages already end in a period.
+  const exec = connectExecutor({
+    handler: () => ({ ok: false, error: { code: "NO_TAB", message: "No ProjectionLab tab is open and auto-open is disabled." } }),
+  });
+  await exec.ready;
+  const status = await bridge.checkConnection();
+  assert.equal(status.pageLoaded, false);
+  assert.match(status.errors[0], /^PAGE_NOT_LOADED: No ProjectionLab tab: No ProjectionLab tab is open and auto-open is disabled\. Open /);
+  exec.ws.close();
+  await exec.done;
+});
+
 test("a takeover replaces the incumbent; old socket closed with REPLACED", async () => {
   const first = connectExecutor({ handler: healthyHandler });
   await first.ready;

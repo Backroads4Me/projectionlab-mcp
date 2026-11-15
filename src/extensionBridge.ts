@@ -22,17 +22,31 @@ import {
   type WireMethod,
 } from "./types/wire.js";
 
+/** ProjectionLab's own app origins: the main app and v5 Early Access, where
+ * ProjectionLab moves accounts that join Early Access. */
+const PROJECTIONLAB_ORIGINS = ["https://app.projectionlab.com", "https://ea.projectionlab.com"];
+
 /** Origins allowed to open the WebSocket. Extensions plus the PL app itself
  * (Tier 0 bootstrap snippet runs in page context, so the browser sends the
- * app origin). Sockets with no Origin header (native clients, e.g. the fake
- * test executor) are allowed; the hello token still gates them. */
+ * app origin): either ProjectionLab origin, or the one PL_APP_URL names.
+ * Sockets with no Origin header (native clients, e.g. the fake test
+ * executor) are allowed; the hello token still gates them. */
 function originAllowed(origin: string | undefined): boolean {
   if (!origin) return true;
   return (
     origin.startsWith("chrome-extension://") ||
     origin.startsWith("moz-extension://") ||
+    PROJECTIONLAB_ORIGINS.includes(origin) ||
     origin === new URL(config.appUrl).origin
   );
+}
+
+/** One connection-check error line: code, message, then suggestion. The
+ * message may already end in a period (the extension's messages do), so the
+ * separator adds one only when it is missing. */
+function statusLine(err: ProjectionLabError): string {
+  const message = /[.!?]$/.test(err.message) ? err.message : `${err.message}.`;
+  return `${err.code}: ${message} ${err.suggestion}`;
 }
 
 const HELLO_TIMEOUT_MS = 5_000;
@@ -69,6 +83,8 @@ const EXTENSION_HELP =
   "or Firefox Add-ons (https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/); " +
   "the store keeps it up to date. Then enter the token from " +
   "~/.projectionlab-mcp/ws-token on its options page, and open https://app.projectionlab.com. " +
+  "An account on ProjectionLab v5 Early Access runs at https://ea.projectionlab.com instead: " +
+  "press Allow ea.projectionlab.com on the extension's options page, then open that site. " +
   "Or call projectionlab_get_bootstrap and paste the snippet into the ProjectionLab tab's console. " +
   "Install the extension from one source only: an unpacked copy alongside a store copy leaves the " +
   "browser with two extensions competing for the server's single connection, and one of them stands by.";
@@ -576,7 +592,9 @@ export class ExtensionBridge implements Bridge {
         return new ProjectionLabError(
           "PAGE_NOT_LOADED",
           `No ProjectionLab tab: ${message}`,
-          "Open https://app.projectionlab.com in the browser running the bridge extension",
+          "Open https://app.projectionlab.com in the browser running the bridge extension. " +
+            "On ProjectionLab v5 Early Access, open https://ea.projectionlab.com and press " +
+            "Allow ea.projectionlab.com on the extension's options page.",
         );
       case "API_NOT_AVAILABLE":
         return new ProjectionLabError(
@@ -760,7 +778,7 @@ export class ExtensionBridge implements Bridge {
           this.requireApiKey();
         } catch (err) {
           const e = err as ProjectionLabError;
-          result.errors.push(`${e.code}: ${e.message}. ${e.suggestion}`);
+          result.errors.push(statusLine(e));
         }
       }
       try {
@@ -785,7 +803,7 @@ export class ExtensionBridge implements Bridge {
         }
         result.errors.push(
           err instanceof ProjectionLabError
-            ? `${err.code}: ${err.message}. ${err.suggestion}`
+            ? statusLine(err)
             : String(err),
         );
         return result;

@@ -1,6 +1,7 @@
 import browser from "webextension-polyfill";
-import { updateLineForVersions } from "./wire.js";
-const elements = Object.fromEntries(["settings", "port", "token", "toggleToken", "autoOpen", "status", "hint", "error", "saved", "version", "update"].map((id) => [id, document.getElementById(id)]));
+import { EARLY_ACCESS_URL_PATTERN, updateLineForVersions } from "./wire.js";
+const elements = Object.fromEntries(["settings", "port", "token", "toggleToken", "autoOpen", "status", "hint", "error", "saved", "version", "update", "eaStatus", "eaToggle"].map((id) => [id, document.getElementById(id)]));
+const EARLY_ACCESS = { origins: [EARLY_ACCESS_URL_PATTERN] };
 
 // Stored connectionStatus values, set by background.js: authed = token
 // accepted by the server, connected = socket open and awaiting that answer,
@@ -42,6 +43,7 @@ async function load() {
   elements.autoOpen.checked = values.autoOpen;
   renderStatus(values);
   renderUpdate(values.minExtensionVersion);
+  await renderEarlyAccess();
 }
 elements.toggleToken.addEventListener("click", () => {
   const hidden = elements.token.type === "password";
@@ -54,6 +56,27 @@ elements.settings.addEventListener("submit", async (event) => {
   elements.saved.textContent = "Saved";
   setTimeout(() => { elements.saved.textContent = ""; }, 1500);
 });
+async function renderEarlyAccess() {
+  const granted = await browser.permissions.contains(EARLY_ACCESS);
+  elements.eaToggle.dataset.granted = String(granted);
+  elements.eaToggle.textContent = granted ? "Remove access to ea.projectionlab.com" : "Allow ea.projectionlab.com";
+  elements.eaStatus.textContent = granted
+    ? "Allowed: the extension can use an open ea.projectionlab.com tab."
+    : "Not allowed: the extension uses app.projectionlab.com only.";
+}
+// permissions.request must be the handler's first call, with no await before
+// it: browsers grant it only while the click's user gesture is still active.
+elements.eaToggle.addEventListener("click", () => {
+  const change = elements.eaToggle.dataset.granted === "true"
+    ? browser.permissions.remove(EARLY_ACCESS)
+    : browser.permissions.request(EARLY_ACCESS);
+  change.then(renderEarlyAccess, (error) => {
+    elements.eaStatus.textContent = `Could not change access: ${error instanceof Error ? error.message : String(error)}`;
+  });
+});
+// The user can also grant or revoke site access from the browser's own menus.
+browser.permissions.onAdded.addListener(() => void renderEarlyAccess());
+browser.permissions.onRemoved.addListener(() => void renderEarlyAccess());
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   const update = {};

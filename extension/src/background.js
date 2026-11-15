@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { executePageRequest } from "./page-main.js";
-import { buildHelloFrame, connectionStatusForClose, doubledDelay, isForcedConnectChange, isStandbyClose, makeResponseFrame, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, STANDBY_RETRY_MS, statusMessageForClose } from "./wire.js";
+import { buildHelloFrame, connectionStatusForClose, doubledDelay, EARLY_ACCESS_URL_PATTERN, isForcedConnectChange, isStandbyClose, makeResponseFrame, NEW_TAB_LOAD_TIMEOUT_MS, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, STANDBY_RETRY_MS, statusMessageForClose, tabPatternsFor, waitForTabLoad } from "./wire.js";
 
 const DEFAULT_PORT = 8788;
 const PROTOCOL_VERSION = 1;
@@ -147,13 +147,21 @@ async function connect(force = false) {
   };
 }
 
+// The query always names the main app. It adds Early Access only once the user
+// has allowed it on the options page, because Chrome ignores a tabs.query url
+// filter for a host the extension holds no permission for.
 async function findProjectionLabTab() {
-  const tabs = await browser.tabs.query({ url: "https://app.projectionlab.com/*" });
+  const earlyAccessGranted = await browser.permissions.contains({ origins: [EARLY_ACCESS_URL_PATTERN] });
+  const tabs = await browser.tabs.query({ url: tabPatternsFor(earlyAccessGranted) });
   if (tabs.length) return tabs[0];
   const { autoOpen } = await browser.storage.local.get({ autoOpen: true });
   if (!autoOpen) throw codedError("NO_TAB", "No ProjectionLab tab is open and auto-open is disabled.");
-  try { return await browser.tabs.create({ url: "https://app.projectionlab.com/", active: false }); }
+  let tab;
+  try { tab = await browser.tabs.create({ url: "https://app.projectionlab.com/", active: false }); }
   catch { throw codedError("NO_TAB", "Could not open a ProjectionLab tab."); }
+  try { await waitForTabLoad(browser.tabs, tab.id, NEW_TAB_LOAD_TIMEOUT_MS); }
+  catch (error) { throw codedError("NO_TAB", error.message); }
+  return tab;
 }
 
 async function executeInTab(request) {

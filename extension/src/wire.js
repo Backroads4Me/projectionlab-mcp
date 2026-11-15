@@ -145,6 +145,55 @@ function compareVersions(a, b) {
   return 0;
 }
 
+/** The ProjectionLab app, granted at install (manifest `host_permissions`). */
+export const APP_URL_PATTERN = "https://app.projectionlab.com/*";
+/** ProjectionLab v5 Early Access, granted only when the user allows it on the
+ * options page (manifest `optional_host_permissions`). */
+export const EARLY_ACCESS_URL_PATTERN = "https://ea.projectionlab.com/*";
+/** The `tabs.query` URL patterns for the executor's tab: always the main app,
+ * plus Early Access once the user has allowed it. */
+export function tabPatternsFor(earlyAccessGranted) {
+  return earlyAccessGranted ? [APP_URL_PATTERN, EARLY_ACCESS_URL_PATTERN] : [APP_URL_PATTERN];
+}
+
+/** How long a tab the extension opens may take to finish loading. */
+export const NEW_TAB_LOAD_TIMEOUT_MS = 30_000;
+
+// A new tab can report "complete" for its initial about:blank document before
+// it navigates. A tab whose URL the extension may not read (no host
+// permission) has no url and counts as loaded; the injection then reports
+// the missing permission itself.
+const isLoaded = (tab) => tab?.status === "complete" && tab.url !== "about:blank";
+
+/**
+ * Resolves once the tab finishes loading its page, and rejects when the tab
+ * closes first or timeoutMs passes. A script injected into a new tab before
+ * then runs in the blank document and is discarded when the page loads.
+ * `tabs` is the browser.tabs API, passed in so tests can supply a fake.
+ */
+export function waitForTabLoad(tabs, tabId, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let timer;
+    const finish = (settle, value) => {
+      clearTimeout(timer);
+      tabs.onUpdated.removeListener(onUpdated);
+      tabs.onRemoved.removeListener(onRemoved);
+      settle(value);
+    };
+    function onUpdated(id, _changeInfo, tab) {
+      if (id === tabId && isLoaded(tab)) finish(resolve);
+    }
+    function onRemoved(id) {
+      if (id === tabId) finish(reject, new Error("ProjectionLab tab was closed before it finished loading."));
+    }
+    tabs.onUpdated.addListener(onUpdated);
+    tabs.onRemoved.addListener(onRemoved);
+    timer = setTimeout(() => finish(reject, new Error(`ProjectionLab tab did not finish loading within ${timeoutMs / 1000} seconds.`)), timeoutMs);
+    // The page may have finished loading before the listeners were added.
+    tabs.get(tabId).then((tab) => { if (isLoaded(tab)) finish(resolve); }, () => {});
+  });
+}
+
 /**
  * The options-page line about the connected server's minimum extension requirement,
  * or "" when the extension is current or minExtensionVersion is missing/unparsable.

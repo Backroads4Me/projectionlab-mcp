@@ -83,7 +83,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `PL_API_KEY` | Yes | - | ProjectionLab Plugin API key; tools that reach the plan fail until it is set |
 | `PL_WS_PORT` | No | `8788` | Localhost WebSocket port |
 | `PL_WS_TOKEN` | No | auto-generated | Shared auth token; if unset, generated and saved to `~/.projectionlab-mcp/ws-token` |
-| `PL_APP_URL` | No | `https://app.projectionlab.com` | ProjectionLab app URL |
+| `PL_APP_URL` | No | `https://app.projectionlab.com` | An extra page origin allowed to connect the bootstrap snippet. `https://app.projectionlab.com` and `https://ea.projectionlab.com` are always allowed. The extension does not read it. |
 | `PL_API_READY_TIMEOUT_MS` | No | `30000` | Timeout waiting for Plugin API to attach |
 | `PL_EXPORT_CACHE_MS` | No | `90000` | How long a full export may be served from cache (writes always invalidate) |
 | `PL_PRETTY_JSON` | No | `false` | Pretty-print JSON output (uses ~25–40% more tokens) |

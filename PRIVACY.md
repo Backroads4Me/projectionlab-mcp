@@ -24,8 +24,9 @@ independent and is not affiliated with or endorsed by ProjectionLab.
 ## What the extension does
 
 The extension relays requests between the `projectionlab-mcp` server running on
-your computer and the ProjectionLab tab (`https://app.projectionlab.com`) in
-which you are already signed in. For each request from the local server, it
+your computer and the ProjectionLab tab (`https://app.projectionlab.com`, or
+`https://ea.projectionlab.com` for ProjectionLab v5 Early Access once you
+allow it) in which you are already signed in. For each request from the local server, it
 calls ProjectionLab's Plugin API inside that tab and returns the result to the
 local server.
 
@@ -41,7 +42,8 @@ local server.
 | A random installation id (`instanceId`) and the time you last pressed Save (`connectRequestedAt`) | The extension generates the id on first use; the time is recorded when you save the options page | Stored in the browser's extension storage. The id identifies this browser to the local server, so the browser you are using is not displaced by another one; it is random, carries no personal information, and goes only to `127.0.0.1` |
 
 The extension does not read your browsing history, does not access any site
-other than `https://app.projectionlab.com`, and does not read the content of
+other than `https://app.projectionlab.com` and, only if you allow it on the
+options page, `https://ea.projectionlab.com`, and does not read the content of
 ProjectionLab pages beyond the Plugin API results the local server asks for.
 
 ## Where your data goes after the local server
@@ -77,6 +79,10 @@ under your own session.
 
 - **Access to `https://app.projectionlab.com/*`**: to find your ProjectionLab
   tab and call its Plugin API.
+- **Optional access to `https://ea.projectionlab.com/*`**: the same, for an
+  account on ProjectionLab v5 Early Access. The browser grants it only when
+  you press **Allow ea.projectionlab.com** on the options page, and you can
+  remove it there at any time.
 - **`scripting`**: to run the Plugin API call inside that tab.
 - **`storage`**: to remember the port, token, and settings.
 - **`alarms`**: to retry the connection to the local server periodically.

@@ -48,7 +48,7 @@ options page (browsers isolate extension storage by ID, so settings do not trans
 | `browser: false`, port held by a program that is not projectionlab-mcp | Some other program is listening on the WebSocket port | Ask the user to stop that program, or set `PL_WS_PORT` to a free port for this server and enter the same port on the extension's options page |
 | `browser: false`, handing the port over did not complete | Another instance holds the port and the browser did not reconnect here in time | Run `projectionlab_check_connection` again; if it keeps failing, ask the user to close the other agent's session |
 | `browser: false` otherwise | No extension or snippet is connected | See "Connecting the browser" |
-| `pageLoaded: false` | No ProjectionLab tab is open | Ask the user to open https://app.projectionlab.com and log in |
+| `pageLoaded: false` | No ProjectionLab tab is open, or the account is on v5 Early Access and the extension has not been allowed to use it | Ask the user to open https://app.projectionlab.com and log in. If ProjectionLab sends them to https://ea.projectionlab.com, ask them to press **Allow ea.projectionlab.com** on the extension's options page and approve the browser's prompt |
 | `apiAvailable: false` | Plugins are off, or the user is logged out | ProjectionLab -> Account Settings -> Plugins -> enable plugins |
 | `apiKeyValid: false` | The key does not match the account | Ask the user to copy the key again from Account Settings -> Plugins |
 
@@ -88,7 +88,10 @@ Recommended, persistent: the **MCP Bridge for ProjectionLab** browser extension.
    `~/.projectionlab-mcp/ws-token`, which the server creates on first start.
    The status changes to **Connected** and the toolbar icon shows a green
    check.
-4. Open https://app.projectionlab.com and log in.
+4. Open https://app.projectionlab.com and log in. If ProjectionLab sends the
+   user to https://ea.projectionlab.com (v5 Early Access), they press
+   **Allow ea.projectionlab.com** on the options page and approve the
+   browser's prompt.
 
 If another browser is already connected to the server, the status reads
 **Standing by** instead: that extension connects on its own when the other

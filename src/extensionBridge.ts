@@ -122,6 +122,8 @@ export class ExtensionBridge implements Bridge {
   private conn: WebSocket | null = null;
   private connExecutor = "";
   private connInstanceId = "";
+  /** The contract from the last successful contract read (knownApiContract). */
+  private lastContract: ApiContract | undefined;
   private readonly pending = new Map<string, Pending>();
   private nextId = 1;
   private heartbeat: NodeJS.Timeout | null = null;
@@ -831,6 +833,10 @@ export class ExtensionBridge implements Bridge {
     return this.serialize(() => this.fetchContract());
   }
 
+  knownApiContract(): ApiContract | undefined {
+    return this.lastContract;
+  }
+
   /**
    * The Plugin API contract the connected page offers, read fresh on every
    * call so a page reloaded onto another ProjectionLab version is never
@@ -854,9 +860,11 @@ export class ExtensionBridge implements Bridge {
           "Update the MCP Bridge for ProjectionLab extension, or paste a fresh snippet from projectionlab_get_bootstrap. Nothing was written.",
         );
       }
+      this.lastContract = 1;
       return 1;
     }
-    return contractFromVersion(version);
+    this.lastContract = contractFromVersion(version);
+    return this.lastContract;
   }
 
   /** Refuses a write the page's contract does not support yet. Call only

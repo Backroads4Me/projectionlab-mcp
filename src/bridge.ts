@@ -24,6 +24,12 @@ export interface Bridge {
   describePluginApi(): Promise<Record<string, string>>;
   /** The Plugin API contract the connected page offers, read fresh. */
   apiContract(): Promise<ApiContract>;
+  /**
+   * The contract from the most recent successful contract read, without
+   * contacting the page; undefined before the first one. For choosing
+   * documentation only: writes read the contract fresh.
+   */
+  knownApiContract(): ApiContract | undefined;
   /** Full export, served from a short-lived cache unless `fresh` is true. */
   exportData(opts?: { fresh?: boolean }): Promise<ExportedData>;
   updateAccount(

@@ -48,8 +48,11 @@ function fakeServer() {
 
 function fakeBridge(contract = 1, state = undefined) {
   return {
-    async apiContract() {
+    knownApiContract() {
       return contract;
+    },
+    async apiContract() {
+      throw new Error("resources must not query the page");
     },
     async exportData() {
       return structuredClone(state);
@@ -333,15 +336,18 @@ test("projectionlab://knowledge v4 regression check with v4 bridge", async () =>
   assert.equal(res.contents[0].text, KNOWLEDGE_V4);
 });
 
-test("resource handlers fall back to v4 and log debug when bridge.apiContract() throws", async () => {
+test("resource handlers render v4 before any contract is known and never query the page", async () => {
   const server = fakeServer();
-  const failingBridge = {
+  const unknownBridge = {
+    knownApiContract() {
+      return undefined;
+    },
     async apiContract() {
-      throw new Error("Bridge connection lost");
+      throw new Error("resources must not query the page");
     },
   };
-  registerDataModelResource(server, failingBridge);
-  registerKnowledgeResource(server, failingBridge);
+  registerDataModelResource(server, unknownBridge);
+  registerKnowledgeResource(server, unknownBridge);
 
   const dmHandler = server.resources.get("projectionlab://data-model").handler;
   const dmRes = await dmHandler(new URL("projectionlab://data-model"));

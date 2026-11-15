@@ -1,7 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import { layoutForContract, type ExportLayout } from "../layout.js";
-import { log } from "../logger.js";
 
 export const KNOWLEDGE_V4 = `# ProjectionLab & FIRE Reference
 
@@ -486,7 +485,9 @@ export function registerKnowledgeResource(server: McpServer, bridge?: Bridge) {
       description:
         "Curated reference: ProjectionLab data model, FIRE/decumulation concepts, " +
         "retirement tax concepts without yearly figures, an analysis checklist, and an " +
-        "index of ProjectionLab help articles. Static; information and education, not " +
+        "index of ProjectionLab help articles, for the connected ProjectionLab version once a " +
+        "connection check has run (ProjectionLab 4 before that; append ?layout=v4 or ?layout=v5 " +
+        "to choose). Information and education, not " +
         "personalized financial advice.",
       mimeType: "text/markdown",
     },
@@ -496,11 +497,10 @@ export function registerKnowledgeResource(server: McpServer, bridge?: Bridge) {
       if (param === "v5" || param === "v4") {
         layout = param;
       } else if (bridge) {
-        try {
-          layout = layoutForContract(await bridge.apiContract());
-        } catch (err) {
-          log.debug("resource:knowledge", `Failed to determine API contract layout: ${err}`);
-        }
+        // The contract the last connection check or write read; reading a
+        // resource never waits on the browser.
+        const contract = bridge.knownApiContract();
+        if (contract !== undefined) layout = layoutForContract(contract);
       }
       return {
         contents: [

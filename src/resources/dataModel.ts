@@ -8,7 +8,6 @@ import {
   type DataModelField,
 } from "../dataModel.js";
 import { layoutForContract, type ExportLayout } from "../layout.js";
-import { log } from "../logger.js";
 
 function renderField(pattern: string, field: DataModelField): string {
   const parts = [`- \`${pattern}\` [${field.evidence}]: ${field.description}`];
@@ -105,7 +104,7 @@ export function registerDataModelResource(server: McpServer, bridge?: Bridge) {
       description:
         `Field meanings, units, and allowed values for path-addressable reads and writes, ` +
         `version-stamped to ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION} (v4) and ` +
-        `${DATA_MODEL_V5_PROJECTIONLAB_VERSION} (v5). Static. ` +
+        `${DATA_MODEL_V5_PROJECTIONLAB_VERSION} (v5). Follows the connected ProjectionLab version once a connection check has run, and ProjectionLab 4 before that; append ?layout=v4 or ?layout=v5 to choose. ` +
         "Entries tagged ui-label or export-shape are not yet confirmed by a stored-value test.",
       mimeType: "text/markdown",
     },
@@ -115,11 +114,10 @@ export function registerDataModelResource(server: McpServer, bridge?: Bridge) {
       if (param === "v5" || param === "v4") {
         layout = param;
       } else if (bridge) {
-        try {
-          layout = layoutForContract(await bridge.apiContract());
-        } catch (err) {
-          log.debug("resource:dataModel", `Failed to determine API contract layout: ${err}`);
-        }
+        // The contract the last connection check or write read; reading a
+        // resource never waits on the browser.
+        const contract = bridge.knownApiContract();
+        if (contract !== undefined) layout = layoutForContract(contract);
       }
       return {
         contents: [

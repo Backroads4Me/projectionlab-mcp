@@ -323,6 +323,8 @@ test("checkConnection reports contract 2 on a ProjectionLab 5 page", async () =>
   await exec.ready;
   const status = await bridge.checkConnection();
   assert.equal(status.apiContract, 2);
+  // The resources choose their text from this without contacting the page.
+  assert.equal(bridge.knownApiContract(), 2);
   assert.equal(status.apiKeyValid, true);
   assert.deepEqual(status.errors, []);
   exec.ws.close();

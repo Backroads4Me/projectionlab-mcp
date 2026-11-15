@@ -1,6 +1,15 @@
 import { ProjectionLabError } from "./errors.js";
+import { exportSections } from "./layout.js";
 
 export type PlanObj = Record<string, unknown>;
+
+/**
+ * The value an output field carries when the export holds nothing for it.
+ * A ProjectionLab 5 plan has no `active` flag and its export leaves the
+ * workspace's active and baseline plan ids null, so a read reports those as
+ * not reported rather than as false or as a plan it picked itself.
+ */
+export const NOT_REPORTED = "not reported" as const;
 
 export const PLAN_SECTIONS = [
   "income",
@@ -134,15 +143,41 @@ export function planNotFoundError(
   );
 }
 
-export function requirePlans(data: { plans?: unknown[] }): unknown[] {
-  if (!Array.isArray(data.plans) || data.plans.length === 0) {
+/**
+ * The plans of a raw export, whichever layout it has (v4 `plans`, v5
+ * `documents.plans`). An export with no plans is refused.
+ */
+export function requirePlans(data: unknown): unknown[] {
+  const plans = exportSections(data).plans;
+  if (plans.length === 0) {
     throw new ProjectionLabError(
       "INVALID_INPUT",
       "No plans found in ProjectionLab",
       "Create a plan in ProjectionLab first",
     );
   }
-  return data.plans;
+  return plans;
+}
+
+/**
+ * Plan names of a raw export, "unnamed" for a plan without one. An export
+ * that carries no plans list has no names.
+ */
+export function exportPlanNames(data: unknown): string[] {
+  let plans: unknown[];
+  try {
+    plans = exportSections(data).plans;
+  } catch (err) {
+    if (err instanceof ProjectionLabError) return [];
+    throw err;
+  }
+  return plans.map((plan) =>
+    String(
+      plan && typeof plan === "object"
+        ? ((plan as PlanObj).name ?? "unnamed")
+        : "unnamed",
+    ),
+  );
 }
 
 /**
@@ -195,6 +230,31 @@ export function resolveEventIndex(
     throw ambiguousMatchError("event", identifier, events, outcome.indexes);
   }
   return outcome.kind === "found" ? outcome.index : -1;
+}
+
+/**
+ * Index of the event linked to the Current Finances account or asset the
+ * identifier names, -1 when none is. A ProjectionLab 5 plan event refers to
+ * its account by `accountId` and to its asset by `assetId`, and its own `id`
+ * is distinct. Throws INVALID_INPUT when several events link the same one.
+ */
+export function resolveLinkedEventIndex(
+  events: unknown[],
+  identifier: string,
+): number {
+  const indexes: number[] = [];
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    if (!event || typeof event !== "object") continue;
+    const obj = event as PlanObj;
+    if (obj.accountId === identifier || obj.assetId === identifier) {
+      indexes.push(i);
+    }
+  }
+  if (indexes.length > 1) {
+    throw ambiguousMatchError("event", identifier, events, indexes);
+  }
+  return indexes.length === 1 ? indexes[0] : -1;
 }
 
 export function eventLabel(event: unknown): string {

@@ -6,9 +6,11 @@ import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
 import { redactSecrets } from "../redact.js";
+import { CONTRACT_2_WRITES, detectLayout } from "../layout.js";
 import {
   PLAN_SETTING_SECTIONS,
   listPlanSettings,
+  planSelection,
 } from "../planSettings.js";
 import {
   resolvePlan,
@@ -34,7 +36,10 @@ export function registerGetPlanSettingsTool(
         "ordered arrays remain intact. Advanced rate schedules also expose indexed control-point " +
         "fields so one year or rate can be patched without replacing the schedule. Use the returned " +
         "paths and JSON types with " +
-        "projectionlab_update_plan_settings.",
+        "projectionlab_update_plan_settings. " +
+        "On ProjectionLab 5 the result also carries planSelection, the workspace's plan settings " +
+        "(active and baseline plan ids, alignment, tabs); a value the export leaves null reads " +
+        "'not reported', and mutableWith is null while writes are unsupported there.",
       inputSchema: {
         planIdentifier: z
           .string()
@@ -75,10 +80,18 @@ export function registerGetPlanSettingsTool(
             settings,
           };
         });
+        // The update tool writes through restorePlans, which a ProjectionLab 5
+        // page refuses until contract 2 allows it.
+        const writable =
+          detectLayout(data) === "v4" || CONTRACT_2_WRITES.has("restorePlans");
+        // v5 keeps the workspace's active/baseline plan ids, alignment and
+        // tabs in documents.settings.plan; v4 output has no such block.
+        const selection = planSelection(data);
         const output = {
           planName: plan.name,
           planId: plan.id,
-          mutableWith: "projectionlab_update_plan_settings",
+          mutableWith: writable ? "projectionlab_update_plan_settings" : null,
+          ...(selection ? { layout: "v5", planSelection: selection } : {}),
           sections,
         };
 

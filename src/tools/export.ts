@@ -4,6 +4,7 @@ import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { redactSecrets } from "../redact.js";
 import { textOrFile } from "../largeOutput.js";
+import { exportPlanNames } from "../plans.js";
 
 export function registerExportTool(server: McpServer, bridge: Bridge) {
   server.registerTool(
@@ -11,8 +12,9 @@ export function registerExportTool(server: McpServer, bridge: Bridge) {
     {
       title: "Export Data",
       description:
-        "Export the complete current state from ProjectionLab (plans, current finances, " +
-        "progress, settings) as a JSON object. This is the primary source of truth. " +
+        "Export the complete current state from ProjectionLab as a JSON object: plans, current " +
+        "finances, settings, and progress (ProjectionLab 4) or account history (ProjectionLab 5). " +
+        "The layout differs by version. This is the primary source of truth. " +
         "WARNING: the full export is very large; results over the inline limit are saved " +
         "to a file and a pointer is returned. " +
         "Prefer projectionlab_get_plan or projectionlab_get_plan_section for targeted access. " +
@@ -30,11 +32,7 @@ export function registerExportTool(server: McpServer, bridge: Bridge) {
         const data = redactSecrets(await bridge.exportData(), { byName: true });
         const json = toJson(data);
 
-        const planNames = Array.isArray(data.plans)
-          ? data.plans.map((p) =>
-              String((p as Record<string, unknown>).name ?? "unnamed"),
-            )
-          : [];
+        const planNames = exportPlanNames(data);
 
         return {
           content: [

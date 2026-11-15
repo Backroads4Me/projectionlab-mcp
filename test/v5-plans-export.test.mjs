@@ -137,6 +137,10 @@ test("export_data describes both export layouts", () => {
   const { definition } = server.tools.get("projectionlab_export_data");
   assert.match(definition.description, /ProjectionLab 4/);
   assert.match(definition.description, /ProjectionLab 5/);
+  assert.match(
+    definition.description,
+    /saved to a file and a pointer is returned\. Prefer projectionlab_get_plan /,
+  );
   assert.equal(definition.annotations.readOnlyHint, true);
 });
 

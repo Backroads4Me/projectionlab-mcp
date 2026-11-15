@@ -16,6 +16,7 @@ export function registerExportTool(server: McpServer, bridge: Bridge) {
         "finances, settings, and progress (ProjectionLab 4) or account history (ProjectionLab 5). " +
         "The layout differs by version. This is the primary source of truth. " +
         "WARNING: the full export is very large; results over the inline limit are saved " +
+        "to a file and a pointer is returned. " +
         "Prefer projectionlab_get_plan or projectionlab_get_plan_section for targeted access. " +
         "Write tools snapshot automatically, so a manual pre-write export is NOT required.",
       annotations: {

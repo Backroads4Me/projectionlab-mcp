@@ -22,9 +22,13 @@ also serves this guide as the MCP resource `projectionlab://guide`.
 
 Call `projectionlab_check_connection` before any other ProjectionLab tool. It
 returns `browser`, `pageLoaded`, `apiAvailable`, `apiKeyValid`, `errors`,
-`writesEnabled`, `versions` and `notices`. When the first four flags are
-`true`, proceed. Otherwise fix the first failing item with the user, one step
-at a time, then check again.
+`writesEnabled`, `versions` and `notices`, and `apiContract` once the page has
+answered. When the first four flags are `true`, proceed. Otherwise fix the
+first failing item with the user, one step at a time, then check again.
+
+`apiContract` is the Plugin API contract the page offers: `1` on
+ProjectionLab 4 and `2` on ProjectionLab 5 (Early Access, at
+https://ea.projectionlab.com). On `2`, follow "ProjectionLab 5" below.
 
 `notices` are plain sentences about the server's release, never connection
 failures. When the list is not empty, tell the user each one once, in plain
@@ -225,6 +229,40 @@ values; it is not an API, and it does not contain the application logic.
 When a change's effect matters, the user has to look at the result in the
 ProjectionLab UI. The stored data cannot show it.
 
+### ProjectionLab 5
+
+When `projectionlab_check_connection` reports `apiContract: 2`, the account is
+on ProjectionLab 5 and its data has a different layout. The read tools handle
+both layouts; these differences show through:
+
+- **No active plan.** A ProjectionLab 5 plan has no `active` flag, so
+  `projectionlab_get_plan` reports `active: "not reported"`. Never call a plan
+  active or inactive from that, and never pick one plan as "the" plan: ask the
+  user which plan they mean.
+- **`planSelection`.** `projectionlab_get_plan_settings` also returns the
+  workspace's plan settings (`activeId`, `baselineId`, `alignment`, `tabs`).
+  Report them as stored values; they do not tell you which plan the user is
+  working in, and a value the export leaves empty reads `"not reported"`.
+- **Events linked to Current Finances.** A plan account or asset event names
+  its Current Finances item in `accountId` or `assetId`, so
+  `projectionlab_get_plan_section` also finds the event by that id when the
+  `eventIdentifier` matches no event id or name. A priority's `accountId` is
+  different: it holds the id of the plan's account event, not the Current
+  Finances account id. Keep the two kinds of id apart.
+- **Resources.** `projectionlab://data-model` and `projectionlab://knowledge`
+  follow the layout the last connection check found. Read
+  `projectionlab://data-model?layout=v4` or `?layout=v5` (the same for
+  `knowledge`) to pick one explicitly.
+- **Writes are not supported yet.** Every write tool, dry runs and
+  `projectionlab_rollback` included, is refused with `WRITE_NOT_SUPPORTED`
+  before it previews or snapshots anything. Tell the user plainly that this
+  server cannot change ProjectionLab 5 data yet, and help them make the change
+  in the ProjectionLab app instead (which item, which field, the new value).
+- **Old snapshots.** A snapshot taken on ProjectionLab 4 cannot be compared
+  with or restored onto ProjectionLab 5 data: `projectionlab_diff` and
+  `projectionlab_rollback` refuse it with `LAYOUT_MISMATCH`. A ProjectionLab 4
+  backup goes back only through the Restore action in the app.
+
 ## Changing the plan
 
 Change the plan only when the user explicitly asks for that change.
@@ -382,6 +420,13 @@ Change progress:
   dry run's `planVersion` as `expectedPlanVersion`.
 - **`INVALID_INPUT`** usually means an unknown path or a changed JSON type.
   List the paths again and correct the call.
+- **`WRITE_NOT_SUPPORTED`** means the account is on ProjectionLab 5, where
+  this server does not write yet (see "ProjectionLab 5"). Nothing was written;
+  help the user make the change in the app.
+- **`CONTRACT_CHANGED`** means the ProjectionLab page changed between the
+  server's version check and the write (for example, a tab on the other
+  ProjectionLab version took over). Nothing was written. Run
+  `projectionlab_check_connection`, then re-run the dry run and confirm again.
 
 ## Worked examples
 

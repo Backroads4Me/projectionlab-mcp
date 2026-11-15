@@ -280,13 +280,13 @@ When evaluating plan elements or answering user questions, anchor claims with ta
       but their export strings are not yet recorded. Observed type strings include \`"taxable"\`, \`"401k"\`,
       \`"savings"\`, \`"land"\`, and \`"secured-loan"\`.
 - **documents.plans[]**: milestone-driven simulation plans.
-  - Plans carry no \`active\` flag. In export documents, both \`settings.plan.activeId\` and
-    \`settings.plan.baselineId\` are null; no plan is treated as the selected plan.
+  - Plans carry no \`active\` flag. \`settings.plan.activeId\` and \`settings.plan.baselineId\` are
+    reported as stored; no plan is treated as the selected plan.
   - Every plan event item carries a \`kind\` discriminator: \`"account"\`, \`"real-asset"\`,
     \`"income"\`, \`"expense"\`, or \`"priority"\`.
   - Timing for event start and end is defined by structured objects:
     \`{ type: "date" | "milestone" | "keyword", value, modifier? }\`.
-  - **milestones[]**: lifecycle events (retirement, Medicare, death) triggered by date, year,
+  - **milestones[]**: lifecycle events (retirement, Medicare, death) triggered by date, year, age,
     or milestone-relative criteria. Other events anchor timing to milestone IDs.
   - **income.events[]**: salary, pensions, social security, other income.
   - **expenses.events[]**: living expenses carrying a \`spendingType\` (\`"essential"\` vs \`"discretionary"\`).
@@ -296,9 +296,11 @@ When evaluating plan elements or answering user questions, anchor claims with ta
   - **variables**: tax settings, inflation, returns, drawdown order, IRMAA, estate rules.
   - **withdrawalStrategy**: alternative withdrawal policy mode (such as fixed percentage or Guyton-Klinger).
   - **montecarlo**: Chance of Success simulation parameters.
-  - **priorities.events[]**: savings contribution ordering and cash flow routing.
+  - **priorities.events[]**: savings contribution ordering and cash flow routing. A priority's
+    \`accountId\` is the id of the plan account event it routes cash to, not a Current Finances account id.
+  - Event names need not be unique within a section; address an event by id when its name is ambiguous.
 - **documents.settings**:
-  - **plan**: viewing preferences including \`activeId\` (null in exports), \`baselineId\` (null in exports),
+  - **plan**: viewing preferences including \`activeId\` and \`baselineId\` (reported as stored),
     calendar alignment (\`alignment.type: "calendar"\`), and pinned tabs.
   - **plugins**: plugin configuration with \`enabled\` status and \`apiKey\` (authentication secret,
     redacted on reads; sits at \`documents.settings.plugins.apiKey\`).

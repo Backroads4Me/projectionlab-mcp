@@ -1835,7 +1835,8 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       accountId: {
-        description: "Destination account identifier in Current Finances.",
+        description:
+          "Identifier of the plan account event this priority routes cash to (an accounts.events[].id in the same plan), not a Current Finances account ID.",
         evidence: "export-shape",
       },
     },
@@ -1865,6 +1866,16 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         description: "Offset modifier for the criterion.",
         evidence: "export-shape",
       },
+      "criteria.*.years": {
+        description: "Age the criterion is met at, for an age criterion.",
+        units: YEARS,
+        evidence: "export-shape",
+      },
+      "criteria.*.precision": {
+        description: "How finely an age criterion is resolved.",
+        evidence: "export-shape",
+        note: 'Observed value: "yearly".',
+      },
     },
   },
   VARIABLES_V5_GROUP,
@@ -1884,11 +1895,11 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "plan.activeId": {
-        description: "Active plan identifier in the application interface (null in exports; no plan is treated as active in exports).",
+        description: "Active plan identifier in the application interface. Reported as stored; it does not tell which plan the user is working in, and the server never treats it as the selected plan.",
         evidence: "export-shape",
       },
       "plan.baselineId": {
-        description: "Baseline comparison plan identifier (null in exports).",
+        description: "Baseline comparison plan identifier. Reported as stored.",
         evidence: "export-shape",
       },
       "plan.alignment.type": {

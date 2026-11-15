@@ -73,8 +73,10 @@ export function renderDataModelV5Markdown(): string {
     "- Plan events carry a kind discriminator: account, real-asset, income, expense, or priority. " +
       "Plan account events link to Current Finances accounts via accountId, and asset events link via assetId. " +
       "Event timing is defined by timing objects with type (date, milestone, keyword), value, and optional modifier.",
-    "- Plans carry no active flag. Both settings.plan.activeId and baselineId are null in exported documents; " +
+    "- Plans carry no active flag. settings.plan.activeId and baselineId are reported as stored, and " +
       "no plan is treated as the selected plan.",
+    "- A priority's accountId names the plan account event it routes cash to, not a Current Finances account. " +
+      "Event names need not be unique within a section; address an event by id when its name is ambiguous.",
     "- Historical records are stored in documents.accountHistory keyed by account ID then calendar year, " +
       "without a separate progress section.",
     "",

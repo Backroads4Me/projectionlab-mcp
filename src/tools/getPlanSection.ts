@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
+import { detectLayout } from "../layout.js";
 import { annotateAddressableValues } from "../dataModel.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
@@ -15,6 +16,7 @@ import {
   getEvents,
   planNotFoundError,
   requirePlans,
+  resolveLinkedEventIndex,
   type PlanObj,
 } from "../plans.js";
 
@@ -71,6 +73,7 @@ export function registerGetPlanSectionTool(
           .optional()
           .describe(
             "Return only the event whose name (case-insensitive; a partial match must identify exactly one event) or ID matches. " +
+              "On ProjectionLab 5 the ID of the Current Finances account or asset an account, asset or priority event links to also matches. " +
               "Only valid for event-based sections (income, expenses, accounts, assets, milestones, priorities).",
           ),
         path: z
@@ -111,7 +114,12 @@ export function registerGetPlanSectionTool(
 
         if (eventIdentifier !== undefined) {
           const events = getEvents(sectionData);
-          const index = resolveEventIndex(events, eventIdentifier);
+          let index = resolveEventIndex(events, eventIdentifier);
+          // A ProjectionLab 5 event names its Current Finances account or
+          // asset by accountId/assetId, so that id selects the event too.
+          if (index === -1 && detectLayout(data) === "v5") {
+            index = resolveLinkedEventIndex(events, eventIdentifier);
+          }
           const match = index === -1 ? undefined : events[index];
           if (!match) {
             throw new ProjectionLabError(

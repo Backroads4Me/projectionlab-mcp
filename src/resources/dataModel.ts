@@ -7,7 +7,8 @@ import {
   DATA_MODEL_V5_PROJECTIONLAB_VERSION,
   type DataModelField,
 } from "../dataModel.js";
-import { layoutForContract, type ExportLayout } from "../layout.js";
+import type { ExportLayout } from "../layout.js";
+import { registerLayoutResource } from "./layoutResource.js";
 
 function renderField(pattern: string, field: DataModelField): string {
   const parts = [`- \`${pattern}\` [${field.evidence}]: ${field.description}`];
@@ -96,38 +97,15 @@ export function renderDataModelMarkdown(layout: ExportLayout = "v4"): string {
 }
 
 export function registerDataModelResource(server: McpServer, bridge?: Bridge) {
-  server.registerResource(
-    "data-model",
-    "projectionlab://data-model",
-    {
-      title: "ProjectionLab Data Model",
-      description:
-        `Field meanings, units, and allowed values for path-addressable reads and writes, ` +
-        `version-stamped to ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION} (v4) and ` +
-        `${DATA_MODEL_V5_PROJECTIONLAB_VERSION} (v5). Follows the connected ProjectionLab version once a connection check has run, and ProjectionLab 4 before that; append ?layout=v4 or ?layout=v5 to choose. ` +
-        "Entries tagged ui-label or export-shape are not yet confirmed by a stored-value test.",
-      mimeType: "text/markdown",
-    },
-    async (uri) => {
-      let layout: ExportLayout | undefined;
-      const param = uri.searchParams.get("layout");
-      if (param === "v5" || param === "v4") {
-        layout = param;
-      } else if (bridge) {
-        // The contract the last connection check or write read; reading a
-        // resource never waits on the browser.
-        const contract = bridge.knownApiContract();
-        if (contract !== undefined) layout = layoutForContract(contract);
-      }
-      return {
-        contents: [
-          {
-            uri: uri.href,
-            text: renderDataModelMarkdown(layout ?? "v4"),
-            mimeType: "text/markdown",
-          },
-        ],
-      };
-    },
-  );
+  registerLayoutResource(server, bridge, {
+    name: "data-model",
+    uri: "projectionlab://data-model",
+    title: "ProjectionLab Data Model",
+    description:
+      `Field meanings, units, and allowed values for path-addressable reads and writes, ` +
+      `version-stamped to ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION} (v4) and ` +
+      `${DATA_MODEL_V5_PROJECTIONLAB_VERSION} (v5). Follows the connected ProjectionLab version once a connection check has run, and ProjectionLab 4 before that; append ?layout=v4 or ?layout=v5 to choose. ` +
+      "Entries tagged ui-label or export-shape are not yet confirmed by a stored-value test.",
+    render: renderDataModelMarkdown,
+  });
 }

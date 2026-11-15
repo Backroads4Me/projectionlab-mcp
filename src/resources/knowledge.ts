@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
-import { layoutForContract, type ExportLayout } from "../layout.js";
+import type { ExportLayout } from "../layout.js";
+import { registerLayoutResource } from "./layoutResource.js";
 
 export const KNOWLEDGE_V4 = `# ProjectionLab & FIRE Reference
 
@@ -477,40 +478,17 @@ export function renderKnowledgeMarkdown(layout: ExportLayout = "v4"): string {
 }
 
 export function registerKnowledgeResource(server: McpServer, bridge?: Bridge) {
-  server.registerResource(
-    "knowledge",
-    "projectionlab://knowledge",
-    {
-      title: "ProjectionLab & FIRE Knowledge",
-      description:
-        "Curated reference: ProjectionLab data model, FIRE/decumulation concepts, " +
-        "retirement tax concepts without yearly figures, an analysis checklist, and an " +
-        "index of ProjectionLab help articles, for the connected ProjectionLab version once a " +
-        "connection check has run (ProjectionLab 4 before that; append ?layout=v4 or ?layout=v5 " +
-        "to choose). Information and education, not " +
-        "personalized financial advice.",
-      mimeType: "text/markdown",
-    },
-    async (uri) => {
-      let layout: ExportLayout | undefined;
-      const param = uri.searchParams.get("layout");
-      if (param === "v5" || param === "v4") {
-        layout = param;
-      } else if (bridge) {
-        // The contract the last connection check or write read; reading a
-        // resource never waits on the browser.
-        const contract = bridge.knownApiContract();
-        if (contract !== undefined) layout = layoutForContract(contract);
-      }
-      return {
-        contents: [
-          {
-            uri: uri.href,
-            text: renderKnowledgeMarkdown(layout ?? "v4"),
-            mimeType: "text/markdown",
-          },
-        ],
-      };
-    },
-  );
+  registerLayoutResource(server, bridge, {
+    name: "knowledge",
+    uri: "projectionlab://knowledge",
+    title: "ProjectionLab & FIRE Knowledge",
+    description:
+      "Curated reference: ProjectionLab data model, FIRE/decumulation concepts, " +
+      "retirement tax concepts without yearly figures, an analysis checklist, and an " +
+      "index of ProjectionLab help articles, for the connected ProjectionLab version once a " +
+      "connection check has run (ProjectionLab 4 before that; append ?layout=v4 or ?layout=v5 " +
+      "to choose). Information and education, not " +
+      "personalized financial advice.",
+    render: renderKnowledgeMarkdown,
+  });
 }

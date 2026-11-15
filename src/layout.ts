@@ -151,6 +151,6 @@ export function assertSnapshotLayout(snapshotLayout: ExportLayout | undefined, l
   );
 }
 
-function layoutLabel(layout: ExportLayout): string {
+export function layoutLabel(layout: ExportLayout): string {
   return layout === "v5" ? "ProjectionLab 5" : "ProjectionLab 4";
 }

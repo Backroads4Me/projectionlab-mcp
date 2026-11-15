@@ -415,6 +415,7 @@ test("two instances writing plans at once: one write lands and the other gets PL
     await bridge.restorePlansIfUnchanged(
       read,
       read.map((p) => ({ ...p, [field]: 1 })),
+      "v4",
     );
   };
   const [a, b] = await Promise.allSettled([

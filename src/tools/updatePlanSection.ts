@@ -236,7 +236,7 @@ export function registerUpdatePlanSectionTool(
           `Updating "${section}" of plan "${plan.name}" (${diff.currentCount} → ${diff.newCount} items)`,
         );
 
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
 
         // Verify by re-reading; match by plan id since order may change.
         // Compares submitted content (not just counts) so a rejected,

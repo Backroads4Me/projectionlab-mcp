@@ -325,7 +325,7 @@ export function registerUpdatePlanEventTool(
           `Patching event "${eventLabel(event)}" in "${section}" of plan "${plan.name}" (${Object.keys(changes).length} fields)`,
         );
 
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
 
         // Verify the patched fields on a fresh read
         let verified = false;

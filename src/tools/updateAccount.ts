@@ -277,7 +277,7 @@ export function registerUpdateAccountTool(
           "updateAccount",
           `Patching ${Object.keys(result.changes).length} field(s) on Current Finances account "${accountId}"`,
         );
-        await bridge.updateAccount(accountId, patch, force || undefined);
+        await bridge.updateAccount(accountId, patch, force || undefined, detectLayout(exportData));
 
         let verified: boolean | undefined;
         try {

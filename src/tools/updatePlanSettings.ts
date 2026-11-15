@@ -139,7 +139,7 @@ export function registerUpdatePlanSettingsTool(
           "updatePlanSettings",
           `Patching ${Object.keys(changes).length} setting(s) in "${section}" of plan "${plan.name}"`,
         );
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
 
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (

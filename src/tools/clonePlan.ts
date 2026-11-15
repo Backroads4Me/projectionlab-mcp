@@ -119,7 +119,7 @@ export function registerClonePlanTool(
           "clonePlan",
           `Copying plan "${String(source.name)}" to "${String(clone.name)}"`,
         );
-        await bridge.restorePlansIfUnchanged(plans, [...plans, clone]);
+        await bridge.restorePlansIfUnchanged(plans, [...plans, clone], detectLayout(data));
 
         const verifyData = await bridge.exportData({ fresh: true });
         const after = Array.isArray(verifyData.plans) ? verifyData.plans : [];

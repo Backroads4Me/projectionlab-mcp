@@ -214,19 +214,20 @@ export function registerSnapshotTools(
 
           switch (section) {
             case "currentFinances":
-              await bridge.restoreCurrentFinances(sectionData);
+              await bridge.restoreCurrentFinances(sectionData, liveLayout);
               break;
             case "plans":
               await bridge.restorePlansIfUnchanged(
                 currentPlans,
                 sectionData as unknown[],
+                liveLayout,
               );
               break;
             case "progress":
-              await bridge.restoreProgress(sectionData);
+              await bridge.restoreProgress(sectionData, liveLayout);
               break;
             case "settings":
-              await bridge.restoreSettings(sectionData);
+              await bridge.restoreSettings(sectionData, liveLayout);
               break;
             default:
               continue;

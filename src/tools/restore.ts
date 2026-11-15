@@ -236,7 +236,7 @@ export function registerRestoreTools(
           currentFinances: sectionOf(exportData, "currentFinances"),
         }, detectLayout(exportData));
 
-        await bridge.restoreCurrentFinances(currentFinances);
+        await bridge.restoreCurrentFinances(currentFinances, detectLayout(exportData));
 
         const { verified, detail } = await verify(
           bridge,
@@ -334,7 +334,7 @@ export function registerRestoreTools(
           plans: sectionOf(exportData, "plans"),
         }, detectLayout(exportData));
 
-        await bridge.restorePlansIfUnchanged(currentPlans, plans);
+        await bridge.restorePlansIfUnchanged(currentPlans, plans, detectLayout(exportData));
 
         const { verified, detail } = await verify(bridge, "plans", plans);
 
@@ -422,7 +422,7 @@ export function registerRestoreTools(
           progress: sectionOf(exportData, "progress"),
         }, detectLayout(exportData));
 
-        await bridge.restoreProgress(progress);
+        await bridge.restoreProgress(progress, detectLayout(exportData));
 
         const { verified, detail } = await verify(bridge, "progress", progress);
 
@@ -510,7 +510,7 @@ export function registerRestoreTools(
           settings: sectionOf(exportData, "settings"),
         }, detectLayout(exportData));
 
-        await bridge.restoreSettings(settings);
+        await bridge.restoreSettings(settings, detectLayout(exportData));
 
         const { verified, detail } = await verify(bridge, "settings", settings);
 

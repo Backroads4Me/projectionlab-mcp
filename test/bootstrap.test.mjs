@@ -79,7 +79,7 @@ test("bootstrap snippet acts as a full executor", async () => {
   const data = await bridge.exportData({ fresh: true });
   assert.deepEqual(data.plans, []);
 
-  await bridge.updateAccount("acct-1", { balance: 42 }, true);
+  await bridge.updateAccount("acct-1", { balance: 42 }, true, "v4");
   // JSON round-trip: the snippet parses frames inside the vm realm, so its
   // objects have a foreign prototype that deepEqual would reject.
   assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), [
@@ -93,7 +93,7 @@ test("bootstrap snippet acts as a full executor", async () => {
   // before they reach the API.
   pluginApi.version = 2;
   assert.equal(await bridge.apiContract(), 2);
-  await assert.rejects(bridge.updateAccount("acct-1", { balance: 1 }), (err) => err.code === "WRITE_NOT_SUPPORTED");
+  await assert.rejects(bridge.updateAccount("acct-1", { balance: 1 }, undefined, "v5"), (err) => err.code === "WRITE_NOT_SUPPORTED");
   assert.equal(calls.length, 1);
   delete pluginApi.version;
 

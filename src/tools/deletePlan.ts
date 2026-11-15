@@ -97,7 +97,7 @@ export function registerDeletePlanTool(
           plans,
         }, detectLayout(data));
         log.info("deletePlan", `Deleting plan "${String(target.name)}"`);
-        await bridge.restorePlansIfUnchanged(plans, withoutPlan(plans, String(target.id)));
+        await bridge.restorePlansIfUnchanged(plans, withoutPlan(plans, String(target.id)), detectLayout(data));
 
         const verifyData = await bridge.exportData({ fresh: true });
         const after = Array.isArray(verifyData.plans) ? verifyData.plans : [];

@@ -1,4 +1,5 @@
 import { ProjectionLabError } from "./errors.js";
+import type { ExportLayout } from "./layout.js";
 
 /**
  * Verified field knowledge for the values this server reads and writes.
@@ -10,10 +11,11 @@ import { ProjectionLabError } from "./errors.js";
  *   read back (or matched field-for-field against a known plan).
  * - "ui-label": the control was seen in the UI but not confirmed by a
  *   stored-value test.
- * Only fields confirmed against ProjectionLab 4.6.0 are listed; fields known
- * from names alone are left out entirely.
+ * Only fields confirmed against ProjectionLab 4.6.0 or 5.0.0 are listed;
+ * fields known from names alone are left out entirely.
  */
 export const DATA_MODEL_PROJECTIONLAB_VERSION = "4.6.0";
+export const DATA_MODEL_V5_PROJECTIONLAB_VERSION = "5.0.0";
 
 export type DataModelEvidence = "observed" | "ui-label";
 
@@ -1413,19 +1415,541 @@ export const DATA_MODEL_GROUPS: readonly DataModelGroup[] = [
   },
 ];
 
+const VARIABLES_GROUP = DATA_MODEL_GROUPS.find((g) => g.scope === "variables")!;
+const MONTECARLO_GROUP = DATA_MODEL_GROUPS.find((g) => g.scope === "montecarlo")!;
+const WITHDRAWAL_STRATEGY_GROUP = DATA_MODEL_GROUPS.find((g) => g.scope === "withdrawalStrategy")!;
+
+export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
+  {
+    scope: "envelope",
+    title: "Document envelope",
+    fields: {
+      schema: {
+        description: "Root envelope schema version (1 in ProjectionLab 5 exports).",
+        units: "count",
+        evidence: "observed",
+      },
+      exportedAt: {
+        description: "Timestamp in milliseconds when the export was generated.",
+        units: "milliseconds",
+        evidence: "observed",
+      },
+      documents: {
+        description: "Container holding currentFinances, plans, settings, and accountHistory documents.",
+        evidence: "observed",
+      },
+    },
+  },
+  {
+    scope: "currentFinances",
+    title: "Current Finances document",
+    fields: {
+      schema: {
+        description: "Current Finances document schema version (5 in ProjectionLab 5).",
+        units: "count",
+        evidence: "observed",
+      },
+      lastUpdated: {
+        description: "Timestamp in milliseconds of the last modification.",
+        units: "milliseconds",
+        evidence: "observed",
+      },
+      "location.country": {
+        description: "Tax residence country code of the household.",
+        evidence: "observed",
+      },
+      "location.state": {
+        description: "State or province code of the household.",
+        evidence: "observed",
+      },
+      "household.partnerStatus": {
+        description: "Household partnership status.",
+        evidence: "observed",
+      },
+      "household.people.me.id": {
+        description: "Identifier of the primary household person.",
+        evidence: "observed",
+      },
+      "household.people.me.name": {
+        description: "Display label of the primary household person.",
+        evidence: "observed",
+      },
+      "household.people.me.birthYear": {
+        description: "Birth year of the primary household person.",
+        units: "count",
+        evidence: "observed",
+      },
+      "household.people.me.birthMonth": {
+        description: "Birth month index of the primary household person.",
+        units: "count",
+        evidence: "observed",
+      },
+      "household.people.me.lifeExpectancy": {
+        description: "Target life expectancy age for modeling the primary household person.",
+        units: "age",
+        evidence: "observed",
+      },
+      "household.people.me.color": {
+        description: "Display color code for the primary household person.",
+        evidence: "observed",
+      },
+      "household.people.me.icon": {
+        description: "Icon identifier for the primary household person.",
+        evidence: "observed",
+      },
+      "household.people.me.character": {
+        description: "Character avatar string for the primary household person.",
+        evidence: "observed",
+      },
+      "household.people.spouse.id": {
+        description: "Identifier of the spouse.",
+        evidence: "observed",
+      },
+      "household.people.spouse.name": {
+        description: "Display label of the spouse.",
+        evidence: "observed",
+      },
+      "household.people.spouse.birthYear": {
+        description: "Birth year of the spouse.",
+        units: "count",
+        evidence: "observed",
+      },
+      "household.people.spouse.birthMonth": {
+        description: "Birth month index of the spouse.",
+        units: "count",
+        evidence: "observed",
+      },
+      "household.people.spouse.lifeExpectancy": {
+        description: "Target life expectancy age for modeling the spouse.",
+        units: "age",
+        evidence: "observed",
+      },
+      "household.people.spouse.color": {
+        description: "Display color code for the spouse.",
+        evidence: "observed",
+      },
+      "household.people.spouse.icon": {
+        description: "Icon identifier for the spouse.",
+        evidence: "observed",
+      },
+      "household.people.spouse.character": {
+        description: "Character avatar string for the spouse.",
+        evidence: "observed",
+      },
+    },
+  },
+  {
+    scope: "accounts",
+    title: "Current Finances accounts and debts (keyed by account ID)",
+    fields: {
+      id: {
+        description: "Unique account identifier.",
+        evidence: "observed",
+      },
+      name: {
+        description: "Display label of the account.",
+        evidence: "observed",
+      },
+      kind: {
+        description: "Account category discriminator.",
+        allowedValues: ["account", "debt", "real-asset"],
+        evidence: "observed",
+      },
+      type: {
+        description: "Account classification type.",
+        allowedValues: ["taxable", "401k", "savings", "land", "secured-loan"],
+        evidence: "observed",
+        note: "ProjectionLab 5 supports Solo 401k, Roth Solo 401k, and SEP IRA account types, but their export strings are not yet recorded.",
+      },
+      subtype: {
+        description: "Sub-classification of a real asset (such as lot).",
+        evidence: "observed",
+      },
+      owner: {
+        description: "Which household member owns the account.",
+        allowedValues: ["me", "spouse", "joint"],
+        evidence: "observed",
+      },
+      order: {
+        description: "Display sort order index.",
+        units: "count",
+        evidence: "observed",
+      },
+      icon: {
+        description: "Icon identifier displayed in the interface.",
+        evidence: "observed",
+      },
+      archivedOn: {
+        description: "ISO date string (YYYY-MM-DD) indicating when the account was archived.",
+        evidence: "observed",
+        note: "Present only on archived accounts.",
+      },
+      balance: {
+        description: "Current balance in dollars for accounts and outstanding principal for debts.",
+        units: DOLLARS,
+        evidence: "observed",
+        note: "Present on account and debt kinds.",
+      },
+      costBasis: {
+        description: "Unadjusted tax cost basis in dollars for capital gains tracking on taxable accounts.",
+        units: DOLLARS,
+        evidence: "observed",
+        note: "Present on account kind.",
+      },
+      value: {
+        description: "Estimated fair market value in dollars for real assets.",
+        units: DOLLARS,
+        evidence: "observed",
+        note: "Present on real-asset kind.",
+      },
+      purchasePrice: {
+        description: "Historical acquisition cost in dollars for real assets.",
+        units: DOLLARS,
+        evidence: "observed",
+        note: "Present on real-asset kind.",
+      },
+      securedByAssetId: {
+        description: "Identifier of the real asset securing this debt.",
+        evidence: "observed",
+        note: "Present on debt kind when secured by an asset.",
+      },
+      accountId: {
+        description: "Identifier of the associated Current Finances account on plan events.",
+        evidence: "observed",
+      },
+      liquidity: {
+        description: "Whether the account balance is treated as liquid capital.",
+        evidence: "observed",
+      },
+      withdraw: {
+        description: "Drawdown eligibility rule.",
+        evidence: "observed",
+      },
+    },
+  },
+  {
+    scope: "assets",
+    title: "Plan assets and real property",
+    fields: {
+      id: {
+        description: "Unique event identifier.",
+        evidence: "observed",
+      },
+      name: {
+        description: "Display label of the asset.",
+        evidence: "observed",
+      },
+      kind: {
+        description: "Event category discriminator.",
+        allowedValues: ["real-asset"],
+        evidence: "observed",
+      },
+      assetId: {
+        description: "Identifier of the corresponding Current Finances real asset.",
+        evidence: "observed",
+      },
+      type: {
+        description: "Asset classification type.",
+        allowedValues: ["land"],
+        evidence: "observed",
+      },
+      subtype: {
+        description: "Sub-classification of the asset (such as lot).",
+        evidence: "observed",
+      },
+      value: {
+        description: "Market value in dollars.",
+        units: DOLLARS,
+        evidence: "observed",
+      },
+      valueType: {
+        description: "Currency basis of the asset value.",
+        evidence: "observed",
+      },
+      purchasePrice: {
+        description: "Historical acquisition cost in dollars.",
+        units: DOLLARS,
+        evidence: "observed",
+      },
+      purchasePriceType: {
+        description: "Currency basis of the purchase price.",
+        evidence: "observed",
+      },
+      loans: {
+        description: "Array of linked financing structures.",
+        evidence: "observed",
+      },
+    },
+  },
+  {
+    scope: "income",
+    title: "Plan income events",
+    fields: {
+      id: {
+        description: "Unique event identifier.",
+        evidence: "observed",
+      },
+      name: {
+        description: "Display label of the income event.",
+        evidence: "observed",
+      },
+      kind: {
+        description: "Event category discriminator.",
+        allowedValues: ["income"],
+        evidence: "observed",
+      },
+      type: {
+        description: "Income classification type.",
+        allowedValues: ["other"],
+        evidence: "observed",
+      },
+      amount: {
+        description: "Scheduled income amount in dollars.",
+        units: DOLLARS,
+        evidence: "observed",
+      },
+      "start.type": {
+        description: "Timing reference mode for when the income event begins.",
+        allowedValues: ["date", "milestone", "keyword"],
+        evidence: "observed",
+      },
+      "start.value": {
+        description: "Target date, milestone identifier, or keyword for the start timing.",
+        evidence: "observed",
+      },
+      "start.modifier": {
+        description: "Optional offset modifier for the start timing.",
+        evidence: "observed",
+      },
+      "end.type": {
+        description: "Timing reference mode for when the income event ends.",
+        allowedValues: ["date", "milestone", "keyword"],
+        evidence: "observed",
+      },
+      "end.value": {
+        description: "Target date, milestone identifier, or keyword for the end timing.",
+        evidence: "observed",
+      },
+      "end.modifier": {
+        description: "Optional offset modifier for the end timing.",
+        evidence: "observed",
+      },
+    },
+  },
+  {
+    scope: "expenses",
+    title: "Plan expense events",
+    fields: {
+      id: {
+        description: "Unique event identifier.",
+        evidence: "observed",
+      },
+      name: {
+        description: "Display label of the expense event.",
+        evidence: "observed",
+      },
+      kind: {
+        description: "Event category discriminator.",
+        allowedValues: ["expense"],
+        evidence: "observed",
+      },
+      type: {
+        description: "Expense classification type.",
+        allowedValues: ["living-expenses"],
+        evidence: "observed",
+      },
+      spendingType: {
+        description: "Spending classification category.",
+        allowedValues: ["essential", "discretionary"],
+        evidence: "observed",
+      },
+      amount: {
+        description: "Scheduled expense amount in dollars.",
+        units: DOLLARS,
+        evidence: "observed",
+      },
+      "start.type": {
+        description: "Timing reference mode for when the expense event begins.",
+        allowedValues: ["date", "milestone", "keyword"],
+        evidence: "observed",
+      },
+      "start.value": {
+        description: "Target date, milestone identifier, or keyword for the start timing.",
+        evidence: "observed",
+      },
+      "start.modifier": {
+        description: "Optional offset modifier for the start timing.",
+        evidence: "observed",
+      },
+      "end.type": {
+        description: "Timing reference mode for when the expense event ends.",
+        allowedValues: ["date", "milestone", "keyword"],
+        evidence: "observed",
+      },
+      "end.value": {
+        description: "Target date, milestone identifier, or keyword for the end timing.",
+        evidence: "observed",
+      },
+      "end.modifier": {
+        description: "Optional offset modifier for the end timing.",
+        evidence: "observed",
+      },
+    },
+  },
+  {
+    scope: "priorities",
+    title: "Plan priorities (cash flow routing)",
+    fields: {
+      id: {
+        description: "Unique event identifier.",
+        evidence: "observed",
+      },
+      name: {
+        description: "Display label of the priority flow.",
+        evidence: "observed",
+      },
+      kind: {
+        description: "Event category discriminator.",
+        allowedValues: ["priority"],
+        evidence: "observed",
+      },
+      type: {
+        description: "Priority routing target type.",
+        allowedValues: ["taxable"],
+        evidence: "observed",
+      },
+      accountId: {
+        description: "Destination account identifier in Current Finances.",
+        evidence: "observed",
+      },
+    },
+  },
+  {
+    scope: "milestones",
+    title: "Plan milestones",
+    fields: {
+      id: {
+        description: "Unique identifier of the milestone.",
+        evidence: "observed",
+      },
+      name: {
+        description: "Display label of the milestone.",
+        evidence: "observed",
+      },
+      "criteria.*.type": {
+        description: "Kind of milestone criterion.",
+        allowedValues: ["date", "year", "milestone", "netWorth", "totalDebt", "age"],
+        evidence: "observed",
+      },
+      "criteria.*.value": {
+        description: "Target value of the criterion.",
+        evidence: "observed",
+      },
+      "criteria.*.modifier": {
+        description: "Offset modifier for the criterion.",
+        evidence: "observed",
+      },
+    },
+  },
+  VARIABLES_GROUP,
+  MONTECARLO_GROUP,
+  WITHDRAWAL_STRATEGY_GROUP,
+  {
+    scope: "settings",
+    title: "Application and plan settings",
+    fields: {
+      schema: {
+        description: "Settings document schema version (5 in ProjectionLab 5).",
+        units: "count",
+        evidence: "observed",
+      },
+      seenVersion: {
+        description: "Last recorded application version.",
+        evidence: "observed",
+      },
+      "plan.activeId": {
+        description: "Active plan identifier in the application interface (null in exports; no plan is treated as active in exports).",
+        evidence: "observed",
+      },
+      "plan.baselineId": {
+        description: "Baseline comparison plan identifier (null in exports).",
+        evidence: "observed",
+      },
+      "plan.alignment.type": {
+        description: "Timeline calendar alignment mode.",
+        allowedValues: ["calendar"],
+        evidence: "observed",
+      },
+      "plan.tabs.pinned": {
+        description: "Whether plan tabs are pinned in the interface.",
+        evidence: "observed",
+      },
+      "plugins.enabled": {
+        description: "Whether the Plugin API is enabled.",
+        evidence: "observed",
+      },
+      "plugins.apiKey": {
+        description: "Secret authentication key for the Plugin API (redacted on reads).",
+        evidence: "observed",
+      },
+    },
+  },
+  {
+    scope: "accountHistory",
+    title: "Account history",
+    fields: {
+      "*.*.schema": {
+        description: "History record schema version (5 in ProjectionLab 5).",
+        units: "count",
+        evidence: "observed",
+        note: "Keyed by account ID then calendar year.",
+      },
+      "*.*.kind": {
+        description: "Account category discriminator.",
+        allowedValues: ["account", "real-asset"],
+        evidence: "observed",
+      },
+      "*.*.balance.*": {
+        description: "Historical end-of-year balance in dollars for an account, keyed by account ID.",
+        units: DOLLARS,
+        evidence: "observed",
+      },
+      "*.*.costBasis.*": {
+        description: "Historical end-of-year cost basis in dollars for an account, keyed by account ID.",
+        units: DOLLARS,
+        evidence: "observed",
+      },
+      "*.*.value.*": {
+        description: "Historical end-of-year estimated value in dollars for a real asset, keyed by asset ID.",
+        units: DOLLARS,
+        evidence: "observed",
+      },
+    },
+  },
+];
+
 interface CompiledEntry {
   pattern: string;
   segments: string[];
   field: DataModelField;
 }
 
-const compiledByScope = new Map<string, CompiledEntry[]>();
+const compiledByScopeV4 = new Map<string, CompiledEntry[]>();
 for (const group of DATA_MODEL_GROUPS) {
   const entries: CompiledEntry[] = [];
   for (const [pattern, field] of Object.entries(group.fields)) {
     entries.push({ pattern, segments: pattern.split("."), field });
   }
-  compiledByScope.set(group.scope, entries);
+  compiledByScopeV4.set(group.scope, entries);
+}
+
+const compiledByScopeV5 = new Map<string, CompiledEntry[]>();
+for (const group of DATA_MODEL_V5_GROUPS) {
+  const entries: CompiledEntry[] = [];
+  for (const [pattern, field] of Object.entries(group.fields)) {
+    entries.push({ pattern, segments: pattern.split("."), field });
+  }
+  compiledByScopeV5.set(group.scope, entries);
 }
 
 function entryMatches(segments: string[], pathSegments: string[]): boolean {
@@ -1436,12 +1960,21 @@ function entryMatches(segments: string[], pathSegments: string[]): boolean {
   return true;
 }
 
+/** Get the data model groups for the specified export layout. */
+export function getDataModelGroups(
+  layout: ExportLayout = "v4",
+): readonly DataModelGroup[] {
+  return layout === "v5" ? DATA_MODEL_V5_GROUPS : DATA_MODEL_GROUPS;
+}
+
 /** Field entry for a scope-prefixed concrete path, or undefined. */
 export function matchDataModelField(
   scope: string,
   path: string,
+  layout: ExportLayout = "v4",
 ): DataModelField | undefined {
-  const entries = compiledByScope.get(scope);
+  const map = layout === "v5" ? compiledByScopeV5 : compiledByScopeV4;
+  const entries = map.get(scope);
   if (!entries) return undefined;
   const exact = entries.find((entry) => entry.pattern === path);
   if (exact) return exact.field;
@@ -1467,9 +2000,10 @@ export interface DataModelAnnotation {
 export function annotateAddressableValues<T extends { path: string }>(
   scope: string | undefined,
   values: readonly T[],
+  layout: ExportLayout = "v4",
 ): (T & DataModelAnnotation)[] {
   return values.map((value) => {
-    const field = scope ? matchDataModelField(scope, value.path) : undefined;
+    const field = scope ? matchDataModelField(scope, value.path, layout) : undefined;
     if (!field) return value;
     const annotated: T & DataModelAnnotation = { ...value };
     annotated.description = field.description;
@@ -1488,9 +2022,10 @@ export function refusedEnumChoices(
   scope: string | undefined,
   path: string,
   value: unknown,
+  layout: ExportLayout = "v4",
 ): readonly string[] | undefined {
   if (scope === undefined || typeof value !== "string") return undefined;
-  const field = matchDataModelField(scope, path);
+  const field = matchDataModelField(scope, path, layout);
   if (!field?.allowedValues || field.evidence !== "observed") return undefined;
   if (field.allowedValues.includes(value)) return undefined;
   return field.allowedValues;
@@ -1501,8 +2036,9 @@ export function enumRefusalError(
   scope: string,
   path: string,
   value: unknown,
+  layout: ExportLayout = "v4",
 ): ProjectionLabError | undefined {
-  const choices = refusedEnumChoices(scope, path, value);
+  const choices = refusedEnumChoices(scope, path, value, layout);
   if (!choices) return undefined;
   const shown = typeof value === "string" ? JSON.stringify(value) : String(value);
   return new ProjectionLabError(

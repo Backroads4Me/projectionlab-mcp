@@ -25,18 +25,23 @@ import {
   type PlanSection,
 } from "../plans.js";
 import type { Snapshot } from "../types/projectionlab.js";
+import { detectLayout, exportSections, type ExportLayout } from "../layout.js";
 
 /** The data areas a snapshot can hold and this tool knows how to compare. */
 const COMPARED_SECTIONS: readonly string[] = [
   "plans",
   "currentFinances",
   "progress",
+  "accountHistory",
   "settings",
 ];
 
-/** A snapshot stores Current Finances under its own key; the export uses `today`. */
-function getSection(data: Record<string, unknown>, section: string): unknown {
-  return section === "currentFinances" ? data.today : data[section];
+/** Read a snapshot section, handling currentFinances stored under today or currentFinances. */
+function getSnapshotSection(snapshot: Snapshot, name: string): unknown {
+  if (name === "currentFinances" && snapshot.data.currentFinances === undefined) {
+    return snapshot.data.today;
+  }
+  return snapshot.data[name];
 }
 
 function describeSnapshot(snapshot: Snapshot) {
@@ -166,6 +171,7 @@ export function registerDiffTool(
   async function readPlansForPair(from?: SnapshotSelectorArgs): Promise<{
     plans: unknown[];
     readFrom: Record<string, unknown>;
+    layout: ExportLayout;
   }> {
     if (from) {
       const snapshot = await resolveSnapshot(snapshots, from, "from snapshot");
@@ -177,10 +183,14 @@ export function registerDiffTool(
           "Drop from to compare the plans in ProjectionLab now, or pick a snapshot whose sections include plans; projectionlab_list_snapshots shows what each snapshot holds",
         );
       }
-      return { plans: stored, readFrom: describeSnapshot(snapshot) };
+      return {
+        plans: stored,
+        readFrom: describeSnapshot(snapshot),
+        layout: snapshot.layout ?? "v4",
+      };
     }
     const live = await bridge.exportData({ fresh: true });
-    const plans = Array.isArray(live.plans) ? live.plans : [];
+    const plans = exportSections(live).plans;
     if (plans.length === 0) {
       throw new ProjectionLabError(
         "INVALID_INPUT",
@@ -195,6 +205,7 @@ export function registerDiffTool(
         readAt: new Date().toISOString(),
         note: "both plans read from ProjectionLab when this diff ran",
       },
+      layout: detectLayout(live),
     };
   }
 
@@ -203,7 +214,7 @@ export function registerDiffTool(
     const budget = createDiffBudget({
       pathsOnly: args.pathsOnly === true,
     });
-    const { plans, readFrom } = await readPlansForPair(args.from);
+    const { plans, readFrom, layout } = await readPlansForPair(args.from);
     const indexA = resolvePlanIndex(plans, args.planA);
     if (indexA === -1) {
       throw planSideNotFoundError(plans, args.planA, "planA");
@@ -225,6 +236,7 @@ export function registerDiffTool(
       plans[indexB] as PlanObj,
       budget,
       args.section,
+      { layout },
     );
     const result = {
       mode: "plans" as const,
@@ -390,6 +402,21 @@ export function registerDiffTool(
           ? await resolveSnapshot(snapshots, to, "to snapshot")
           : null;
 
+        const live = toSnapshot ? null : await bridge.exportData({ fresh: true });
+
+        const fromLayout: ExportLayout = fromSnapshot.layout ?? "v4";
+        const toLayout: ExportLayout = toSnapshot
+          ? (toSnapshot.layout ?? "v4")
+          : detectLayout(live);
+
+        if (fromLayout !== toLayout) {
+          throw new ProjectionLabError(
+            "LAYOUT_MISMATCH",
+            `Cannot diff between ${fromLayout} and ${toLayout}: comparing two exports of different layouts is not meaningful`,
+            "Compare snapshots or exports from the same ProjectionLab layout version.",
+          );
+        }
+
         // Against the live data every section the from snapshot holds is
         // available; against another snapshot, only the sections both hold.
         const comparedSections = fromSnapshot.sections.filter(
@@ -434,9 +461,28 @@ export function registerDiffTool(
         }
 
         // `to` is either a snapshot or the live export; one reader covers both.
-        const live = toSnapshot ? null : await bridge.exportData({ fresh: true });
-        const newerValue = (name: string): unknown =>
-          toSnapshot ? toSnapshot.data[name] : getSection(live ?? {}, name);
+        const liveSections = live ? exportSections(live) : null;
+        const newerValue = (name: string): unknown => {
+          if (toSnapshot) return getSnapshotSection(toSnapshot, name);
+          if (!liveSections) return undefined;
+          switch (name) {
+            case "plans":
+              return liveSections.plans;
+            case "currentFinances":
+              return liveSections.currentFinances;
+            case "settings":
+              return liveSections.settings;
+            case "progress":
+              return liveSections.progress;
+            case "accountHistory":
+              return liveSections.accountHistory;
+            default:
+              return undefined;
+          }
+        };
+
+        const olderValue = (name: string): unknown =>
+          getSnapshotSection(fromSnapshot, name);
 
         // A section one side carries no data for is not a difference, it is
         // nothing to compare: rollback skips such a section rather than
@@ -448,7 +494,7 @@ export function registerDiffTool(
           after: unknown;
         }[] = [];
         for (const name of comparedSections) {
-          const before = fromSnapshot.data[name];
+          const before = olderValue(name);
           const after = newerValue(name);
           if (before === undefined) {
             notCompared.push({
@@ -497,7 +543,7 @@ export function registerDiffTool(
               "Drop planIdentifier, or pick a snapshot whose sections include plans; projectionlab_list_snapshots shows what each snapshot holds",
             );
           }
-          const olderPlans = plansOf(fromSnapshot.data.plans);
+          const olderPlans = plansOf(olderValue("plans"));
           const beforeIndex = resolvePlanIndex(olderPlans, planIdentifier);
           const afterIndex = resolvePlanIndex(newerPlans, planIdentifier);
           const match =
@@ -508,14 +554,14 @@ export function registerDiffTool(
                 : undefined;
           if (match === undefined) {
             const byKey = new Map(
-              plansOf(fromSnapshot.data.plans, newerPlans).map((plan) => [
-                planKey(plan),
+              plansOf(olderPlans, newerPlans).map((plan) => [
+                planKey(plan, fromLayout),
                 plan,
               ]),
             );
             throw planNotFoundError([...byKey.values()], planIdentifier);
           }
-          planOnlyKey = planKey(match);
+          planOnlyKey = planKey(match, fromLayout);
         }
 
         const budget = createDiffBudget({
@@ -534,6 +580,7 @@ export function registerDiffTool(
                 entry.section === "plans" ? section : undefined,
               planOnlyKey:
                 entry.section === "plans" ? planOnlyKey : undefined,
+              layout: fromLayout,
             },
           );
           sections[entry.section] = payload;

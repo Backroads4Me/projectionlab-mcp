@@ -7,6 +7,7 @@ import { redactApiKeyToPlaceholder, restoreApiKeyFromPlaceholder } from "./redac
 import { secureMkdir, secureWriteFile } from "./secureFs.js";
 import { log } from "./logger.js";
 import type { Snapshot } from "./types/projectionlab.js";
+import type { ExportLayout } from "./layout.js";
 
 const RETENTION_DAYS = 30;
 const UUID_RE =
@@ -124,6 +125,7 @@ export class SnapshotManager {
     operation: string,
     sections: string[],
     data: Record<string, unknown>,
+    layout: ExportLayout,
   ): Promise<Snapshot> {
     await this.ensureDir();
 
@@ -132,6 +134,7 @@ export class SnapshotManager {
       timestamp: new Date().toISOString(),
       operation,
       sections,
+      layout,
       // The Plugin API key is stored as SNAPSHOT_KEY_PLACEHOLDER, so the file
       // on disk never holds it; SnapshotManager.get puts the current
       // config.apiKey back on every read, which keeps a rollback exact while
@@ -167,6 +170,7 @@ export class SnapshotManager {
           timestamp: snap.timestamp,
           operation: snap.operation,
           sections: snap.sections,
+          layout: snap.layout,
         });
       } catch {
         log.warn("snapshot", `Failed to read snapshot file: ${file}`);

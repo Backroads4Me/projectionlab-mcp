@@ -62,3 +62,27 @@ test("only genuine key errors classify as API_KEY_INVALID", async () => {
     assert.equal(response.error.code, code, message);
   }
 });
+
+test("apiVersion reports the API's version, or null when it has none", async () => {
+  globalThis.window = { projectionlabPluginAPI: {} };
+  assert.deepEqual(await executePageRequest({ method: "apiVersion", params: [] }), { ok: true, result: null });
+  globalThis.window = { projectionlabPluginAPI: { version: 2 } };
+  assert.deepEqual(await executePageRequest({ method: "apiVersion", params: [] }), { ok: true, result: 2 });
+});
+
+test("the contract 2 account methods reach the API", async () => {
+  globalThis.window = {
+    projectionlabPluginAPI: {
+      getAccounts: async () => [{ id: "a1", kind: "account" }],
+      updateAccountValues: async ({ accountId }) => ({ accountId }),
+    },
+  };
+  assert.deepEqual(await executePageRequest({ method: "getAccounts", params: [] }), {
+    ok: true,
+    result: [{ id: "a1", kind: "account" }],
+  });
+  assert.deepEqual(await executePageRequest({ method: "updateAccountValues", params: [{ accountId: "a1", values: {}, key: "k" }] }), {
+    ok: true,
+    result: { accountId: "a1" },
+  });
+});

@@ -1,3 +1,5 @@
+import type { ExportLayout } from "../layout.js";
+
 export interface ExportedData {
   today?: unknown;
   plans?: unknown[];
@@ -45,5 +47,8 @@ export interface Snapshot {
   timestamp: string;
   operation: string;
   sections: string[];
+  /** Export layout the data was taken from (src/layout.ts). Snapshots
+   * without one were taken from ProjectionLab 4. */
+  layout?: ExportLayout;
   data: Record<string, unknown>;
 }

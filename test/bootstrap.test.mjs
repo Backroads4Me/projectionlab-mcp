@@ -66,6 +66,8 @@ test("bootstrap snippet acts as a full executor", async () => {
   const status = await bridge.checkConnection();
   assert.equal(status.browser, true);
   assert.equal(status.apiAvailable, true);
+  // The fake API has no version property: a ProjectionLab 4 page.
+  assert.equal(status.apiContract, 1);
   // validateApiKey is absent from the fake API object; the snippet reports
   // "method unavailable" and the bridge records a key error - matching how
   // older PL builds behave. Not asserting apiKeyValid here.
@@ -86,6 +88,14 @@ test("bootstrap snippet acts as a full executor", async () => {
     { balance: 42 },
     { key: "test-api-key", force: "true" },
   ]);
+
+  // A ProjectionLab 5 page reports api.version 2, and writes are refused
+  // before they reach the API.
+  pluginApi.version = 2;
+  assert.equal(await bridge.apiContract(), 2);
+  await assert.rejects(bridge.updateAccount("acct-1", { balance: 1 }), (err) => err.code === "WRITE_NOT_SUPPORTED");
+  assert.equal(calls.length, 1);
+  delete pluginApi.version;
 
   // Second install in the same tab is a no-op
   vm.runInContext(bridge.bootstrapSnippet(), sandbox);

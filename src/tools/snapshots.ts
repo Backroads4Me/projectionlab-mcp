@@ -9,13 +9,7 @@ import { REDACTED, containsText, hasApiKeyPlaceholder } from "../redact.js";
 import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { restoredSectionMatches } from "./restore.js";
-
-function getExportSection(
-  data: Record<string, unknown>,
-  section: string,
-): unknown {
-  return section === "currentFinances" ? data.today : data[section];
-}
+import { assertSnapshotLayout, detectLayout, exportSections, sectionOf } from "../layout.js";
 
 export function registerSnapshotTools(
   server: McpServer,
@@ -142,6 +136,12 @@ export function registerSnapshotTools(
           );
         }
 
+        // A snapshot from the other export layout cannot be written back
+        // through the Plugin API; refuse it in the preview as well.
+        const currentData = await bridge.exportData({ fresh: true });
+        const liveLayout = detectLayout(currentData);
+        assertSnapshotLayout(snapshot.layout, liveLayout);
+
         if (!confirm) {
           return {
             content: [
@@ -164,26 +164,22 @@ export function registerSnapshotTools(
         }
 
         // Snapshot current state before rolling back
-        const currentData = await bridge.exportData({ fresh: true });
         const sectionsToBackup: Record<string, unknown> = {};
         for (const section of snapshot.sections) {
-          sectionsToBackup[section] = getExportSection(
-            currentData as Record<string, unknown>,
-            section,
-          );
+          sectionsToBackup[section] = sectionOf(currentData, section);
         }
         await snapshots.create(
           `rollback_pre_${snapshot.id}`,
           snapshot.sections,
           sectionsToBackup,
+          liveLayout,
         );
 
         // restorePlans replaces every plan, so refuse when a plan was saved
         // in ProjectionLab since the read above. This early check refuses
         // before any section is applied; the plans write below checks again,
         // atomically with the write.
-        const exportedPlans = (currentData as Record<string, unknown>).plans;
-        const currentPlans = Array.isArray(exportedPlans) ? exportedPlans : [];
+        const currentPlans = exportSections(currentData).plans;
         if (
           snapshot.sections.includes("plans") &&
           snapshot.data.plans !== undefined
@@ -228,16 +224,13 @@ export function registerSnapshotTools(
         let unverifiedSections: string[] = restoredSections;
         try {
           await new Promise((r) => setTimeout(r, 1000));
-          const fresh = (await bridge.exportData({ fresh: true })) as Record<
-            string,
-            unknown
-          >;
+          const fresh = await bridge.exportData({ fresh: true });
           unverifiedSections = restoredSections.filter(
             (section) =>
               !restoredSectionMatches(
                 section,
                 snapshot.data[section],
-                getExportSection(fresh, section),
+                sectionOf(fresh, section),
               ),
           );
         } catch (err) {

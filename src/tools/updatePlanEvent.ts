@@ -24,6 +24,7 @@ import {
   EVENT_SECTIONS,
   type PlanObj,
 } from "../plans.js";
+import { detectLayout } from "../layout.js";
 
 const EVENT_FIELD_CONTEXT = {
   label: "event field",
@@ -308,7 +309,7 @@ export function registerUpdatePlanEventTool(
 
         const snapshot = await snapshots.create("updatePlanEvent", ["plans"], {
           plans,
-        });
+        }, detectLayout(data));
 
         const updatedPlan = {
           ...plan,

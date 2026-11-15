@@ -1,3 +1,4 @@
+import type { ApiContract } from "./layout.js";
 import type { ExportedData } from "./types/projectionlab.js";
 
 export interface ConnectionStatus {
@@ -7,6 +8,8 @@ export interface ConnectionStatus {
   apiKeyValid: boolean;
   /** Connected executor's identity, "extension/<version>" or "bootstrap/<version>". */
   executor?: string;
+  /** Plugin API contract the page offers (src/layout.ts), once the API is available. */
+  apiContract?: ApiContract;
   errors: string[];
 }
 
@@ -19,6 +22,8 @@ export interface ConnectionStatus {
 export interface Bridge {
   checkConnection(): Promise<ConnectionStatus>;
   describePluginApi(): Promise<Record<string, string>>;
+  /** The Plugin API contract the connected page offers, read fresh. */
+  apiContract(): Promise<ApiContract>;
   /** Full export, served from a short-lived cache unless `fresh` is true. */
   exportData(opts?: { fresh?: boolean }): Promise<ExportedData>;
   updateAccount(

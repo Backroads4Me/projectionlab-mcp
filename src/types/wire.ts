@@ -38,21 +38,29 @@ export const HEARTBEAT_INTERVAL_MS = 20_000;
  * Plugin API operations the executor must support. `params` for each is an
  * ordered argument list matching window.projectionlabPluginAPI signatures,
  * except the meta-operations `describeApi` (no args; enumerates own +
- * prototype properties of the API object) and `waitForApi` (optional
+ * prototype properties of the API object), `waitForApi` (optional
  * `[timeoutMs]`; resolves once the API is attached to the page, waiting up to
- * `timeoutMs`, or 15 seconds when omitted). Other operations wait up to 15
- * seconds for the API before running.
+ * `timeoutMs`, or 15 seconds when omitted), and `apiVersion` (no args;
+ * resolves to the API object's `version` property, or null when it has none).
+ * Other operations wait up to 15 seconds for the API before running.
+ *
+ * `getAccounts` and `updateAccountValues` exist only on Plugin API contract 2
+ * (ProjectionLab 5); see src/layout.ts. An executor that predates
+ * `apiVersion` rejects it as "Not a wire protocol method".
  */
 export type WireMethod =
   | "exportData" // params: [{ key }]
+  | "getAccounts" // params: [params?] (contract 2)
   | "updateAccount" // params: [accountId, data, { key, force? }]
+  | "updateAccountValues" // params: [{ accountId, values, key }] (contract 2)
   | "restoreCurrentFinances" // params: [state, { key }]
   | "restorePlans" // params: [plans, { key }]
   | "restoreProgress" // params: [progress, { key }]
   | "restoreSettings" // params: [settings, { key }]
   | "validateApiKey" // params: [{ key }]
   | "describeApi" // params: []
-  | "waitForApi"; // params: [timeoutMs?]
+  | "waitForApi" // params: [timeoutMs?]
+  | "apiVersion"; // params: []
 
 /** First frame the executor sends after the socket opens. */
 export interface HelloFrame {

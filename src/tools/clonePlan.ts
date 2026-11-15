@@ -15,6 +15,7 @@ import {
   requirePlans,
   type PlanObj,
 } from "../plans.js";
+import { detectLayout } from "../layout.js";
 
 export function registerClonePlanTool(
   server: McpServer,
@@ -111,7 +112,7 @@ export function registerClonePlanTool(
 
         const snapshot = await snapshots.create("clonePlan", ["plans"], {
           plans,
-        });
+        }, detectLayout(data));
         log.info(
           "clonePlan",
           `Copying plan "${String(source.name)}" to "${String(clone.name)}"`,

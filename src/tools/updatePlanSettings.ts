@@ -18,6 +18,7 @@ import {
   requirePlans,
   type PlanObj,
 } from "../plans.js";
+import { detectLayout } from "../layout.js";
 
 export function registerUpdatePlanSettingsTool(
   server: McpServer,
@@ -128,7 +129,7 @@ export function registerUpdatePlanSettingsTool(
 
         const snapshot = await snapshots.create("updatePlanSettings", ["plans"], {
           plans,
-        });
+        }, detectLayout(data));
 
         const updatedPlans = [...plans];
         updatedPlans[planIndex] = { ...plan, [section]: updated };

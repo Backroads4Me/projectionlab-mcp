@@ -9,6 +9,7 @@ import {
   errorResult,
   redactedSecretsError,
 } from "../errors.js";
+import { detectLayout, exportSections, sectionOf } from "../layout.js";
 import { log } from "../logger.js";
 import { containsSubset } from "../plans.js";
 import { findRedactedSecretPaths } from "../redact.js";
@@ -23,13 +24,6 @@ function checkReadOnly() {
       "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
     );
   }
-}
-
-function getExportSection(
-  data: Record<string, unknown>,
-  section: string,
-): unknown {
-  return section === "currentFinances" ? data.today : data[section];
 }
 
 /** Strip the `lastUpdated` stamp ProjectionLab sets when it saves a plan. */
@@ -66,11 +60,8 @@ async function verify(
 ): Promise<{ verified: boolean; detail?: string }> {
   try {
     await new Promise((r) => setTimeout(r, 1000));
-    const fresh = (await bridge.exportData({ fresh: true })) as Record<
-      string,
-      unknown
-    >;
-    const actual = getExportSection(fresh, section);
+    const fresh = await bridge.exportData({ fresh: true });
+    const actual = sectionOf(fresh, section);
     if (actual === undefined) {
       return {
         verified: false,
@@ -240,8 +231,8 @@ export function registerRestoreTools(
 
         const exportData = await bridge.exportData({ fresh: true });
         await snapshots.create("restoreCurrentFinances", ["currentFinances"], {
-          currentFinances: exportData.today,
-        });
+          currentFinances: sectionOf(exportData, "currentFinances"),
+        }, detectLayout(exportData));
 
         await bridge.restoreCurrentFinances(currentFinances);
 
@@ -312,7 +303,7 @@ export function registerRestoreTools(
         }
 
         const exportData = await bridge.exportData({ fresh: true });
-        const currentPlans = Array.isArray(exportData.plans) ? exportData.plans : [];
+        const currentPlans = exportSections(exportData).plans;
         const diff = diffPlans(currentPlans, plans);
 
         if (!confirm) {
@@ -337,8 +328,8 @@ export function registerRestoreTools(
         }
 
         await snapshots.create("restorePlans", ["plans"], {
-          plans: exportData.plans,
-        });
+          plans: sectionOf(exportData, "plans"),
+        }, detectLayout(exportData));
 
         await bridge.restorePlansIfUnchanged(currentPlans, plans);
 
@@ -424,8 +415,8 @@ export function registerRestoreTools(
 
         const exportData = await bridge.exportData({ fresh: true });
         await snapshots.create("restoreProgress", ["progress"], {
-          progress: exportData.progress,
-        });
+          progress: sectionOf(exportData, "progress"),
+        }, detectLayout(exportData));
 
         await bridge.restoreProgress(progress);
 
@@ -511,8 +502,8 @@ export function registerRestoreTools(
 
         const exportData = await bridge.exportData({ fresh: true });
         await snapshots.create("restoreSettings", ["settings"], {
-          settings: exportData.settings,
-        });
+          settings: sectionOf(exportData, "settings"),
+        }, detectLayout(exportData));
 
         await bridge.restoreSettings(settings);
 

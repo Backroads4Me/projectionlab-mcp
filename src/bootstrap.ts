@@ -2,10 +2,12 @@ import { PROTOCOL_VERSION, type WireMethod } from "./types/wire.js";
 import { VERSION } from "./version.js";
 
 /** The Plugin API calls the snippet will run; the meta-operations
- * `describeApi` and `waitForApi` are handled by the snippet itself. */
-const PLUGIN_METHODS: readonly Exclude<WireMethod, "describeApi" | "waitForApi">[] = [
+ * `describeApi`, `waitForApi`, and `apiVersion` are handled by the snippet itself. */
+const PLUGIN_METHODS: readonly Exclude<WireMethod, "describeApi" | "waitForApi" | "apiVersion">[] = [
   "exportData",
+  "getAccounts",
   "updateAccount",
+  "updateAccountValues",
   "restoreCurrentFinances",
   "restorePlans",
   "restoreProgress",
@@ -61,13 +63,14 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   }
   async function handle(frame, ws) {
     try {
-      if (frame.method !== "waitForApi" && frame.method !== "describeApi" && !PLUGIN_METHODS.includes(frame.method)) {
+      if (frame.method !== "waitForApi" && frame.method !== "describeApi" && frame.method !== "apiVersion" && !PLUGIN_METHODS.includes(frame.method)) {
         throw new Error("Not a wire protocol method: " + frame.method);
       }
       const requested = frame.method === "waitForApi" ? Number((frame.params || [])[0]) : NaN;
       const api = await waitForApi(Number.isFinite(requested) && requested > 0 ? requested : 15000);
       let result;
       if (frame.method === "waitForApi") result = true;
+      else if (frame.method === "apiVersion") result = api.version === undefined ? null : api.version;
       else if (frame.method === "describeApi") result = describeApi(api);
       else {
         const fn = api[frame.method];

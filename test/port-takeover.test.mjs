@@ -65,6 +65,8 @@ function reconnectingExecutor({ reconnectMs = 300, hang = false, plans, response
         if (frame.method === "exportData") await gate;
         if (responseMs) await sleep(responseMs);
         let result = true;
+        // A ProjectionLab 4 page: its Plugin API has no version.
+        if (frame.method === "apiVersion") result = null;
         if (frame.method === "exportData") {
           result = plans ? { plans: structuredClone(plans) } : { marker: "data" };
         }

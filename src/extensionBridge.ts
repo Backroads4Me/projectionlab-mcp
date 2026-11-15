@@ -6,6 +6,7 @@ import { buildBootstrapSnippet } from "./bootstrap.js";
 import type { Bridge, ConnectionStatus } from "./bridge.js";
 import { config, USER_ENV_FILE } from "./config.js";
 import { ProjectionLabError } from "./errors.js";
+import { CONTRACT_2_WRITES, contractFromVersion, exportSections, type ApiContract } from "./layout.js";
 import { log } from "./logger.js";
 import { planChanges, planConflictError } from "./planVersion.js";
 import type { ExportedData } from "./types/projectionlab.js";
@@ -808,6 +809,11 @@ export class ExtensionBridge implements Bridge {
         );
         return result;
       }
+      try {
+        result.apiContract = await this.fetchContract();
+      } catch (err) {
+        result.errors.push(err instanceof ProjectionLabError ? statusLine(err) : String(err));
+      }
       if (!config.apiKey) return result;
       try {
         await this.request("validateApiKey", [{ key: config.apiKey }]);
@@ -819,6 +825,51 @@ export class ExtensionBridge implements Bridge {
       }
       return result;
     });
+  }
+
+  async apiContract(): Promise<ApiContract> {
+    return this.serialize(() => this.fetchContract());
+  }
+
+  /**
+   * The Plugin API contract the connected page offers, read fresh on every
+   * call so a page reloaded onto another ProjectionLab version is never
+   * written to under the old contract. Call only from the operation chain.
+   *
+   * An executor that predates the apiVersion meta-operation rejects it; the
+   * API's member list then decides. A page whose API has a `version` member
+   * the executor cannot report is refused rather than assumed to be contract 1.
+   */
+  private async fetchContract(): Promise<ApiContract> {
+    let version: unknown;
+    try {
+      version = await this.request("apiVersion", []);
+    } catch (err) {
+      if (!(err instanceof ProjectionLabError) || err.code !== "UNKNOWN") throw err;
+      const members = (await this.request("describeApi", [])) as Record<string, string>;
+      if (members && typeof members === "object" && "version" in members) {
+        throw new ProjectionLabError(
+          "EXECUTOR_OUTDATED",
+          "The ProjectionLab page reports a Plugin API version that this browser executor cannot read",
+          "Update the MCP Bridge for ProjectionLab extension, or paste a fresh snippet from projectionlab_get_bootstrap. Nothing was written.",
+        );
+      }
+      return 1;
+    }
+    return contractFromVersion(version);
+  }
+
+  /** Refuses a write the page's contract does not support yet. Call only
+   * from the operation chain, in the same entry as the write it guards. */
+  private async assertWriteSupported(method: WireMethod): Promise<void> {
+    const contract = await this.fetchContract();
+    if (contract === 2 && !CONTRACT_2_WRITES.has(method)) {
+      throw new ProjectionLabError(
+        "WRITE_NOT_SUPPORTED",
+        `${method} is not supported on ProjectionLab 5 yet`,
+        "This server reads ProjectionLab 5 data but does not write it yet. Make the change in the ProjectionLab app. Nothing was written.",
+      );
+    }
   }
 
   async describePluginApi(): Promise<Record<string, string>> {
@@ -868,6 +919,7 @@ export class ExtensionBridge implements Bridge {
       );
       const opts: { key: string; force?: string } = { key: this.requireApiKey() };
       if (force) opts.force = "true";
+      await this.assertWriteSupported("updateAccount");
       await this.request("updateAccount", [accountId, data, opts]);
     });
     this.invalidateCache();
@@ -875,8 +927,10 @@ export class ExtensionBridge implements Bridge {
 
   private async restoreCall(method: WireMethod, payload: unknown): Promise<void> {
     await this.serialize(async () => {
+      const key = this.requireApiKey();
+      await this.assertWriteSupported(method);
       log.info("extension", `Calling ${method}`);
-      await this.request(method, [payload, { key: this.requireApiKey() }]);
+      await this.request(method, [payload, { key }]);
     });
     this.invalidateCache();
   }
@@ -895,8 +949,9 @@ export class ExtensionBridge implements Bridge {
   async restorePlansIfUnchanged(read: unknown[], plans: unknown[]): Promise<void> {
     await this.serialize(async () => {
       const key = this.requireApiKey();
-      const data = (await this.request("exportData", [{ key }])) as ExportedData;
-      const changes = planChanges(read, Array.isArray(data.plans) ? data.plans : []);
+      await this.assertWriteSupported("restorePlans");
+      const data = await this.request("exportData", [{ key }]);
+      const changes = planChanges(read, exportSections(data).plans);
       if (changes.length > 0) throw planConflictError(changes);
       log.info("extension", "Calling restorePlans");
       await this.request("restorePlans", [plans, { key }]);

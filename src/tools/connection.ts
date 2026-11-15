@@ -24,13 +24,16 @@ export function registerConnectionTool(
         "Call this first in every session, before any other ProjectionLab tool. If any check " +
         "fails, read the projectionlab://guide resource and walk the user through the fix. " +
         "The result also carries versions (server, executor, latest npm release) and notices: " +
-        "plain sentences to relay to the user when a release is out of date.",
+        "plain sentences to relay to the user when a release is out of date. apiContract is the " +
+        "Plugin API contract the page offers: 1 on ProjectionLab 4, 2 on ProjectionLab 5, where " +
+        "writes are not supported yet.",
       outputSchema: {
         browser: z.boolean(),
         pageLoaded: z.boolean(),
         apiAvailable: z.boolean(),
         apiKeyValid: z.boolean(),
         executor: z.string().optional(),
+        apiContract: z.union([z.literal(1), z.literal(2)]).optional(),
         errors: z.array(z.string()),
         writesEnabled: z.boolean(),
         versions: z.object({

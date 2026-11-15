@@ -18,6 +18,7 @@ import {
 } from "../pathPatch.js";
 import type { PlanObj } from "../plans.js";
 import { isSecretFieldName, redactSecrets } from "../redact.js";
+import { detectLayout } from "../layout.js";
 
 const ACCOUNT_FIELD_CONTEXT = {
   label: "Current Finances account field",
@@ -267,7 +268,7 @@ export function registerUpdateAccountTool(
 
         const snapshot = await snapshots.create("updateAccount", ["currentFinances"], {
           currentFinances: today,
-        });
+        }, detectLayout(exportData));
 
         const patch = topLevelPatch(result.updated, result.changes);
         log.info(

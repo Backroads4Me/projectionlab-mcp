@@ -1,6 +1,7 @@
 import type { Bridge } from "./bridge.js";
 import { ProjectionLabError } from "./errors.js";
 import type { PlanObj } from "./plans.js";
+import { exportSections } from "./layout.js";
 
 /**
  * A plan's version token: its `lastUpdated` stamp, which ProjectionLab sets
@@ -61,8 +62,7 @@ export async function assertPlansUnchanged(
   read: unknown[],
 ): Promise<void> {
   const data = await bridge.exportData({ fresh: true });
-  const current = Array.isArray(data.plans) ? data.plans : [];
-  const changes = planChanges(read, current);
+  const changes = planChanges(read, exportSections(data).plans);
   if (changes.length > 0) throw planConflictError(changes);
 }
 

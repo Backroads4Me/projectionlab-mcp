@@ -28,6 +28,7 @@ import {
   verifySectionApplied,
   type PlanObj,
 } from "../plans.js";
+import { detectLayout } from "../layout.js";
 
 interface DiffResult {
   currentCount: number;
@@ -221,7 +222,7 @@ export function registerUpdatePlanSectionTool(
         // Snapshot all plans before mutation
         const snapshot = await snapshots.create("updatePlanSection", ["plans"], {
           plans,
-        });
+        }, detectLayout(data));
 
         // Rebuild plans array with the one section replaced
         const updatedPlan = { ...plan, [section]: sectionData };

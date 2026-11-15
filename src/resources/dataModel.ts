@@ -7,7 +7,8 @@ import {
   DATA_MODEL_V5_PROJECTIONLAB_VERSION,
   type DataModelField,
 } from "../dataModel.js";
-import { detectLayout, type ExportLayout } from "../layout.js";
+import { layoutForContract, type ExportLayout } from "../layout.js";
+import { log } from "../logger.js";
 
 function renderField(pattern: string, field: DataModelField): string {
   const parts = [`- \`${pattern}\` [${field.evidence}]: ${field.description}`];
@@ -77,9 +78,8 @@ export function renderDataModelV5Markdown(): string {
     "- Historical records are stored in documents.accountHistory keyed by account ID then calendar year, " +
       "without a separate progress section.",
     "",
-    "Evidence tags: [observed] means a value was set through the UI and the stored value was " +
-      "read back (or matched field-for-field against a known plan). [ui-label] means the " +
-      "control was seen in the UI but the entry is not yet confirmed by a stored-value test.",
+    "Evidence tags: [export-shape] means the field and its value type appear in a " +
+      "ProjectionLab 5 export; its meaning is not yet confirmed by a stored-value test.",
     "",
   ];
   for (const group of DATA_MODEL_V5_GROUPS) {
@@ -106,7 +106,7 @@ export function registerDataModelResource(server: McpServer, bridge?: Bridge) {
         `Field meanings, units, and allowed values for path-addressable reads and writes, ` +
         `version-stamped to ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION} (v4) and ` +
         `${DATA_MODEL_V5_PROJECTIONLAB_VERSION} (v5). Static. ` +
-        "Entries tagged ui-label are not yet confirmed by a stored-value test.",
+        "Entries tagged ui-label or export-shape are not yet confirmed by a stored-value test.",
       mimeType: "text/markdown",
     },
     async (uri) => {
@@ -116,10 +116,9 @@ export function registerDataModelResource(server: McpServer, bridge?: Bridge) {
         layout = param;
       } else if (bridge) {
         try {
-          const raw = await bridge.exportData();
-          layout = detectLayout(raw);
-        } catch {
-          // Fall back to v4 when bridge export is unavailable.
+          layout = layoutForContract(await bridge.apiContract());
+        } catch (err) {
+          log.debug("resource:dataModel", `Failed to determine API contract layout: ${err}`);
         }
       }
       return {

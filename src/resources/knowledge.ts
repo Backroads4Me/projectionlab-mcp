@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
-import { detectLayout, type ExportLayout } from "../layout.js";
+import { layoutForContract, type ExportLayout } from "../layout.js";
+import { log } from "../logger.js";
 
 export const KNOWLEDGE_V4 = `# ProjectionLab & FIRE Reference
 
@@ -22,6 +23,13 @@ describe the current release, 4.6.0
   limits and ACA subsidies, and the user sees those numbers in the app (Tax
   Analytics). Never state a yearly figure from memory: they change every year.
   Ask the user to read the current one in ProjectionLab.
+
+## Evidence legend
+
+When evaluating plan elements or answering user questions, anchor claims with tags:
+- **[EXACT]**: Verified directly from plan JSON via tool inspection or output.
+- **[INFERRED]**: Derived logically from adjacent plan data or standard rule interactions.
+- **[ASSUMPTION]**: A placeholder, default, or external benchmark where plan data is absent.
 
 ## ProjectionLab data model (quick map)
 
@@ -246,6 +254,15 @@ ProjectionLab 5 operates under Plugin API contract 2, using a multi-document exp
   limits and ACA subsidies, and the user sees those numbers in the app (Tax
   Analytics). Never state a yearly figure from memory: they change every year.
   Ask the user to read the current one in ProjectionLab.
+
+## Evidence legend
+
+Data model entries for ProjectionLab 5 carry the tag \`[export-shape]\`, meaning the field and its value type appear in a ProjectionLab 5 export; its meaning is not yet confirmed by a stored-value test.
+
+When evaluating plan elements or answering user questions, anchor claims with tags:
+- **[EXACT]**: Verified directly from plan JSON via tool inspection or output.
+- **[INFERRED]**: Derived logically from adjacent plan data or standard rule interactions.
+- **[ASSUMPTION]**: A placeholder, default, or external benchmark where plan data is absent.
 
 ## ProjectionLab 5 data model (quick map)
 
@@ -480,10 +497,9 @@ export function registerKnowledgeResource(server: McpServer, bridge?: Bridge) {
         layout = param;
       } else if (bridge) {
         try {
-          const raw = await bridge.exportData();
-          layout = detectLayout(raw);
-        } catch {
-          // Fall back to v4 when bridge export is unavailable.
+          layout = layoutForContract(await bridge.apiContract());
+        } catch (err) {
+          log.debug("resource:knowledge", `Failed to determine API contract layout: ${err}`);
         }
       }
       return {

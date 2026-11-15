@@ -46,8 +46,11 @@ function fakeServer() {
   };
 }
 
-function fakeBridge(state) {
+function fakeBridge(contract = 1, state = undefined) {
   return {
+    async apiContract() {
+      return contract;
+    },
     async exportData() {
       return structuredClone(state);
     },
@@ -93,29 +96,44 @@ test("getDataModelGroups returns appropriate groups per layout", () => {
   assert.ok(scopes.has("withdrawalStrategy"));
   assert.ok(scopes.has("settings"));
   assert.ok(scopes.has("accountHistory"));
+
+  // All v5 fields must have evidence: "export-shape"
+  for (const group of v5Groups) {
+    for (const [pattern, field] of Object.entries(group.fields)) {
+      assert.equal(
+        field.evidence,
+        "export-shape",
+        `Field ${group.scope}.${pattern} should have evidence 'export-shape'`,
+      );
+    }
+  }
 });
 
 test("matchDataModelField matches v5 fields and preserves v4 defaults", () => {
   // v5 field matches
   const kindField = matchDataModelField("accounts", "kind", "v5");
   assert.ok(kindField);
-  assert.equal(kindField.evidence, "observed");
+  assert.equal(kindField.evidence, "export-shape");
   assert.deepEqual(kindField.allowedValues, ["account", "debt", "real-asset"]);
 
   const archivedField = matchDataModelField("accounts", "archivedOn", "v5");
   assert.ok(archivedField);
+  assert.equal(archivedField.evidence, "export-shape");
   assert.match(archivedField.note ?? "", /archived accounts/);
 
   const securedField = matchDataModelField("accounts", "securedByAssetId", "v5");
   assert.ok(securedField);
+  assert.equal(securedField.evidence, "export-shape");
   assert.match(securedField.note ?? "", /secured by an asset/);
 
   const incomeTypeField = matchDataModelField("income", "start.type", "v5");
   assert.ok(incomeTypeField);
+  assert.equal(incomeTypeField.evidence, "export-shape");
   assert.deepEqual(incomeTypeField.allowedValues, ["date", "milestone", "keyword"]);
 
   const expenseTypeField = matchDataModelField("expenses", "spendingType", "v5");
   assert.ok(expenseTypeField);
+  assert.equal(expenseTypeField.evidence, "export-shape");
   assert.deepEqual(expenseTypeField.allowedValues, ["essential", "discretionary"]);
 
   const historyBalanceField = matchDataModelField(
@@ -124,18 +142,22 @@ test("matchDataModelField matches v5 fields and preserves v4 defaults", () => {
     "v5",
   );
   assert.ok(historyBalanceField);
+  assert.equal(historyBalanceField.evidence, "export-shape");
   assert.equal(historyBalanceField.units, "dollars");
 
   const settingsPlanActive = matchDataModelField("settings", "plan.activeId", "v5");
   assert.ok(settingsPlanActive);
+  assert.equal(settingsPlanActive.evidence, "export-shape");
 
   // v4 regression check: default layout (no arg) behaves as v4
   const v4FieldDefault = matchDataModelField("savingsAccounts", "balance");
   assert.ok(v4FieldDefault);
+  assert.equal(v4FieldDefault.evidence, "ui-label");
   assert.equal(v4FieldDefault.units, "dollars");
 
   const v4FieldExplicit = matchDataModelField("savingsAccounts", "balance", "v4");
   assert.ok(v4FieldExplicit);
+  assert.equal(v4FieldExplicit.evidence, "ui-label");
   assert.equal(v4FieldExplicit.units, "dollars");
 });
 
@@ -158,17 +180,9 @@ test("annotateAddressableValues annotates correctly per layout", () => {
 });
 
 test("refusedEnumChoices and enumRefusalError work per layout", () => {
-  // v5 enum refusal on accounts.kind
+  // v5 fields carry export-shape evidence; writes are refused only on observed option lists
   const v5Choices = refusedEnumChoices("accounts", "kind", "unsupported", "v5");
-  assert.deepEqual(v5Choices, ["account", "debt", "real-asset"]);
-
-  const v5Accepted = refusedEnumChoices("accounts", "kind", "real-asset", "v5");
-  assert.equal(v5Accepted, undefined);
-
-  const v5Error = enumRefusalError("accounts", "kind", "unsupported", "v5");
-  assert.ok(v5Error);
-  assert.equal(v5Error.code, "INVALID_INPUT");
-  assert.match(v5Error.message, /Allowed values: account, debt, real-asset/);
+  assert.equal(v5Choices, undefined);
 
   // v4 regression check: variables.assumptionsMode is an observed enum with allowed values
   const v4Choices = refusedEnumChoices("variables", "assumptionsMode", "invalid");
@@ -184,7 +198,7 @@ test("refusedEnumChoices and enumRefusalError work per layout", () => {
 
 test("projectionlab://data-model resource renders v5 layout correctly", async () => {
   const server = fakeServer();
-  const bridge = fakeBridge(v5Export());
+  const bridge = fakeBridge(2);
   registerDataModelResource(server, bridge);
 
   const handler = server.resources.get("projectionlab://data-model").handler;
@@ -194,15 +208,19 @@ test("projectionlab://data-model resource renders v5 layout correctly", async ()
   // Checks on v5 markdown
   assert.match(markdown, /ProjectionLab 5\.0\.0/);
   assert.match(markdown, /documents\.currentFinances\.accounts/);
-  assert.match(markdown, /`kind` \[observed\]/);
+  assert.match(markdown, /`kind` \[export-shape\]/);
   assert.match(markdown, /Allowed values: account, debt, real-asset/);
-  assert.match(markdown, /`archivedOn` \[observed\]/);
-  assert.match(markdown, /`securedByAssetId` \[observed\]/);
-  assert.match(markdown, /`start\.type` \[observed\]/);
+  assert.match(markdown, /`archivedOn` \[export-shape\]/);
+  assert.match(markdown, /`securedByAssetId` \[export-shape\]/);
+  assert.match(markdown, /`start\.type` \[export-shape\]/);
   assert.match(markdown, /Allowed values: date, milestone, keyword/);
   assert.match(markdown, /## Application and plan settings/);
-  assert.match(markdown, /`plan\.activeId` \[observed\]/);
+  assert.match(markdown, /`plan\.activeId` \[export-shape\]/);
   assert.match(markdown, /## Account history/);
+
+  // Evidence legend check
+  assert.match(markdown, /Evidence tags: \[export-shape\] means/);
+  assert.equal(markdown.includes("[observed]"), false);
 
   // Requirement: solo 401k prose without guessed string
   assert.match(markdown, /Solo 401k, Roth Solo 401k, and SEP IRA/);
@@ -236,7 +254,7 @@ test("projectionlab://data-model resource handles explicit ?layout=v5 and ?layou
 
 test("projectionlab://data-model v4 regression check with v4 bridge", async () => {
   const server = fakeServer();
-  const bridge = fakeBridge(v4Export());
+  const bridge = fakeBridge(1);
   registerDataModelResource(server, bridge);
 
   const handler = server.resources.get("projectionlab://data-model").handler;
@@ -250,7 +268,7 @@ test("projectionlab://data-model v4 regression check with v4 bridge", async () =
 
 test("projectionlab://knowledge resource renders v5 reference correctly", async () => {
   const server = fakeServer();
-  const bridge = fakeBridge(v5Export());
+  const bridge = fakeBridge(2);
   registerKnowledgeResource(server, bridge);
 
   const handler = server.resources.get("projectionlab://knowledge").handler;
@@ -268,6 +286,11 @@ test("projectionlab://knowledge resource renders v5 reference correctly", async 
   assert.match(markdown, /`securedByAssetId`/);
   assert.match(markdown, /`settings\.plan\.activeId`/);
   assert.match(markdown, /documents\.accountHistory/);
+
+  // Evidence legend check
+  assert.match(markdown, /## Evidence legend/);
+  assert.match(markdown, /`\[export-shape\]`/);
+  assert.match(markdown, /is not yet confirmed by a stored-value test/);
 
   // Requirement: solo 401k prose without guessed string
   assert.match(markdown, /Solo 401k, Roth Solo 401k, and SEP IRA/);
@@ -301,13 +324,32 @@ test("projectionlab://knowledge resource handles explicit ?layout=v5 and ?layout
 
 test("projectionlab://knowledge v4 regression check with v4 bridge", async () => {
   const server = fakeServer();
-  const bridge = fakeBridge(v4Export());
+  const bridge = fakeBridge(1);
   registerKnowledgeResource(server, bridge);
 
   const handler = server.resources.get("projectionlab://knowledge").handler;
   const res = await handler(new URL("projectionlab://knowledge"));
 
   assert.equal(res.contents[0].text, KNOWLEDGE_V4);
+});
+
+test("resource handlers fall back to v4 and log debug when bridge.apiContract() throws", async () => {
+  const server = fakeServer();
+  const failingBridge = {
+    async apiContract() {
+      throw new Error("Bridge connection lost");
+    },
+  };
+  registerDataModelResource(server, failingBridge);
+  registerKnowledgeResource(server, failingBridge);
+
+  const dmHandler = server.resources.get("projectionlab://data-model").handler;
+  const dmRes = await dmHandler(new URL("projectionlab://data-model"));
+  assert.match(dmRes.contents[0].text, /ProjectionLab 4\.6\.0/);
+
+  const knHandler = server.resources.get("projectionlab://knowledge").handler;
+  const knRes = await knHandler(new URL("projectionlab://knowledge"));
+  assert.equal(knRes.contents[0].text, KNOWLEDGE_V4);
 });
 
 test("exportSections and sectionOf operate on synthetic v5 export", () => {

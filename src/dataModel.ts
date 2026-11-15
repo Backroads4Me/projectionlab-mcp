@@ -11,13 +11,15 @@ import type { ExportLayout } from "./layout.js";
  *   read back (or matched field-for-field against a known plan).
  * - "ui-label": the control was seen in the UI but not confirmed by a
  *   stored-value test.
+ * - "export-shape": the field and its value type appear in a ProjectionLab 5
+ *   export; its meaning is not yet confirmed by a stored-value test.
  * Only fields confirmed against ProjectionLab 4.6.0 or 5.0.0 are listed;
  * fields known from names alone are left out entirely.
  */
 export const DATA_MODEL_PROJECTIONLAB_VERSION = "4.6.0";
 export const DATA_MODEL_V5_PROJECTIONLAB_VERSION = "5.0.0";
 
-export type DataModelEvidence = "observed" | "ui-label";
+export type DataModelEvidence = "observed" | "ui-label" | "export-shape";
 
 export interface DataModelField {
   description: string;
@@ -1415,9 +1417,23 @@ export const DATA_MODEL_GROUPS: readonly DataModelGroup[] = [
   },
 ];
 
-const VARIABLES_GROUP = DATA_MODEL_GROUPS.find((g) => g.scope === "variables")!;
-const MONTECARLO_GROUP = DATA_MODEL_GROUPS.find((g) => g.scope === "montecarlo")!;
-const WITHDRAWAL_STRATEGY_GROUP = DATA_MODEL_GROUPS.find((g) => g.scope === "withdrawalStrategy")!;
+function asExportShapeGroup(group: DataModelGroup): DataModelGroup {
+  const fields: Record<string, DataModelField> = {};
+  for (const [pattern, field] of Object.entries(group.fields)) {
+    fields[pattern] = { ...field, evidence: "export-shape" };
+  }
+  return { ...group, fields };
+}
+
+const VARIABLES_V5_GROUP = asExportShapeGroup(
+  DATA_MODEL_GROUPS.find((g) => g.scope === "variables")!,
+);
+const MONTECARLO_V5_GROUP = asExportShapeGroup(
+  DATA_MODEL_GROUPS.find((g) => g.scope === "montecarlo")!,
+);
+const WITHDRAWAL_STRATEGY_V5_GROUP = asExportShapeGroup(
+  DATA_MODEL_GROUPS.find((g) => g.scope === "withdrawalStrategy")!,
+);
 
 export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
   {
@@ -1427,16 +1443,16 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       schema: {
         description: "Root envelope schema version (1 in ProjectionLab 5 exports).",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       exportedAt: {
         description: "Timestamp in milliseconds when the export was generated.",
         units: "milliseconds",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       documents: {
         description: "Container holding currentFinances, plans, settings, and accountHistory documents.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
@@ -1447,94 +1463,94 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       schema: {
         description: "Current Finances document schema version (5 in ProjectionLab 5).",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       lastUpdated: {
         description: "Timestamp in milliseconds of the last modification.",
         units: "milliseconds",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "location.country": {
         description: "Tax residence country code of the household.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "location.state": {
         description: "State or province code of the household.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.partnerStatus": {
         description: "Household partnership status.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.me.id": {
         description: "Identifier of the primary household person.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.me.name": {
         description: "Display label of the primary household person.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.me.birthYear": {
         description: "Birth year of the primary household person.",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.me.birthMonth": {
         description: "Birth month index of the primary household person.",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.me.lifeExpectancy": {
         description: "Target life expectancy age for modeling the primary household person.",
         units: "age",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.me.color": {
         description: "Display color code for the primary household person.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.me.icon": {
         description: "Icon identifier for the primary household person.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.me.character": {
         description: "Character avatar string for the primary household person.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.spouse.id": {
         description: "Identifier of the spouse.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.spouse.name": {
         description: "Display label of the spouse.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.spouse.birthYear": {
         description: "Birth year of the spouse.",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.spouse.birthMonth": {
         description: "Birth month index of the spouse.",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.spouse.lifeExpectancy": {
         description: "Target life expectancy age for modeling the spouse.",
         units: "age",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.spouse.color": {
         description: "Display color code for the spouse.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.spouse.icon": {
         description: "Icon identifier for the spouse.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "household.people.spouse.character": {
         description: "Character avatar string for the spouse.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
@@ -1544,86 +1560,86 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
     fields: {
       id: {
         description: "Unique account identifier.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       name: {
         description: "Display label of the account.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       kind: {
         description: "Account category discriminator.",
         allowedValues: ["account", "debt", "real-asset"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       type: {
         description: "Account classification type.",
         allowedValues: ["taxable", "401k", "savings", "land", "secured-loan"],
-        evidence: "observed",
+        evidence: "export-shape",
         note: "ProjectionLab 5 supports Solo 401k, Roth Solo 401k, and SEP IRA account types, but their export strings are not yet recorded.",
       },
       subtype: {
         description: "Sub-classification of a real asset (such as lot).",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       owner: {
         description: "Which household member owns the account.",
         allowedValues: ["me", "spouse", "joint"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       order: {
         description: "Display sort order index.",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       icon: {
         description: "Icon identifier displayed in the interface.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       archivedOn: {
         description: "ISO date string (YYYY-MM-DD) indicating when the account was archived.",
-        evidence: "observed",
+        evidence: "export-shape",
         note: "Present only on archived accounts.",
       },
       balance: {
         description: "Current balance in dollars for accounts and outstanding principal for debts.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
         note: "Present on account and debt kinds.",
       },
       costBasis: {
         description: "Unadjusted tax cost basis in dollars for capital gains tracking on taxable accounts.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
         note: "Present on account kind.",
       },
       value: {
         description: "Estimated fair market value in dollars for real assets.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
         note: "Present on real-asset kind.",
       },
       purchasePrice: {
         description: "Historical acquisition cost in dollars for real assets.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
         note: "Present on real-asset kind.",
       },
       securedByAssetId: {
         description: "Identifier of the real asset securing this debt.",
-        evidence: "observed",
+        evidence: "export-shape",
         note: "Present on debt kind when secured by an asset.",
       },
       accountId: {
         description: "Identifier of the associated Current Finances account on plan events.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       liquidity: {
         description: "Whether the account balance is treated as liquid capital.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       withdraw: {
         description: "Drawdown eligibility rule.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
@@ -1633,51 +1649,51 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
     fields: {
       id: {
         description: "Unique event identifier.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       name: {
         description: "Display label of the asset.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       kind: {
         description: "Event category discriminator.",
         allowedValues: ["real-asset"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       assetId: {
         description: "Identifier of the corresponding Current Finances real asset.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       type: {
         description: "Asset classification type.",
         allowedValues: ["land"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       subtype: {
         description: "Sub-classification of the asset (such as lot).",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       value: {
         description: "Market value in dollars.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
       },
       valueType: {
         description: "Currency basis of the asset value.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       purchasePrice: {
         description: "Historical acquisition cost in dollars.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
       },
       purchasePriceType: {
         description: "Currency basis of the purchase price.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       loans: {
         description: "Array of linked financing structures.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
@@ -1687,52 +1703,52 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
     fields: {
       id: {
         description: "Unique event identifier.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       name: {
         description: "Display label of the income event.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       kind: {
         description: "Event category discriminator.",
         allowedValues: ["income"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       type: {
         description: "Income classification type.",
         allowedValues: ["other"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       amount: {
         description: "Scheduled income amount in dollars.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "start.type": {
         description: "Timing reference mode for when the income event begins.",
         allowedValues: ["date", "milestone", "keyword"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "start.value": {
         description: "Target date, milestone identifier, or keyword for the start timing.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "start.modifier": {
         description: "Optional offset modifier for the start timing.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "end.type": {
         description: "Timing reference mode for when the income event ends.",
         allowedValues: ["date", "milestone", "keyword"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "end.value": {
         description: "Target date, milestone identifier, or keyword for the end timing.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "end.modifier": {
         description: "Optional offset modifier for the end timing.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
@@ -1742,57 +1758,57 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
     fields: {
       id: {
         description: "Unique event identifier.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       name: {
         description: "Display label of the expense event.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       kind: {
         description: "Event category discriminator.",
         allowedValues: ["expense"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       type: {
         description: "Expense classification type.",
         allowedValues: ["living-expenses"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       spendingType: {
         description: "Spending classification category.",
         allowedValues: ["essential", "discretionary"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       amount: {
         description: "Scheduled expense amount in dollars.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "start.type": {
         description: "Timing reference mode for when the expense event begins.",
         allowedValues: ["date", "milestone", "keyword"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "start.value": {
         description: "Target date, milestone identifier, or keyword for the start timing.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "start.modifier": {
         description: "Optional offset modifier for the start timing.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "end.type": {
         description: "Timing reference mode for when the expense event ends.",
         allowedValues: ["date", "milestone", "keyword"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "end.value": {
         description: "Target date, milestone identifier, or keyword for the end timing.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "end.modifier": {
         description: "Optional offset modifier for the end timing.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
@@ -1802,25 +1818,25 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
     fields: {
       id: {
         description: "Unique event identifier.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       name: {
         description: "Display label of the priority flow.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       kind: {
         description: "Event category discriminator.",
         allowedValues: ["priority"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       type: {
         description: "Priority routing target type.",
         allowedValues: ["taxable"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       accountId: {
         description: "Destination account identifier in Current Finances.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
@@ -1830,30 +1846,30 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
     fields: {
       id: {
         description: "Unique identifier of the milestone.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       name: {
         description: "Display label of the milestone.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "criteria.*.type": {
         description: "Kind of milestone criterion.",
         allowedValues: ["date", "year", "milestone", "netWorth", "totalDebt", "age"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "criteria.*.value": {
         description: "Target value of the criterion.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "criteria.*.modifier": {
         description: "Offset modifier for the criterion.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
-  VARIABLES_GROUP,
-  MONTECARLO_GROUP,
-  WITHDRAWAL_STRATEGY_GROUP,
+  VARIABLES_V5_GROUP,
+  MONTECARLO_V5_GROUP,
+  WITHDRAWAL_STRATEGY_V5_GROUP,
   {
     scope: "settings",
     title: "Application and plan settings",
@@ -1861,36 +1877,36 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       schema: {
         description: "Settings document schema version (5 in ProjectionLab 5).",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       seenVersion: {
         description: "Last recorded application version.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "plan.activeId": {
         description: "Active plan identifier in the application interface (null in exports; no plan is treated as active in exports).",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "plan.baselineId": {
         description: "Baseline comparison plan identifier (null in exports).",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "plan.alignment.type": {
         description: "Timeline calendar alignment mode.",
         allowedValues: ["calendar"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "plan.tabs.pinned": {
         description: "Whether plan tabs are pinned in the interface.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "plugins.enabled": {
         description: "Whether the Plugin API is enabled.",
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "plugins.apiKey": {
         description: "Secret authentication key for the Plugin API (redacted on reads).",
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },
@@ -1901,28 +1917,28 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       "*.*.schema": {
         description: "History record schema version (5 in ProjectionLab 5).",
         units: "count",
-        evidence: "observed",
+        evidence: "export-shape",
         note: "Keyed by account ID then calendar year.",
       },
       "*.*.kind": {
         description: "Account category discriminator.",
         allowedValues: ["account", "real-asset"],
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "*.*.balance.*": {
         description: "Historical end-of-year balance in dollars for an account, keyed by account ID.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "*.*.costBasis.*": {
         description: "Historical end-of-year cost basis in dollars for an account, keyed by account ID.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
       },
       "*.*.value.*": {
         description: "Historical end-of-year estimated value in dollars for a real asset, keyed by asset ID.",
         units: DOLLARS,
-        evidence: "observed",
+        evidence: "export-shape",
       },
     },
   },

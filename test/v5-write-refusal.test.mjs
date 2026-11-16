@@ -1,8 +1,9 @@
-// On a ProjectionLab 5 account (Plugin API contract 2), every write tool
-// whose methods are not in CONTRACT_2_WRITES refuses with
-// WRITE_NOT_SUPPORTED, dry run included, before it previews, snapshots, or
-// writes anything. Plan and Current Finances writes are allowed;
-// test/v5-plan-writes.test.mjs and test/v5-account-writes.test.mjs cover them.
+// On a ProjectionLab 5 account (Plugin API contract 2), ProjectionLab has
+// no restoreProgress, so restore_progress and a rollback of a snapshot
+// holding progress refuse with WRITE_NOT_SUPPORTED, dry run included, before
+// they preview, snapshot, or write anything. The other writes are allowed;
+// test/v5-plan-writes.test.mjs, test/v5-account-writes.test.mjs and
+// test/v5-settings-writes.test.mjs cover them.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -59,12 +60,13 @@ function snapshotStore() {
     id: "snap-v5",
     timestamp: new Date(0).toISOString(),
     operation: "test",
-    sections: ["currentFinances", "plans", "settings"],
+    sections: ["currentFinances", "plans", "settings", "progress"],
     layout: "v5",
     data: {
       currentFinances: v5Export().documents.currentFinances,
       plans: v5Export().documents.plans,
       settings: {},
+      progress: {},
     },
   };
   return {
@@ -102,12 +104,14 @@ function register(bridge, snapshots) {
 
 const calls = {
   projectionlab_restore_progress: { progress: {} },
-  projectionlab_restore_settings: { settings: {} },
   projectionlab_rollback: { snapshotId: "snap-v5" },
 };
 
-test("CONTRACT_2_WRITES allows plan and Current Finances writes only, so every tool below must refuse", () => {
-  assert.deepEqual([...CONTRACT_2_WRITES], ["restorePlans", "updateAccount", "restoreCurrentFinances"]);
+test("CONTRACT_2_WRITES allows every write method but restoreProgress", () => {
+  assert.deepEqual(
+    [...CONTRACT_2_WRITES],
+    ["restorePlans", "updateAccount", "restoreCurrentFinances", "restoreSettings"],
+  );
 });
 
 for (const confirm of [false, true]) {
@@ -119,6 +123,8 @@ for (const confirm of [false, true]) {
       assert.ok(handler, name);
       const result = JSON.parse((await handler({ ...input, confirm })).content[0].text);
       assert.equal(result.error, "WRITE_NOT_SUPPORTED", JSON.stringify(result));
+      assert.equal(result.message, "ProjectionLab 5 removed restoreProgress");
+      assert.match(result.suggestion, /Restore in the ProjectionLab app/);
       assert.match(result.suggestion, /Nothing was written/);
       assert.deepEqual(snapshots.created, []);
       // Rollback reads the export to check the snapshot's layout first;

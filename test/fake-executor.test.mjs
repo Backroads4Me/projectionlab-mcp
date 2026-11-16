@@ -331,26 +331,21 @@ test("checkConnection reports contract 2 on a ProjectionLab 5 page", async () =>
   await exec.done;
 });
 
-test("writes outside CONTRACT_2_WRITES are refused on contract 2 before anything is sent", async () => {
+test("restoreProgress is refused on contract 2 before anything is sent", async () => {
   const seen = [];
   const exec = connectExecutor({ handler: v5Handler(seen) });
   await exec.ready;
-  const writes = [
-    () => bridge.restoreProgress({}, "v5"),
-    () => bridge.restoreSettings({}, "v5"),
-  ];
-  for (const write of writes) {
-    await assert.rejects(write(), (err) => {
-      assert.equal(err.code, "WRITE_NOT_SUPPORTED");
-      return true;
-    });
-  }
+  await assert.rejects(bridge.restoreProgress({}, "v5"), (err) => {
+    assert.equal(err.code, "WRITE_NOT_SUPPORTED");
+    assert.equal(err.message, "ProjectionLab 5 removed restoreProgress");
+    return true;
+  });
   assert.deepEqual(seen.filter((m) => m !== "apiVersion"), []);
   exec.ws.close();
   await exec.done;
 });
 
-test("plan and Current Finances writes reach a contract 2 page", async () => {
+test("plan, Current Finances and settings writes reach a contract 2 page", async () => {
   const seen = [];
   const exec = connectExecutor({ handler: v5Handler(seen) });
   await exec.ready;
@@ -358,10 +353,11 @@ test("plan and Current Finances writes reach a contract 2 page", async () => {
   await bridge.restorePlansIfUnchanged([], [], "v5");
   await bridge.updateAccount("a", { balance: 1 }, undefined, "v5");
   await bridge.restoreCurrentFinances({}, "v5");
-  const writes = ["restorePlans", "updateAccount", "restoreCurrentFinances"];
+  await bridge.restoreSettings({}, "v5");
+  const writes = ["restorePlans", "updateAccount", "restoreCurrentFinances", "restoreSettings"];
   assert.deepEqual(
     seen.filter((m) => writes.includes(m)),
-    ["restorePlans", "restorePlans", "updateAccount", "restoreCurrentFinances"],
+    ["restorePlans", "restorePlans", "updateAccount", "restoreCurrentFinances", "restoreSettings"],
   );
   // A write prepared from ProjectionLab 4 data is still refused.
   await assert.rejects(bridge.restorePlans([], "v4"), (err) => err.code === "CONTRACT_CHANGED");

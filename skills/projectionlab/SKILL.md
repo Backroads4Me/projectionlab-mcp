@@ -263,8 +263,7 @@ both layouts; these differences show through:
   follow the layout the last connection check found. Read
   `projectionlab://data-model?layout=v4` or `?layout=v5` (the same for
   `knowledge`) to pick one explicitly.
-- **Plan and Current Finances writes work; settings and progress do not
-  yet.** The plan tools (`projectionlab_update_plan_event`,
+- **Every write but Progress works.** The plan tools (`projectionlab_update_plan_event`,
   `projectionlab_update_plan_section`, `projectionlab_update_plan_settings`,
   `projectionlab_clone_plan`, `projectionlab_delete_plan`,
   `projectionlab_restore_plans`) and `projectionlab_update_account` behave as
@@ -277,14 +276,17 @@ both layouts; these differences show through:
   snapshot, such as an account added since, stays as it is. The preview
   lists those as `keptAccounts`; tell the user, and have them archive or
   delete such an account in the ProjectionLab app if it should go.
-- **Settings and progress writes are refused.**
-  `projectionlab_restore_settings`, `projectionlab_restore_progress`, and a
-  rollback of a snapshot holding settings or progress, dry runs included,
-  are refused with `WRITE_NOT_SUPPORTED` before they preview or snapshot
-  anything. For those, tell the user plainly that this
-  server cannot make that change on ProjectionLab 5 yet, and help them make
-  it in the ProjectionLab app instead (which item, which field, the new
-  value).
+- **Settings restores replace the whole document.**
+  `projectionlab_restore_settings` behaves as on ProjectionLab 4: the
+  submission replaces every setting, and ProjectionLab refuses a settings
+  document it cannot read. Settings are account-wide, not per plan.
+- **Progress cannot be written.** ProjectionLab 5 records Progress history
+  by itself whenever a current value changes, and removed the way to
+  replace it. `projectionlab_restore_progress` and a rollback of a snapshot
+  holding progress, dry runs included, are refused with
+  `WRITE_NOT_SUPPORTED` before they preview or snapshot anything. Tell the
+  user plainly; to bring back Progress from a backup file, they use Restore
+  in the ProjectionLab app.
 - **Old snapshots.** A snapshot taken on ProjectionLab 4 cannot be compared
   with or restored onto ProjectionLab 5 data: `projectionlab_diff` and
   `projectionlab_rollback` refuse it with `LAYOUT_MISMATCH`. A ProjectionLab 4
@@ -447,10 +449,10 @@ Change progress:
   dry run's `planVersion` as `expectedPlanVersion`.
 - **`INVALID_INPUT`** usually means an unknown path or a changed JSON type.
   List the paths again and correct the call.
-- **`WRITE_NOT_SUPPORTED`** means the account is on ProjectionLab 5, where
-  this server does not make that kind of change yet (see "ProjectionLab 5").
-  Nothing was written;
-  help the user make the change in the app.
+- **`WRITE_NOT_SUPPORTED`** means the account is on ProjectionLab 5, which
+  has no way to make that change, such as replacing Progress (see
+  "ProjectionLab 5"). Nothing was written; help the user make the change in
+  the app.
 - **`CONTRACT_CHANGED`** means the ProjectionLab page changed between the
   server's version check and the write (for example, a tab on the other
   ProjectionLab version took over). Nothing was written. Run

@@ -19,10 +19,13 @@ export type ApiContract = 1 | 2;
 export type ExportLayout = "v4" | "v5";
 
 /**
- * Write methods allowed on contract 2. Each is added only once its v5
- * semantics are verified against a live ProjectionLab 5 account; until then
- * the write tools and the bridge refuse the write. Contract 1 allows every
- * write method.
+ * Write methods allowed on contract 2, each verified against ProjectionLab
+ * 5's Plugin API. The write tools and the bridge refuse any other write
+ * method on contract 2. Contract 1 allows every write method.
+ *
+ * restoreProgress is absent: ProjectionLab 5's restoreProgress always
+ * throws, because the app records Progress history itself whenever a
+ * current value changes.
  */
 export const CONTRACT_2_WRITES: ReadonlySet<WireMethod> = new Set<WireMethod>([
   // ProjectionLab 5's restorePlans(plans, { key }) replaces the whole plans
@@ -38,6 +41,10 @@ export const CONTRACT_2_WRITES: ReadonlySet<WireMethod> = new Set<WireMethod>([
   // keeps any stored account the submission leaves out: it never deletes an
   // account. Rolling back an account change through it is exact.
   "restoreCurrentFinances",
+  // restoreSettings(settings, { key }) replaces the whole settings document,
+  // as on ProjectionLab 4, after ProjectionLab's own validation of the
+  // document, and marks it unsaved so the app saves it.
+  "restoreSettings",
 ]);
 
 /** Whether `method` may write to a page offering `contract`. */
@@ -45,12 +52,19 @@ export function writeSupported(contract: ApiContract, method: WireMethod): boole
   return contract !== 2 || CONTRACT_2_WRITES.has(method);
 }
 
-/** The refusal for a write the page's contract does not support yet. */
+/** The refusal for a write method the page's contract does not offer. */
 export function writeNotSupportedError(method: WireMethod): ProjectionLabError {
+  if (method === "restoreProgress") {
+    return new ProjectionLabError(
+      "WRITE_NOT_SUPPORTED",
+      "ProjectionLab 5 removed restoreProgress",
+      "ProjectionLab 5 records Progress history by itself whenever a current value changes, so Progress cannot be replaced. To bring back Progress from a backup file, use Restore in the ProjectionLab app. Nothing was written.",
+    );
+  }
   return new ProjectionLabError(
     "WRITE_NOT_SUPPORTED",
-    `${method} is not supported on ProjectionLab 5 yet`,
-    "This server reads ProjectionLab 5 data but does not write it yet. Make the change in the ProjectionLab app. Nothing was written.",
+    `${method} is not available on ProjectionLab 5`,
+    "Make the change in the ProjectionLab app. Nothing was written.",
   );
 }
 

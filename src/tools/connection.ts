@@ -25,8 +25,8 @@ export function registerConnectionTool(
         "fails, read the projectionlab://guide resource and walk the user through the fix. " +
         "The result also carries versions (server, executor, latest npm release) and notices: " +
         "plain sentences to relay to the user when a release is out of date. apiContract is the " +
-        "Plugin API contract the page offers: 1 on ProjectionLab 4, 2 on ProjectionLab 5, where " +
-        "the settings and progress writes are not supported yet.",
+        "Plugin API contract the page offers: 1 on ProjectionLab 4, 2 on ProjectionLab 5, which " +
+        "has no progress write.",
       outputSchema: {
         browser: z.boolean(),
         pageLoaded: z.boolean(),

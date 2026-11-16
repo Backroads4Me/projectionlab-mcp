@@ -48,7 +48,7 @@ function withoutStamp(document: unknown): unknown {
 /**
  * True when a fresh export shows the restored `expected` data for `section`.
  * The app may add fields of its own and re-stamps `lastUpdated` on each saved
- * plan and on the Current Finances document, so this checks that every
+ * plan and on the Current Finances and Settings documents, so this checks that every
  * restored value other than those stamps is present rather than requiring
  * byte-for-byte equality.
  */
@@ -60,7 +60,7 @@ export function restoredSectionMatches(
   if (section === "plans") {
     return containsSubset(withoutPlanStamps(expected), actual);
   }
-  if (section === "currentFinances") {
+  if (section === "currentFinances" || section === "settings") {
     return containsSubset(withoutStamp(expected), actual);
   }
   return containsSubset(expected, actual);
@@ -394,7 +394,8 @@ export function registerRestoreTools(
         "This is a FULL REPLACEMENT, not a patch. " +
         "When confirm is false (default), returns a dry-run preview. " +
         "When confirm is true, auto-snapshots then applies the replacement. " +
-        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
+        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed. " +
+        "Not available on ProjectionLab 5, which records Progress history by itself.",
       inputSchema: {
         progress: z
           .unknown()

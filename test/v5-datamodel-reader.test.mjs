@@ -111,6 +111,24 @@ test("getDataModelGroups returns appropriate groups per layout", () => {
     "settings.plan.alignment.type",
     "settings.plan.alignment.date",
     "expenses.fundWithAccounts",
+    // Confirmed against the ProjectionLab 5.0.0 web build: the option arrays the
+    // app ships, the labels it renders, and the code that binds each array to its
+    // field.
+    "assets.interestType",
+    "assets.compounding",
+    "assets.yearlyChange.type",
+    "income.yearlyChange.type",
+    "income.yearlyChange.amount",
+    "income.yearlyChange.limit",
+    "income.yearlyChange.limitType",
+    "income.yearlyChange.custom",
+    "expenses.spendingType",
+    "expenses.yearlyChange.type",
+    "expenses.yearlyChange.amount",
+    "expenses.yearlyChange.limit",
+    "expenses.yearlyChange.limitType",
+    "expenses.yearlyChange.custom",
+    "priorities.desiredContribution",
   ]);
   for (const group of v5Groups) {
     for (const [pattern, field] of Object.entries(group.fields)) {
@@ -148,8 +166,13 @@ test("matchDataModelField matches v5 fields and preserves v4 defaults", () => {
 
   const expenseTypeField = matchDataModelField("expenses", "spendingType", "v5");
   assert.ok(expenseTypeField);
-  assert.equal(expenseTypeField.evidence, "export-shape");
-  assert.deepEqual(expenseTypeField.allowedValues, ["essential", "discretionary"]);
+  assert.equal(expenseTypeField.evidence, "observed");
+  assert.deepEqual(expenseTypeField.allowedValues, [
+    "essential",
+    "discretionary",
+    "hybrid",
+    "none",
+  ]);
 
   const historyBalanceField = matchDataModelField(
     "accountHistory",

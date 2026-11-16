@@ -1815,13 +1815,16 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       interestType: {
         description: "How interest accrues on the asset's loan.",
         allowedValues: ["simple", "compound"],
-        evidence: "export-shape",
+        evidence: "observed",
+        note: 'Defaults to "simple"; "compound" is what reveals the Compounding control.',
       },
       compounding: {
         description: "Frequency at which loan interest compounds.",
-        allowedValues: ["monthly", "yearly"],
+        allowedValues: ["daily", "monthly"],
         enabledBy: 'interestType "compound"',
-        evidence: "export-shape",
+        evidence: "observed",
+        note:
+          'The Financing panel offers Daily and Monthly and defaults to monthly. It is a companion of Interest Type and stays hidden while Interest Type is "simple".',
       },
       monthlyPayment: {
         description: "Scheduled monthly financing payment.",
@@ -1834,9 +1837,20 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "yearlyChange.type": {
-        description: "How the asset's value moves each year.",
-        allowedValues: ["inflation+", "inflation-", "depreciate", "appreciate"],
-        evidence: "export-shape",
+        description:
+          "How the asset's value moves each year. \"custom\" stores the curve in yearlyChange.custom.",
+        allowedValues: [
+          "none",
+          "appreciate",
+          "depreciate",
+          "custom",
+          "match-inflation",
+          "inflation+",
+          "inflation-",
+        ],
+        evidence: "observed",
+        note:
+          "The asset control labels the pair Appreciate and Depreciate and the curve option Advanced, where income and expense spell the same option Increase and Decrease. The app validates nothing on write, so a token outside this list stores and renders as nothing.",
       },
       taxRate: {
         description: "Annual property tax figure.",
@@ -1955,25 +1969,53 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "yearlyChange.type": {
-        description: "How the amount changes each year.",
+        description:
+          "How the amount changes each year. \"increase\" and \"decrease\" take yearlyChange.amount as a percent, \"custom\" stores a curve in yearlyChange.custom, and \"match-inflation\", \"inflation+\" and \"inflation-\" follow the plan's inflation rate.",
         allowedValues: [
           "none",
+          "increase",
+          "decrease",
+          "custom",
           "match-inflation",
-          "fixed-rate",
-          "fixed-amount",
-          "curve",
+          "inflation+",
+          "inflation-",
         ],
-        evidence: "export-shape",
+        enabledBy: 'frequency other than "once", or amountType "grow$"',
+        evidence: "observed",
+        note:
+          'The Change control offers Increase, Decrease, Advanced ("custom"), Match inflation, and Match inflation plus or minus a percent. A once-frequency event such as an inheritance or a windfall shows no Change control at all, and an amountType of "grow$" brings it back. The app validates nothing on write.',
       },
       "yearlyChange.amount": {
-        description: "Magnitude of the yearly change.",
-        note: 'Percentage points when yearlyChange.type is "fixed-rate"; a dollar amount when it is "fixed-amount".',
-        evidence: "export-shape",
+        description:
+          "Percent per year applied by yearlyChange.type \"increase\" or \"decrease\".",
+        units: PCT,
+        enabledBy: 'yearlyChange.type "increase" or "decrease"',
+        evidence: "observed",
+        note: "The percent per year field in the Change Over Time dialog, beside the Maximum field.",
       },
       "yearlyChange.limit": {
-        description: "Cap applied when yearlyChange.limitEnabled is true.",
-        units: PCT,
-        evidence: "export-shape",
+        description: "Dollar ceiling on the value the yearly change may reach.",
+        units: DOLLARS,
+        enabledBy: 'yearlyChange.limitEnabled with yearlyChange.type "increase" or "decrease"',
+        evidence: "observed",
+        note:
+          'The Maximum field in the Change Over Time dialog is a dollar field. Its unit is held by yearlyChange.limitType, so a percent token there changes nothing on screen.',
+      },
+      "yearlyChange.limitType": {
+        description: "Unit of yearlyChange.limit.",
+        allowedValues: ["$", "today$"],
+        enabledBy: "yearlyChange.limitEnabled",
+        evidence: "observed",
+        note:
+          'Present on every yearlyChange object examined and always written "today$". The Maximum control offers no percent form.',
+      },
+      "yearlyChange.custom": {
+        description:
+          "The curve behind yearlyChange.type \"custom\": { type, data } where type is \"%\", \"$\" or \"today$\" and data is an array of { x, y } points.",
+        enabledBy: 'yearlyChange.type "custom"',
+        evidence: "observed",
+        note:
+          "Advanced opens a separate window with the curve editor. x is the year offset from the event start and y is the rate or amount in the unit named by type.",
       },
     },
   },
@@ -2000,9 +2042,11 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       spendingType: {
-        description: "Spending classification category.",
-        allowedValues: ["essential", "discretionary"],
-        evidence: "export-shape",
+        description: "How the expense counts towards total spending.",
+        allowedValues: ["essential", "discretionary", "hybrid", "none"],
+        evidence: "observed",
+        note:
+          'Offered as Essential, Discretionary, Hybrid ("Count a percentage of this expense as discretionary", the only state that uses discretionaryPercent) and Not Spending.',
       },
       amount: {
         description: "Scheduled expense amount in dollars.",
@@ -2056,25 +2100,53 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "yearlyChange.type": {
-        description: "How the amount changes each year.",
+        description:
+          "How the amount changes each year. \"increase\" and \"decrease\" take yearlyChange.amount as a percent, \"custom\" stores a curve in yearlyChange.custom, and \"match-inflation\", \"inflation+\" and \"inflation-\" follow the plan's inflation rate.",
         allowedValues: [
           "none",
+          "increase",
+          "decrease",
+          "custom",
           "match-inflation",
-          "fixed-rate",
-          "fixed-amount",
-          "curve",
+          "inflation+",
+          "inflation-",
         ],
-        evidence: "export-shape",
+        enabledBy: 'frequency other than "once", or amountType "grow$"',
+        evidence: "observed",
+        note:
+          "On an expense the pair is labelled Increase Spending and Decrease Spending, each described as changing spending by a certain percentage. The app validates nothing on write, so a token outside this list stores and renders as nothing.",
       },
       "yearlyChange.amount": {
-        description: "Magnitude of the yearly change.",
-        note: 'Percentage points when yearlyChange.type is "fixed-rate"; a dollar amount when it is "fixed-amount".',
-        evidence: "export-shape",
+        description:
+          "Percent per year applied by yearlyChange.type \"increase\" or \"decrease\".",
+        units: PCT,
+        enabledBy: 'yearlyChange.type "increase" or "decrease"',
+        evidence: "observed",
+        note: "The percent per year field in the Change Over Time dialog, beside the Maximum field.",
       },
       "yearlyChange.limit": {
-        description: "Cap applied when yearlyChange.limitEnabled is true.",
-        units: PCT,
-        evidence: "export-shape",
+        description: "Dollar ceiling on the value the yearly change may reach.",
+        units: DOLLARS,
+        enabledBy: 'yearlyChange.limitEnabled with yearlyChange.type "increase" or "decrease"',
+        evidence: "observed",
+        note:
+          'The Maximum field in the Change Over Time dialog is a dollar field. Its unit is held by yearlyChange.limitType, so a percent token there changes nothing on screen.',
+      },
+      "yearlyChange.limitType": {
+        description: "Unit of yearlyChange.limit.",
+        allowedValues: ["$", "today$"],
+        enabledBy: "yearlyChange.limitEnabled",
+        evidence: "observed",
+        note:
+          'Present on every yearlyChange object examined and always written "today$". The Maximum control offers no percent form.',
+      },
+      "yearlyChange.custom": {
+        description:
+          "The curve behind yearlyChange.type \"custom\": { type, data } where type is \"%\", \"$\" or \"today$\" and data is an array of { x, y } points.",
+        enabledBy: 'yearlyChange.type "custom"',
+        evidence: "observed",
+        note:
+          "Advanced opens a separate window with the curve editor. x is the year offset from the event start and y is the rate or amount in the unit named by type.",
       },
       fundWithAccounts: {
         description:
@@ -2115,12 +2187,13 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       // ProjectionLab 5 export shows.
       desiredContribution: {
         description: "How much the flow receives from surplus cash flow.",
-        allowedValues: ["max", "fixed"],
-        evidence: "export-shape",
-        note: '"max" routes all remaining surplus; "fixed" takes amount.',
+        allowedValues: ["max", "%-remaining", "amount", "%-balance"],
+        evidence: "observed",
+        note:
+          'Offered as Maximize Contribution ("max"), % of Remaining Income ("%-remaining") and Specific Amount ("amount"). "%-balance", % of Remaining Balance, is a real token the flow editor does not request: only the extra-contribution control asks for it, so a flow normally holds one of the first three.',
       },
       amount: {
-        description: "Fixed contribution taken when desiredContribution is \"fixed\".",
+        description: 'Dollar amount the flow takes when desiredContribution is "amount".',
         units: DOLLARS,
         evidence: "export-shape",
       },
@@ -2269,8 +2342,8 @@ const FLOW = "Plan > Flows > flow";
 const HOUSEHOLD = "Profile menu > Household";
 const changeOverTime = (event: string) => ({
   "yearlyChange.type": ["Change", `${event} > Change Over Time`],
-  "yearlyChange.amount": ["Per Year", `${event} > Change Over Time`],
-  "yearlyChange.limit": ["Maximum", `${event} > Change Over Time`],
+  "yearlyChange.amount": ["Percent per year", `${event} > Change Over Time (Increase or Decrease)`],
+  "yearlyChange.limit": ["Maximum", `${event} > Change Over Time (Increase or Decrease)`],
 }) as const;
 
 export const UI_LABELS_V5: Readonly<
@@ -2411,7 +2484,7 @@ export const UI_LABELS_V5: Readonly<
   priorities: {
     accountId: ["Account", FLOW],
     amount: ["Funding", FLOW],
-    desiredContribution: ["Goal", `${FLOW} ("As much as possible" is the maximum)`],
+    desiredContribution: ["Goal", `${FLOW} (offered as Maximize Contribution, % of Remaining Income or Specific Amount)`],
   },
   currentFinances: {
     "household.people.me.name": ["First Name", HOUSEHOLD],

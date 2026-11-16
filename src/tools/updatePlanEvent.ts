@@ -24,7 +24,7 @@ import {
   EVENT_SECTIONS,
   type PlanObj,
 } from "../plans.js";
-import { detectLayout, exportSections } from "../layout.js";
+import { detectLayout, exportSections, type ExportLayout } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 const EVENT_FIELD_CONTEXT = {
@@ -61,12 +61,13 @@ function applyEventPatch(
   event: PlanObj,
   patch: Record<string, unknown>,
   section: string,
+  layout: ExportLayout,
 ): { updated: PlanObj; changes: Record<string, PathValueChange> } {
   for (const key of Object.keys(patch)) {
     assertMutableEventPath(key);
   }
   for (const { path, value } of listAddressableValues(patch)) {
-    const refusal = enumRefusalError(section, path, value);
+    const refusal = enumRefusalError(section, path, value, layout);
     if (refusal) throw refusal;
   }
   const existing: Record<string, unknown> = {};
@@ -99,6 +100,7 @@ function applyEventPatch(
       existing,
       EVENT_FIELD_CONTEXT,
       section,
+      layout,
     );
     updated = result.updated;
     changes = result.changes;
@@ -256,11 +258,12 @@ export function registerUpdatePlanEventTool(
             pathChanges,
             EVENT_FIELD_CONTEXT,
             section,
+            detectLayout(data),
           );
           patched = result.updated;
           changes = result.changes;
         } else {
-          const result = applyEventPatch(event, patch ?? {}, section);
+          const result = applyEventPatch(event, patch ?? {}, section, detectLayout(data));
           patched = result.updated;
           changes = result.changes;
         }

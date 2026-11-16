@@ -1,4 +1,4 @@
-import { exportSections } from "./layout.js";
+import { exportSections, type ExportLayout } from "./layout.js";
 import {
   applyExistingPathChanges,
   listAddressableValues,
@@ -49,6 +49,7 @@ export function applyPlanSettingChanges(
   sectionData: unknown,
   incoming: Record<string, unknown>,
   section?: PlanSettingSection,
+  layout: ExportLayout = "v4",
 ): {
   updated: Record<string, unknown>;
   changes: Record<string, PlanSettingChange>;
@@ -58,6 +59,7 @@ export function applyPlanSettingChanges(
     incoming,
     PLAN_SETTING_CONTEXT,
     section,
+    layout,
   );
 }
 

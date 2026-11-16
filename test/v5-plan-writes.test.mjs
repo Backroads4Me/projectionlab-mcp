@@ -227,3 +227,20 @@ test("rollback restores the plans of a v5 plans snapshot", async () => {
   assert.equal(bridge.writes[0].layout, "v5");
   assert.deepEqual(bridge.writes[0].plans, v5Export().documents.plans);
 });
+
+test("update_plan_event checks values against the v5 data model, not the v4 enums", async () => {
+  // "flexible" is outside the v4 observed choices for an expense's
+  // spendingType; ProjectionLab 5's choices are not recorded, so the write
+  // goes through.
+  const bridge = v5Bridge();
+  const call = tools(bridge, snapshotStore());
+  const done = await call("projectionlab_update_plan_event", {
+    planIdentifier: "plan_main",
+    section: "expenses",
+    eventIdentifier: "plan_main_ev_living",
+    patch: { spendingType: "flexible" },
+    confirm: true,
+  });
+  assert.equal(done.success, true, JSON.stringify(done));
+  assert.equal(planById(bridge.writes[0].plans, "plan_main").expenses.events[0].spendingType, "flexible");
+});

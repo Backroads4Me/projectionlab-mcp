@@ -87,6 +87,7 @@ export function registerUpdatePlanSettingsTool(
           plan[section],
           incoming,
           section,
+          detectLayout(data),
         );
 
         if (!confirm) {

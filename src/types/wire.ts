@@ -54,6 +54,19 @@ export type WireMethod =
   | "describeApi" // params: []
   | "waitForApi"; // params: [timeoutMs?]
 
+/**
+ * The methods that only read. Every other method is a write, which the
+ * server sends only to an executor that reports allowEdits on, and which the
+ * extension refuses in the browser while its switch is off. Mirrored by
+ * READ_METHODS in extension/src/wire.js.
+ */
+export const READ_METHODS: readonly WireMethod[] = [
+  "exportData",
+  "validateApiKey",
+  "describeApi",
+  "waitForApi",
+];
+
 /** First frame the executor sends after the socket opens. */
 export interface HelloFrame {
   type: "hello";
@@ -77,6 +90,23 @@ export interface HelloFrame {
    * when the user presses Save on the options page.
    */
   takeover?: boolean;
+  /**
+   * The extension's "Enable agent plan edits" switch at connect time.
+   * Additive: an executor that omits it (the bootstrap snippet, extensions
+   * released before the switch) has no switch, and the server sends it no
+   * writes. Only a boolean counts.
+   */
+  allowEdits?: boolean;
+}
+
+/**
+ * Sent by the extension after its helloAck and whenever the switch changes,
+ * so the server knows the current value without a reconnect. Servers that
+ * predate it ignore it.
+ */
+export interface SettingsFrame {
+  type: "settings";
+  allowEdits: boolean;
 }
 
 /** Server acknowledges a valid hello. Requests only flow after this. */
@@ -113,6 +143,8 @@ export type WireErrorCode =
   | "API_KEY_INVALID"
   /** Executor-side timeout waiting on the page. */
   | "TIMEOUT"
+  /** A write arrived while the extension's Enable agent plan edits switch is off. */
+  | "EDITS_DISABLED"
   | "UNKNOWN";
 
 export interface ResponseFrame {
@@ -145,7 +177,7 @@ export interface YieldFrame {
   token: string;
 }
 
-export type ClientFrame = HelloFrame | ResponseFrame | PongFrame | YieldFrame;
+export type ClientFrame = HelloFrame | ResponseFrame | PongFrame | YieldFrame | SettingsFrame;
 export type ServerFrame = HelloAckFrame | RequestFrame | PingFrame;
 export type WireFrame = ClientFrame | ServerFrame;
 

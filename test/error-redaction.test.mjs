@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.PL_API_KEY = "test-api-key-secret";
-process.env.PL_READ_ONLY = "true";
 process.env.LOG_LEVEL = "error";
 
 const { errorResult, ProjectionLabError } = await import("../dist/errors.js");

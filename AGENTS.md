@@ -50,6 +50,8 @@ checks on Node 20 for every pull request and push to `main`.
 - `src/instructions.ts`: server instructions sent at initialize, and the
   loader for the agent guide.
 - `src/plans.ts`: plan, section, and event lookup helpers shared by the tools.
+- `src/editAccess.ts`: the write gate every mutating tool calls first, and its
+  `READ_ONLY_MODE` errors.
 - `src/versionCompare.ts`: numeric `major.minor.patch` comparison; `null` for
   anything unparsable, which callers treat as "say nothing".
 - `src/updateCheck.ts`: the one npm-registry lookup per server process
@@ -108,8 +110,17 @@ checks on Node 20 for every pull request and push to `main`.
   sensitive field names, preventing accidental overwrite with redacted reads.
 - `update_plan_section` validates the shape of `sectionData` against the
   section's expected schema before applying changes.
-- Writes are disabled unless `PL_READ_ONLY=false`; every mutating tool checks
-  `config.readOnly` before writing.
+- Writes are disabled unless the extension's "Enable agent plan edits" switch
+  is on; no environment variable enables them. The extension refuses every
+  non-read wire method in the browser while the switch is off
+  (`editRefusal` in `extension/src/wire.js`, checked in `background.js`
+  before the tab runs anything). On the server, every mutating tool calls
+  `requireEditsEnabled` (`src/editAccess.ts`) first, so a dry run is refused
+  before any read, preview, or snapshot, and `ExtensionBridge.request` sends
+  no write to an executor whose hello or latest `settings` frame did not
+  report `allowEdits: true`. The bootstrap snippet has no switch and only
+  reads. `READ_METHODS` in `src/types/wire.ts` and `extension/src/wire.js`
+  must list the same methods; any method missing from them counts as a write.
 - Only one browser executor connects at a time; competing connections are
   answered with `BUSY` and stand by without disrupting the active session.
 - **Never** print, log, or persist `PL_API_KEY`. Anything written to disk

@@ -77,15 +77,15 @@ test("bootstrap snippet acts as a full executor", async () => {
   const data = await bridge.exportData({ fresh: true });
   assert.deepEqual(data.plans, []);
 
-  await bridge.updateAccount("acct-1", { balance: 42 }, true);
-  // JSON round-trip: the snippet parses frames inside the vm realm, so its
-  // objects have a foreign prototype that deepEqual would reject.
-  assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), [
-    "updateAccount",
-    "acct-1",
-    { balance: 42 },
-    { key: "test-api-key", force: "true" },
-  ]);
+  // The snippet has no plan-edits switch, so it only reads: the bridge
+  // refuses the write before sending it, and the page never sees it.
+  assert.equal(status.writesEnabled, false);
+  assert.equal(await bridge.editAccess(), "unsupported");
+  await assert.rejects(bridge.updateAccount("acct-1", { balance: 42 }, true), {
+    code: "READ_ONLY_MODE",
+    message: /no plan-edits switch/,
+  });
+  assert.deepEqual(calls, []);
 
   // Second install in the same tab is a no-op
   vm.runInContext(bridge.bootstrapSnippet(), sandbox);

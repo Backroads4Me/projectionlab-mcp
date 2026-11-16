@@ -19,6 +19,9 @@ function fakeServer() {
 test("summary explicitly reports Current Finances scope, not projected outcomes", async () => {
   const server = fakeServer();
   registerSummaryTool(server, {
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       return {
         today: {
@@ -59,6 +62,9 @@ test("summary explicitly reports Current Finances scope, not projected outcomes"
 test("summary net worth accounts for paid-in-full assets, financed assets with loans, and debts", async () => {
   const server = fakeServer();
   registerSummaryTool(server, {
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       return {
         today: {

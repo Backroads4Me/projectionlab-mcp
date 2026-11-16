@@ -8,7 +8,18 @@ export interface ConnectionStatus {
   /** Connected executor's identity, "extension/<version>" or "bootstrap/<version>". */
   executor?: string;
   errors: string[];
+  /** Whether the connected executor allows edits (see EditAccess). */
+  writesEnabled: boolean;
 }
+
+/**
+ * Whether the connected executor allows writes: "enabled" while the
+ * extension's Enable agent plan edits switch is on, "disabled" while it is
+ * off, "unsupported" for an executor that has no switch (the console
+ * bootstrap snippet, extension releases without it). Only "enabled" allows a
+ * write; the extension also refuses writes in the browser while it is off.
+ */
+export type EditAccess = "enabled" | "disabled" | "unsupported";
 
 /**
  * Surface for reaching window.projectionlabPluginAPI in a live ProjectionLab
@@ -19,6 +30,8 @@ export interface ConnectionStatus {
 export interface Bridge {
   checkConnection(): Promise<ConnectionStatus>;
   describePluginApi(): Promise<Record<string, string>>;
+  /** The connected executor's edit access; connects to it first if needed. */
+  editAccess(): Promise<EditAccess>;
   /** Full export, served from a short-lived cache unless `fresh` is true. */
   exportData(opts?: { fresh?: boolean }): Promise<ExportedData>;
   updateAccount(

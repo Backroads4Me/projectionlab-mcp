@@ -27,6 +27,8 @@ npm run build
 
 In Chrome, Edge, or Brave, open the extensions page, enable Developer mode, choose **Load unpacked**, and select `extension/dist/chromium`. Click the extension's toolbar icon to open its options page, and enter the WebSocket port (8788 by default) and the shared token from `~/.projectionlab-mcp/ws-token`. The status advances from **Not connected** to **Connecting…** to **Connected** once the server accepts the token. While connected, the toolbar icon shows a green check; it shows no badge otherwise, since the server runs only while an MCP host does. Hover the icon for the current status.
 
+**Enable agent plan edits** (stored as `allowEdits` in `browser.storage.local`) is off by default. While it is off the extension refuses every request that would change ProjectionLab data, whatever the server asks, and the assistant can only read. Turning it on or off takes effect at once, with no Save or restart: the extension checks it for every request and reports each change to the server, which shows it as `writesEnabled` in `projectionlab_check_connection`.
+
 Do not put the ProjectionLab Plugin API key in extension options. The MCP server owns it and sends it only as an in-memory request parameter.
 
 The extension has no version of its own: the build writes the version from the repository's root `package.json` into each built manifest, so a release's server and extension share one number.

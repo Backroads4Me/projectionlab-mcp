@@ -26,7 +26,8 @@ const { ExtensionBridge } = await import("../dist/extensionBridge.js");
 const { PROTOCOL_VERSION, CLOSE_CODES } = await import("../dist/types/wire.js");
 
 /** Minimal scriptable executor: answers requests via the supplied handler.
- * `hello` adds extra hello fields (takeover, instanceId). */
+ * `hello` adds extra hello fields (takeover, instanceId) and can override
+ * allowEdits, which defaults to on so the write paths can run. */
 function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, executor = "fake/1.0", handler, hello = {} } = {}) {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   const events = { closed: null, acked: false };
@@ -37,7 +38,7 @@ function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, ex
     });
   });
   ws.on("open", () => {
-    ws.send(JSON.stringify({ type: "hello", token, protocolVersion, executor, ...hello }));
+    ws.send(JSON.stringify({ type: "hello", token, protocolVersion, executor, allowEdits: true, ...hello }));
   });
   ws.on("message", (raw) => {
     const frame = JSON.parse(String(raw));
@@ -121,6 +122,7 @@ test("all Bridge methods round-trip through a healthy executor", async () => {
     apiKeyValid: true,
     executor: "fake/1.0",
     errors: [],
+    writesEnabled: true,
   });
 
   assert.deepEqual(await bridge.describePluginApi(), { exportData: "function(1 args)" });

@@ -64,7 +64,8 @@ port `8788` and the token from `~/.projectionlab-mcp/ws-token`.
 Then ask your assistant to run `projectionlab_check_connection`. When every
 check passes, ask it about your plan.
 
-The server starts in read-only mode. To let the assistant make changes, add
-`PL_READ_ONLY=false` to `~/.projectionlab-mcp/.env` and restart your
-assistant. Every setting is listed in the
+The assistant starts out able to read but not change anything. To let it make
+changes, turn on **Enable agent plan edits** on the extension's options page.
+It takes effect at once, with no restart, and turning it off stops changes just
+as quickly. Every setting is listed in the
 [technical reference](REFERENCE.md#environment-variables).

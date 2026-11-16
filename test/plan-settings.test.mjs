@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-settings-")),
   "snapshots",
@@ -25,6 +24,9 @@ const { registerUpdatePlanSettingsTool } = await import(
   "../dist/tools/updatePlanSettings.js"
 );
 const { config } = await import("../dist/config.js");
+
+/** What every fake bridge here reports as its executor's edit access. */
+const editAccess = { value: "enabled" };
 
 test("settings inventory flattens nested objects and preserves arrays", () => {
   const settings = listPlanSettings({
@@ -218,6 +220,9 @@ function resultJson(result) {
 test("get settings tool returns supported sections as addressable values", async () => {
   const server = fakeServer();
   const bridge = {
+    async editAccess() {
+      return editAccess.value;
+    },
     async exportData() {
       return {
         plans: [
@@ -269,6 +274,9 @@ test("update settings tool dry-runs, snapshots before mutation, and verifies", a
   };
   const actions = [];
   const bridge = {
+    async editAccess() {
+      return editAccess.value;
+    },
     async exportData() {
       return state;
     },
@@ -331,10 +339,13 @@ test("update settings tool dry-runs, snapshots before mutation, and verifies", a
   assert.deepEqual(actions, []);
 });
 
-test("update settings tool respects PL_READ_ONLY before reading or writing", async () => {
+test("update settings tool refuses while plan edits are off, before reading or writing", async () => {
   const server = fakeServer();
   let bridgeCalled = false;
   const bridge = {
+    async editAccess() {
+      return editAccess.value;
+    },
     async exportData() {
       bridgeCalled = true;
       throw new Error("must not read");
@@ -353,7 +364,7 @@ test("update settings tool respects PL_READ_ONLY before reading or writing", asy
   };
   registerUpdatePlanSettingsTool(server, bridge, snapshots);
 
-  config.readOnly = true;
+  editAccess.value = "disabled";
   try {
     const result = await server.handlers.get(
       "projectionlab_update_plan_settings",
@@ -368,6 +379,6 @@ test("update settings tool respects PL_READ_ONLY before reading or writing", asy
     assert.equal(bridgeCalled, false);
     assert.equal(snapshotCalled, false);
   } finally {
-    config.readOnly = false;
+    editAccess.value = "enabled";
   }
 });

@@ -10,7 +10,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-tools-")),
   "snapshots",
@@ -32,6 +31,9 @@ const { registerPrompts } = await import("../dist/prompts/index.js");
 const { updateCheck } = await import("../dist/updateCheck.js");
 const { VERSION } = await import("../dist/version.js");
 const { z } = await import("zod");
+
+/** What every fake bridge here reports as its executor's edit access. */
+const editAccess = { value: "enabled" };
 
 function fakeServer() {
   const tools = new Map();
@@ -80,6 +82,9 @@ function fakeBridge(initial) {
   const bridge = {
     state,
     writes: 0,
+    async editAccess() {
+      return editAccess.value;
+    },
     async exportData() {
       return structuredClone(state);
     },
@@ -224,12 +229,12 @@ test("update_plan_section reports unverified when the app drops an event", async
   assert.equal(out.verified, false);
 });
 
-test("write tools refuse in read-only mode", async () => {
+test("write tools refuse while plan edits are off", async () => {
   const { bridge, server } = setup((s, b, snaps) => {
     registerUpdatePlanSectionTool(s, b, snaps);
     registerClonePlanTool(s, b, snaps);
   });
-  config.readOnly = true;
+  editAccess.value = "disabled";
   try {
     for (const [name, args] of [
       ["projectionlab_update_plan_section", sectionArgs({ confirm: true })],
@@ -241,7 +246,7 @@ test("write tools refuse in read-only mode", async () => {
     }
     assert.equal(bridge.writes, 0);
   } finally {
-    config.readOnly = false;
+    editAccess.value = "enabled";
   }
 });
 
@@ -254,22 +259,19 @@ test("check_connection reports whether writes are enabled", async () => {
     apiKeyValid: true,
     errors: [],
   };
-  registerConnectionTool(server, { checkConnection: async () => ({ ...status }) });
+  let writesEnabled = false;
+  registerConnectionTool(server, { checkConnection: async () => ({ ...status, writesEnabled }) });
   const { handler } = server.tools.get("projectionlab_check_connection");
-  try {
-    for (const readOnly of [true, false]) {
-      config.readOnly = readOnly;
-      const result = await handler({});
-      assert.deepEqual(result.structuredContent, {
-        ...status,
-        writesEnabled: !readOnly,
-        versions: { server: VERSION, executor: null, latest: updateCheck.latest() },
-        notices: [],
-      });
-      assert.equal(JSON.parse(result.content[0].text).writesEnabled, !readOnly);
-    }
-  } finally {
-    config.readOnly = false;
+  for (const enabled of [false, true]) {
+    writesEnabled = enabled;
+    const result = await handler({});
+    assert.deepEqual(result.structuredContent, {
+      ...status,
+      writesEnabled: enabled,
+      versions: { server: VERSION, executor: null, latest: updateCheck.latest() },
+      notices: [],
+    });
+    assert.equal(JSON.parse(result.content[0].text).writesEnabled, enabled);
   }
 });
 
@@ -290,6 +292,7 @@ test("check_connection carries versions and notices, and validates against its o
       apiKeyValid: true,
       executor: "extension/0.0.1",
       errors: [],
+      writesEnabled: false,
     }),
   });
   const { definition, handler } = server.tools.get("projectionlab_check_connection");
@@ -449,6 +452,9 @@ test("plan-data resource redacts the API key and secret-named fields", async () 
 
 test("resource error details never leak the API key", async () => {
   const leaking = {
+    async editAccess() {
+      return editAccess.value;
+    },
     async exportData() {
       throw new Error(`executor failed for key ${config.apiKey}`);
     },

@@ -1,5 +1,5 @@
-// projectionlab_diff works while writes are disabled: with PL_READ_ONLY=true
-// it still diffs a snapshot against the live export and saves nothing, while
+// projectionlab_diff works while writes are disabled: with plan edits turned
+// off in the extension it still diffs a snapshot against the live export and saves nothing, while
 // the write path (projectionlab_rollback) refuses the same call.
 
 import assert from "node:assert/strict";
@@ -10,7 +10,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "true";
 const SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-diff-readonly-")),
   "snapshots",
@@ -21,7 +20,6 @@ process.env.LOG_LEVEL = "error";
 const { registerDiffTool } = await import("../dist/tools/diff.js");
 const { registerSnapshotTools } = await import("../dist/tools/snapshots.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
-const { config } = await import("../dist/config.js");
 
 function fakeServer() {
   const tools = new Map();
@@ -35,9 +33,7 @@ function fakeServer() {
 
 const text = (result) => JSON.parse(result.content[0].text);
 
-test("diff runs with PL_READ_ONLY=true and saves nothing", async () => {
-  assert.equal(config.readOnly, true, "PL_READ_ONLY must be on for this test");
-
+test("diff runs with plan edits turned off and saves nothing", async () => {
   const snapshots = new SnapshotManager();
   const saved = await snapshots.create("updatePlanSection", ["plans"], {
     plans: [
@@ -72,6 +68,9 @@ test("diff runs with PL_READ_ONLY=true and saves nothing", async () => {
   };
   const bridge = {
     writes: [],
+    async editAccess() {
+      return "disabled";
+    },
     async exportData() {
       return structuredClone(state);
     },

@@ -143,7 +143,7 @@ narrowest read that answers the question.
   questions about a property's value or equity from that block, not from
   the raw `balance`.
 - `projectionlab_diff` answers "what changed?" in one read-only call, so it
-  works with `PL_READ_ONLY=true`. `from` selects a saved snapshot with exactly
+  works while plan edits are turned off. `from` selects a saved snapshot with exactly
   one of `snapshotId`, `nBack` or `beforeTime`, the same selectors
   `projectionlab_rollback` takes and resolves the same way; `to` selects another
   snapshot, or omit it to compare against the data in ProjectionLab now. Only
@@ -260,9 +260,14 @@ Change the plan only when the user explicitly asks for that change.
 
 **Writes are off by default.** `writesEnabled` in the connection check shows
 the current mode. While it is `false`, every write tool, dry runs included,
-fails with `READ_ONLY_MODE` until the user sets `PL_READ_ONLY=false` (MCP host
-`env` block or `~/.projectionlab-mcp/.env`) and restarts the server. Explain this and let the
-user decide; do not enable writes on your own.
+fails with `READ_ONLY_MODE` until the user turns on **Enable agent plan edits**
+on the browser extension's options page (they click the extension's toolbar
+icon). It takes effect at once, with no restart; no file or environment
+variable enables writes. If the error says the executor has no plan-edits
+switch, the browser is running the console bootstrap snippet or an extension
+release without the switch, which can only read: the fix is the current
+extension from the browser's store. Explain this and let the user decide; do
+not enable writes on your own.
 
 ### Units
 

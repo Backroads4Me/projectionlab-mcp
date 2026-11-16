@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { executePageRequest } from "./page-main.js";
-import { buildHelloFrame, connectionStatusForClose, doubledDelay, isForcedConnectChange, isStandbyClose, makeResponseFrame, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, STANDBY_RETRY_MS, statusMessageForClose } from "./wire.js";
+import { buildHelloFrame, buildSettingsFrame, connectionStatusForClose, doubledDelay, editRefusal, isForcedConnectChange, isStandbyClose, makeResponseFrame, reconnectBlockedForClose, retryDelayForClose, shouldAttemptReconnect, STANDBY_RETRY_MS, statusMessageForClose } from "./wire.js";
 
 const DEFAULT_PORT = 8788;
 const PROTOCOL_VERSION = 1;
@@ -81,7 +81,7 @@ async function connect(force = false) {
   reconnectTimer = undefined;
   if (socket) { socket.onclose = null; socket.close(); }
   await browser.storage.session.set({ lastConnectAttemptAt: Date.now() });
-  const config = await browser.storage.local.get({ port: DEFAULT_PORT, token: "" });
+  const config = await browser.storage.local.get({ port: DEFAULT_PORT, token: "", allowEdits: false });
   if (!config.token) {
     await setStatus("disconnected", "Configure the shared token to connect.");
     return;
@@ -105,6 +105,7 @@ async function connect(force = false) {
       executor: `extension/${browser.runtime.getManifest().version}`,
       instanceId,
       takeover: force,
+      allowEdits: config.allowEdits,
     })));
   };
   ws.onmessage = (event) => {
@@ -125,6 +126,8 @@ async function connect(force = false) {
         minExtensionVersion: frame.minExtensionVersion ?? "",
       });
       void setStatus("authed");
+      // The switch may have changed while the hello was in flight.
+      void sendSettings(ws);
     }
     else if (frame.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
     else if (frame.type === "request") void handleRequest(frame, ws);
@@ -174,10 +177,26 @@ async function executeInTab(request) {
   }
 }
 
+// Reports the "Enable agent plan edits" switch to the server.
+async function sendSettings(ws) {
+  const { allowEdits } = await browser.storage.local.get({ allowEdits: false });
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(buildSettingsFrame(allowEdits)));
+}
+
+// The switch is read from storage on every request, never cached: the
+// browser enforces it whatever the server decides, and a cached value could
+// outlive a change made while the service worker slept.
+async function guardedExecute(request) {
+  const { allowEdits } = await browser.storage.local.get({ allowEdits: false });
+  const refusal = editRefusal(request.method, allowEdits);
+  if (refusal) throw codedError(refusal.code, refusal.message);
+  return executeInTab(request);
+}
+
 async function handleRequest(request, ws) {
   if (typeof request.id !== "string" || inFlight.has(request.id)) return;
   let timer;
-  const operation = executeInTab(request);
+  const operation = guardedExecute(request);
   // Promise.race may settle on the timeout first; consume a later operation
   // rejection so it cannot become an unhandled service-worker rejection.
   operation.catch(() => {});
@@ -187,7 +206,7 @@ async function handleRequest(request, ws) {
     const response = await Promise.race([operation, timeout]);
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(makeResponseFrame(request.id, response)));
   } catch (error) {
-    const code = ["NO_TAB", "API_NOT_AVAILABLE", "API_KEY_INVALID", "TIMEOUT"].includes(error?.code) ? error.code : "UNKNOWN";
+    const code = ["NO_TAB", "API_NOT_AVAILABLE", "API_KEY_INVALID", "TIMEOUT", "EDITS_DISABLED"].includes(error?.code) ? error.code : "UNKNOWN";
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "response", id: request.id, ok: false, error: { code, message: error instanceof Error ? error.message : String(error) } }));
   } finally {
     clearTimeout(timer);
@@ -196,7 +215,9 @@ async function handleRequest(request, ws) {
 }
 
 browser.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && isForcedConnectChange(changes, { authed })) void connect(true);
+  if (area !== "local") return;
+  if (isForcedConnectChange(changes, { authed })) void connect(true);
+  else if (changes.allowEdits && authed && socket) void sendSettings(socket);
 });
 browser.action.onClicked.addListener(() => void browser.runtime.openOptionsPage());
 browser.alarms.onAlarm.addListener((alarm) => {

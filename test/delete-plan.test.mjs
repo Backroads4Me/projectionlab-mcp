@@ -11,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-delete-plan-")),
   "snapshots",
@@ -27,6 +26,9 @@ const { registerDeletePlanTool } = await import("../dist/tools/deletePlan.js");
 const { registerSnapshotTools } = await import("../dist/tools/snapshots.js");
 const { config } = await import("../dist/config.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
+
+/** What every fake bridge here reports as its executor's edit access. */
+const editAccess = { value: "enabled" };
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -71,6 +73,9 @@ function fakeBridge(initial, opts = {}) {
     state,
     writes: [],
     exportCalls: 0,
+    async editAccess() {
+      return editAccess.value;
+    },
     async exportData() {
       bridge.exportCalls++;
       // Simulate a save in the ProjectionLab UI between the tool's read
@@ -339,11 +344,11 @@ test("delete_plan reports verification problems but keeps the snapshot id", asyn
   assert.match(out.snapshotId, UUID_RE);
 });
 
-test("delete_plan respects PL_READ_ONLY before reading or writing", async () => {
+test("delete_plan refuses while plan edits are off, before reading or writing", async () => {
   const bridge = fakeBridge({ plans: samplePlans() });
   const handler = register(bridge);
 
-  config.readOnly = true;
+  editAccess.value = "disabled";
   try {
     const result = await handler({ planId: "p2", confirm: true });
     assert.equal(result.isError, true);
@@ -351,6 +356,6 @@ test("delete_plan respects PL_READ_ONLY before reading or writing", async () => 
     assert.equal(bridge.exportCalls, 0);
     assert.equal(bridge.writes.length, 0);
   } finally {
-    config.readOnly = false;
+    editAccess.value = "enabled";
   }
 });

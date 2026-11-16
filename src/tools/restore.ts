@@ -3,27 +3,13 @@ import { toJson } from "../json.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
-import { config } from "../config.js";
-import {
-  ProjectionLabError,
-  errorResult,
-  redactedSecretsError,
-} from "../errors.js";
+import { requireEditsEnabled } from "../editAccess.js";
+import { errorResult, redactedSecretsError } from "../errors.js";
 import { log } from "../logger.js";
 import { containsSubset } from "../plans.js";
 import { findRedactedSecretPaths } from "../redact.js";
 
 type Obj = Record<string, unknown>;
-
-function checkReadOnly() {
-  if (config.readOnly) {
-    throw new ProjectionLabError(
-      "READ_ONLY_MODE",
-      "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
-      "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
-    );
-  }
-}
 
 function getExportSection(
   data: Record<string, unknown>,
@@ -212,7 +198,7 @@ export function registerRestoreTools(
     },
     async ({ currentFinances, confirm }) => {
       try {
-        checkReadOnly();
+        await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(currentFinances);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("currentFinances", redactedPaths);
@@ -305,7 +291,7 @@ export function registerRestoreTools(
     },
     async ({ plans, confirm }) => {
       try {
-        checkReadOnly();
+        await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(plans);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("plans", redactedPaths);
@@ -398,7 +384,7 @@ export function registerRestoreTools(
     },
     async ({ progress, confirm }) => {
       try {
-        checkReadOnly();
+        await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(progress);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("progress", redactedPaths);
@@ -484,7 +470,7 @@ export function registerRestoreTools(
     },
     async ({ settings, confirm }) => {
       try {
-        checkReadOnly();
+        await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(settings);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("settings", redactedPaths);

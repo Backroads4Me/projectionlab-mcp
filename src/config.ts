@@ -91,8 +91,6 @@ export const config = {
   exportCacheMs: optionalInt("PL_EXPORT_CACHE_MS", 90000),
   // Pretty-print JSON tool output (costs ~25-40% more tokens; off by default).
   prettyJson: optionalBoolean("PL_PRETTY_JSON") ?? false,
-  // Writes stay disabled unless PL_READ_ONLY is exactly "false".
-  readOnly: (process.env.PL_READ_ONLY ?? "").trim().toLowerCase() !== "false",
   // On unless PL_UPDATE_CHECK is exactly "false"; the only registry request
   // the server makes is the one this gates.
   updateCheck: (process.env.PL_UPDATE_CHECK ?? "").trim().toLowerCase() !== "false",

@@ -99,7 +99,6 @@ async function main() {
   registerPrompts(server, bridge);
 
   log.info("server", `WebSocket port: ${config.wsPort}`);
-  log.info("server", `Read-only mode: ${config.readOnly}`);
   log.info("server", `Snapshot dir: ${config.snapshotDir}`);
 
   // Graceful shutdown

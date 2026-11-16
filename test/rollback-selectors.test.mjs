@@ -11,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 const SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-rollback-selectors-")),
   "snapshots",
@@ -23,6 +22,9 @@ const { registerSnapshotTools } = await import("../dist/tools/snapshots.js");
 const { registerRestoreTools } = await import("../dist/tools/restore.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
 const { config } = await import("../dist/config.js");
+
+/** What every fake bridge here reports as its executor's edit access. */
+const editAccess = { value: "enabled" };
 
 const HOUR = 60 * 60 * 1000;
 
@@ -55,6 +57,9 @@ function fakeBridge(initial) {
   const bridge = {
     state,
     writes: [],
+    async editAccess() {
+      return editAccess.value;
+    },
     async exportData() {
       return structuredClone(state);
     },
@@ -415,7 +420,7 @@ test("rollback refuses in read-only mode before checking selectors", async () =>
   registerSnapshotTools(server, fakeBridge({ today: {}, plans: [] }), guarded);
   const rollback = server.tools.get("projectionlab_rollback").handler;
 
-  config.readOnly = true;
+  editAccess.value = "disabled";
   try {
     const noSelector = await rollback({ confirm: false });
     assert.equal(noSelector.isError, true);
@@ -429,14 +434,14 @@ test("rollback refuses in read-only mode before checking selectors", async () =>
     assert.equal(badSelectors.isError, true);
     assert.equal(parse(badSelectors).error, "READ_ONLY_MODE");
   } finally {
-    config.readOnly = false;
+    editAccess.value = "enabled";
   }
 
   assert.deepEqual(touched, []);
 
   // With writes on, the same two calls fail on the selectors instead, so the
   // refusal above came from the read-only gate and not from the stub.
-  config.readOnly = false;
+  editAccess.value = "enabled";
   const noSelectorOpen = await rollback({ confirm: false });
   assert.equal(parse(noSelectorOpen).error, "INVALID_INPUT");
   const badSelectorsOpen = await rollback({

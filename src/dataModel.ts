@@ -2637,19 +2637,35 @@ export function matchDataModelField(
   return undefined;
 }
 
+/**
+ * Whether a write of a value outside an entry's `allowedValues` is refused.
+ * Only an observed entry binds a write: its field is confirmed by a
+ * stored-value test and its list is held as the app's own set of choices. A
+ * ui-label or export-shape list is a hint and may leave choices the app offers
+ * out of it.
+ */
+export function enforcesAllowedValues(field: DataModelField): boolean {
+  return field.evidence === "observed";
+}
+
 export interface DataModelAnnotation {
   description?: string;
   units?: string;
   allowedValues?: readonly string[];
+  /**
+   * Present whenever `allowedValues` is: true when a write outside the list is
+   * refused, false when the list is a hint that may leave choices out.
+   */
+  allowedValuesEnforced?: boolean;
   uiLabel?: string;
   uiLocation?: string;
 }
 
 /**
- * Copy listed values, attaching description, units, allowedValues, and the
- * ProjectionLab 5.0.0 uiLabel and uiLocation for paths with a registry entry.
- * Entries for unknown paths are returned unchanged, so existing listPaths
- * fields never change.
+ * Copy listed values, attaching description, units, allowedValues with its
+ * allowedValuesEnforced, and the ProjectionLab 5.0.0 uiLabel and uiLocation for
+ * paths with a registry entry. Entries for unknown paths are returned
+ * unchanged, so existing listPaths fields never change.
  */
 export function annotateAddressableValues<T extends { path: string }>(
   scope: string | undefined,
@@ -2662,7 +2678,10 @@ export function annotateAddressableValues<T extends { path: string }>(
     const annotated: T & DataModelAnnotation = { ...value };
     annotated.description = field.description;
     if (field.units) annotated.units = field.units;
-    if (field.allowedValues) annotated.allowedValues = field.allowedValues;
+    if (field.allowedValues) {
+      annotated.allowedValues = field.allowedValues;
+      annotated.allowedValuesEnforced = enforcesAllowedValues(field);
+    }
     if (field.uiLabel) annotated.uiLabel = field.uiLabel;
     if (field.uiLocation) annotated.uiLocation = field.uiLocation;
     return annotated;
@@ -2682,7 +2701,7 @@ export function refusedEnumChoices(
 ): readonly string[] | undefined {
   if (scope === undefined || typeof value !== "string") return undefined;
   const field = matchDataModelField(scope, path, layout);
-  if (!field?.allowedValues || field.evidence !== "observed") return undefined;
+  if (!field?.allowedValues || !enforcesAllowedValues(field)) return undefined;
   if (field.allowedValues.includes(value)) return undefined;
   return field.allowedValues;
 }

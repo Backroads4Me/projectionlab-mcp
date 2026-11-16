@@ -6,6 +6,7 @@ import {
   DATA_MODEL_V5_GROUPS,
   DATA_MODEL_V5_PROJECTIONLAB_VERSION,
   type DataModelField,
+  enforcesAllowedValues,
   UI_LABELS_V5,
 } from "../dataModel.js";
 import type { ExportLayout } from "../layout.js";
@@ -16,6 +17,9 @@ function renderField(pattern: string, field: DataModelField): string {
   if (field.units) parts.push(`Units: ${field.units}.`);
   if (field.allowedValues) {
     parts.push(`Allowed values: ${field.allowedValues.join(", ")}.`);
+    if (enforcesAllowedValues(field)) {
+      parts.push("A write of any other value is refused.");
+    }
   }
   if (field.enabledBy) parts.push(`Enabled by: ${field.enabledBy}.`);
   if (field.note) parts.push(`Note: ${field.note}`);

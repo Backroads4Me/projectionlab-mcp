@@ -28,6 +28,15 @@ export interface AddressableValueOptions {
 
 const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
 
+/**
+ * What the stored container holds at a compared path. The absent case covers
+ * everything with nothing to compare against: a new key, an element past the
+ * end of the stored array, or a stored value of another kind.
+ */
+type StoredValue = { present: true; value: unknown } | { present: false };
+
+const ABSENT: StoredValue = { present: false };
+
 function valueType(value: unknown): string {
   if (value === null) return "null";
   if (Array.isArray(value)) return "array";
@@ -203,19 +212,58 @@ function replaceAtPath(
 }
 
 /**
- * Refusal for a value a write sets outside an observed enum's choices. A whole
- * object or array is walked and each leaf is checked with the joined path, so
- * `yearlyChange.type` is enforced whether the caller addressed that leaf or
- * sent the container around it. Array elements are addressed by numeric index,
- * the syntax `parsePath` accepts and the registry wildcards match, so a
- * `criteria.*.type` entry matches `criteria.0.type`.
+ * The value stored at a dot path. Reading a path never fails: an unknown path
+ * is `ABSENT`, so everything written under it counts as changed, and
+ * `replaceAtPath` is what refuses it.
+ */
+function readStoredPath(data: unknown, parts: readonly string[]): StoredValue {
+  let current = data;
+  for (const part of parts) {
+    if (
+      !isContainer(current) ||
+      !Object.prototype.hasOwnProperty.call(current, part)
+    ) {
+      return ABSENT;
+    }
+    current = containerValue(current, part);
+  }
+  return { present: true, value: current };
+}
+
+/** The stored counterpart of one key inside a compared value. */
+function storedCounterpart(stored: StoredValue, key: string): StoredValue {
+  if (!stored.present || !isContainer(stored.value)) return ABSENT;
+  if (!Object.prototype.hasOwnProperty.call(stored.value, key)) return ABSENT;
+  return { present: true, value: containerValue(stored.value, key) };
+}
+
+/**
+ * Refusal for a value a write sets outside an observed enum's choices, where
+ * `stored` is what the container holds at the same joined path. A whole object
+ * or array is walked and each leaf is compared, so `yearlyChange.type` is
+ * enforced whether the caller addressed that leaf or sent the container around
+ * it. Array elements are addressed by numeric index, the syntax `parsePath`
+ * accepts and the registry wildcards match, so a `criteria.*.type` entry
+ * matches `criteria.0.type`.
+ *
+ * Only a leaf whose value the write actually changes is refused. A whole-object
+ * write carries the sibling values it did not come to change, so an out-of-list
+ * value the plan already holds rides through untouched while the field the
+ * caller came for is written; moving that same value to another out-of-list
+ * value is still refused. A leaf with no stored counterpart (a new key, an
+ * element past the end of the stored array, a stored value of another kind)
+ * counts as changed and is checked.
  */
 function enumRefusalForValue(
   scope: string,
   path: string,
   value: unknown,
+  stored: StoredValue,
   layout: ExportLayout,
 ): ProjectionLabError | undefined {
+  if (stored.present && storedValueMatches(value, stored.value)) {
+    return undefined;
+  }
   const refusal = enumRefusalError(scope, path, value, layout);
   if (refusal) return refusal;
   if (!isContainer(value)) return undefined;
@@ -224,6 +272,7 @@ function enumRefusalForValue(
       scope,
       `${path}.${key}`,
       containerValue(value, key),
+      storedCounterpart(stored, key),
       layout,
     );
     if (nested) return nested;
@@ -232,12 +281,29 @@ function enumRefusalForValue(
 }
 
 /**
+ * Whether writing `value` at `path` of `data` would change anything, compared
+ * by value rather than by JSON text. A patch leaf that already holds this
+ * value is not a write of that value, so the observed enums do not apply to
+ * it.
+ */
+export function pathValueUnchanged(
+  data: unknown,
+  path: string,
+  value: unknown,
+): boolean {
+  const stored = readStoredPath(data, path.split("."));
+  return stored.present && storedValueMatches(value, stored.value);
+}
+
+/**
  * Apply path-addressed changes immutably. Paths must already exist and values
  * must retain their JSON type. When `scope` names a group in the data model
  * registry (a settings section, event section, or Current Finances
  * collection) of the `layout` data model, a string value outside an observed
  * enum's choices is refused with INVALID_INPUT, at the addressed path and at
- * every path nested inside a whole-object or whole-array value.
+ * every path nested inside a whole-object or whole-array value. A leaf is
+ * checked only when the write changes it, so an out-of-list value the stored
+ * object already holds does not block writing the fields beside it.
  */
 export function applyExistingPathChanges(
   data: unknown,
@@ -283,7 +349,13 @@ export function applyExistingPathChanges(
   for (const [path, after] of Object.entries(incoming)) {
     const parts = parsePath(path, context);
     if (scope !== undefined) {
-      const refusal = enumRefusalForValue(scope, path, after, layout);
+      const refusal = enumRefusalForValue(
+        scope,
+        path,
+        after,
+        readStoredPath(data, parts),
+        layout,
+      );
       if (refusal) throw refusal;
     }
     checked.push({ path, parts, after });

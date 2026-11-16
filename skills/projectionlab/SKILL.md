@@ -378,6 +378,15 @@ field tagged `observed` is refused with `INVALID_INPUT`, and the refusal lists
 the choices: pick one of them and re-run the dry run. Numbers and booleans are
 never refused this way, and `ui-label` fields are annotated but not enforced.
 
+Users know plan settings by their on-screen labels, not by paths. A listed
+setting can also carry `uiLabel` and `uiLocation`: the control's label and
+where it is in ProjectionLab 5.0.0, with any mode that must be selected for it
+to appear in parentheses (for example `inflation` is "Inflation Rate" under
+"Plan Settings > Rates (Fixed mode)"). Use them when describing a change or
+telling the user where to check it, and say "inflation rate", not
+`variables.inflation`. A setting without them has no recorded label; describe
+it from its `description`.
+
 ### Choose the write tool
 
 Every tool below also takes `confirm` (default `false`, a dry run).

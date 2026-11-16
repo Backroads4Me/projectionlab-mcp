@@ -30,6 +30,11 @@ export interface DataModelField {
   /** Which other field must be set for this field to matter. */
   enabledBy?: string;
   note?: string;
+  /** Label of the control that shows this field in ProjectionLab 5.0.0. */
+  uiLabel?: string;
+  /** Where that control is in ProjectionLab 5.0.0, including the mode or
+   * choice that must be selected for it to appear. */
+  uiLocation?: string;
   evidence: DataModelEvidence;
 }
 
@@ -1996,6 +2001,106 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
   },
 ];
 
+/**
+ * On-screen labels in ProjectionLab 5.0.0 for plan settings, keyed by scope
+ * then path. Each was confirmed by writing a distinct value to the field and
+ * finding that value under the label in the app. Plan settings keep the same
+ * paths in both layouts, so the labels sit on the entries above.
+ */
+const RATES = "Plan Settings > Rates";
+const TAX = "Plan Settings > Tax";
+const ESTATE = "Plan overview > Estate Settings";
+const MC_DATA = "Chance of Success > Data Sources";
+const TEXTBOOK = "Optimize > Drawdown Strategy > Textbook Withdrawals";
+const strategyAt = (name: string) => `${TEXTBOOK}, Strategy "${name}"`;
+
+export const UI_LABELS_V5: Readonly<
+  Record<string, Readonly<Record<string, readonly [label: string, location: string]>>>
+> = {
+  variables: {
+    inflation: ["Inflation Rate", `${RATES} (Fixed mode)`],
+    investmentReturn: ["Stock Growth Rate", `${RATES} (Fixed mode)`],
+    dividendRate: ["Stock Dividend Yield", `${RATES} (Fixed mode)`],
+    bondInvestmentReturn: ["Bond Growth Rate", `${RATES} (Fixed mode)`],
+    bondDividendRate: ["Bond Yield", `${RATES} (Fixed mode)`],
+    benefitColaModifier: ["Benefit COLA Modifier", RATES],
+    startYear: ["Start Year", `${RATES} (Historical mode)`],
+    loopYear: ["Loopback Year", `${RATES} (Historical mode)`],
+    "dividendSettings.composition.qualifiedPercent": [
+      "Qualified Dividends",
+      "Plan Settings > Dividends > Stock Dividend Composition",
+    ],
+    "bondSettings.composition.municipalPercent": [
+      "Municipal Bonds",
+      "Plan Settings > Bonds > Bond Income Composition",
+    ],
+    "bondSettings.composition.treasuryPercent": [
+      "Treasury / Government",
+      "Plan Settings > Bonds > Bond Income Composition",
+    ],
+    "withholding.taxDeferred": ["Tax-Deferred Withdrawals", `${TAX} > Withholding`],
+    "withholding.taxable": ["Taxable Withdrawals", `${TAX} > Withholding`],
+    "withholding.conversions": ["Conversions", `${TAX} > Withholding`],
+    incomeTaxModifier: ["Income Tax Modifier", `${TAX} > More Options`],
+    capGainsModifier: ["Capital Gains Tax Modifier", `${TAX} > More Options`],
+    "taxStrategy.bracketRate": ["Tax Bracket", "Plan overview > Tax Strategy"],
+    "estate.taxDeferredRate": ["Tax-Deferred Account Tax Rate", ESTATE],
+    "estate.assetLiquidationFee": ["Liquidation Costs", ESTATE],
+    "estate.charityRate": ["Charitable Giving", ESTATE],
+    "estate.adminRate": ["Administrative Costs", ESTATE],
+  },
+  montecarlo: {
+    investmentReturnMean: ["Mean", `${MC_DATA} > Stock Growth Rate`],
+    investmentReturnStdDev: ["Std. Dev.", `${MC_DATA} > Stock Growth Rate`],
+    dividendRateMean: ["Mean", `${MC_DATA} > Stock Dividend Yield`],
+    dividendRateStdDev: ["Std. Dev.", `${MC_DATA} > Stock Dividend Yield`],
+    inflationMean: ["Mean", `${MC_DATA} > Inflation`],
+    inflationStdDev: ["Std. Dev.", `${MC_DATA} > Inflation`],
+    bondReturnMean: ["Mean", `${MC_DATA} > Bond Returns (Normal Distribution)`],
+    bondReturnStdDev: ["Std. Dev.", `${MC_DATA} > Bond Returns (Normal Distribution)`],
+  },
+  withdrawalStrategy: {
+    enabled: ["Textbook Strategy", TEXTBOOK],
+    "initial-%.amount": ["Initial Withdrawal", strategyAt("Initial Percentage")],
+    "fixed-%.amount": ["Yearly Withdrawal", strategyAt("Fixed Percentage")],
+    "fixed-amount.amount": ["The amount withdrawn each year", strategyAt("Fixed Amount")],
+    "kitces-ratchet.amount": [
+      "Initial Withdrawal",
+      strategyAt("Ratcheting Safe Withdrawal Rate"),
+    ],
+    "kitces-ratchet.threshold": [
+      "Ratchet Threshold",
+      strategyAt("Ratcheting Safe Withdrawal Rate"),
+    ],
+    "kitces-ratchet.ratchet": [
+      "Ratchet Increase",
+      strategyAt("Ratcheting Safe Withdrawal Rate"),
+    ],
+    "kitces-ratchet.cooldown": [
+      "The years to wait between ratchets",
+      strategyAt("Ratcheting Safe Withdrawal Rate"),
+    ],
+    "clyatt-95%.amount": ["Portfolio Share", strategyAt("Clyatt 95% Rule")],
+    "clyatt-95%.percentOfPrevious": [
+      "Previous Withdrawal Floor",
+      strategyAt("Clyatt 95% Rule"),
+    ],
+    "guyton-klinger.amount": ["Initial Withdrawal", strategyAt("Guyton-Klinger")],
+    "guyton-klinger.guardrail": ["Guardrail", strategyAt("Guyton-Klinger")],
+    "guyton-klinger.adjustment": ["Adjustment", strategyAt("Guyton-Klinger")],
+  },
+};
+
+for (const [scope, labels] of Object.entries(UI_LABELS_V5)) {
+  const group = DATA_MODEL_GROUPS.find((candidate) => candidate.scope === scope);
+  for (const [path, [label, location]] of Object.entries(labels)) {
+    const field = group?.fields[path];
+    if (!field) throw new Error(`UI label for unknown data model path ${scope}.${path}`);
+    field.uiLabel = label;
+    field.uiLocation = location;
+  }
+}
+
 interface CompiledEntry {
   pattern: string;
   segments: string[];
@@ -2058,12 +2163,15 @@ export interface DataModelAnnotation {
   description?: string;
   units?: string;
   allowedValues?: readonly string[];
+  uiLabel?: string;
+  uiLocation?: string;
 }
 
 /**
- * Copy listed values, attaching description, units, and allowedValues for
- * paths with a registry entry. Entries for unknown paths are returned
- * unchanged, so existing listPaths fields never change.
+ * Copy listed values, attaching description, units, allowedValues, and the
+ * ProjectionLab 5.0.0 uiLabel and uiLocation for paths with a registry entry.
+ * Entries for unknown paths are returned unchanged, so existing listPaths
+ * fields never change.
  */
 export function annotateAddressableValues<T extends { path: string }>(
   scope: string | undefined,
@@ -2077,6 +2185,8 @@ export function annotateAddressableValues<T extends { path: string }>(
     annotated.description = field.description;
     if (field.units) annotated.units = field.units;
     if (field.allowedValues) annotated.allowedValues = field.allowedValues;
+    if (field.uiLabel) annotated.uiLabel = field.uiLabel;
+    if (field.uiLocation) annotated.uiLocation = field.uiLocation;
     return annotated;
   });
 }

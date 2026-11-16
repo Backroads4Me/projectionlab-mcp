@@ -18,7 +18,22 @@ function renderField(pattern: string, field: DataModelField): string {
   }
   if (field.enabledBy) parts.push(`Enabled by: ${field.enabledBy}.`);
   if (field.note) parts.push(`Note: ${field.note}`);
+  if (field.uiLabel && field.uiLocation) {
+    parts.push(`In the app (ProjectionLab 5.0.0): "${field.uiLabel}" under ${field.uiLocation}.`);
+  }
   return parts.join(" ");
+}
+
+/** The plan-settings fields whose ProjectionLab 5.0.0 label is recorded. */
+function renderPlanSettingLabels(): string[] {
+  const lines: string[] = [];
+  for (const group of DATA_MODEL_GROUPS) {
+    for (const [pattern, field] of Object.entries(group.fields)) {
+      if (!field.uiLabel || !field.uiLocation) continue;
+      lines.push(`- \`${group.scope}.${pattern}\`: "${field.uiLabel}" under ${field.uiLocation}.`);
+    }
+  }
+  return lines;
 }
 
 export function renderDataModelV4Markdown(): string {
@@ -93,6 +108,18 @@ export function renderDataModelV5Markdown(): string {
     }
     lines.push("");
   }
+  lines.push(
+    "## Plan settings in the app",
+    "",
+    "Plan settings (variables, montecarlo, withdrawalStrategy) keep the paths ProjectionLab 4 " +
+      "uses; their meanings, units and allowed values are in projectionlab://data-model?layout=v4. " +
+      "Each field below was found in the app by writing a distinct value to it. Use the label " +
+      "and location when telling the user where to look. A location in parentheses names the " +
+      "mode or choice that must be selected for the control to appear.",
+    "",
+    ...renderPlanSettingLabels(),
+    "",
+  );
   return lines.join("\n");
 }
 

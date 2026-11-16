@@ -255,6 +255,8 @@ test("get settings tool returns supported sections as addressable values", async
       description:
         "Annual baseline inflation rate applied to living expenses and cost escalations.",
       units: "percentage points",
+      uiLabel: "Inflation Rate",
+      uiLocation: "Plan Settings > Rates (Fixed mode)",
     },
   ]);
 });

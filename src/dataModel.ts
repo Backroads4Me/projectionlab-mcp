@@ -1697,10 +1697,10 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       investmentGrowthType: {
         description:
           "Where the account's stock growth rate comes from.",
-        allowedValues: ["plan", "fixed", "custom"],
+        allowedValues: ["plan", "fixed", "custom", "none"],
         evidence: "observed",
         note:
-          'Labelled Stock Growth Rate ("plan", inherit from Plan Settings > Growth Rates), Fixed Rate ("fixed") and Advanced ("custom"), which stores the curve in investmentGrowthCustom as { type, data: [ { x, y } ] }.',
+          'Labelled Stock Growth Rate ("plan", inherit from Plan Settings > Growth Rates), Fixed Rate ("fixed"), Advanced ("custom"), which stores the curve in investmentGrowthCustom as { type, data: [ { x, y } ] }, and None ("none", no investment growth).',
       },
       investmentGrowthRate: {
         description: "Custom annual growth rate for the account.",
@@ -1710,10 +1710,10 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       dividendType: {
         description: "Where the account's dividend yield comes from.",
-        allowedValues: ["plan", "fixed", "custom"],
+        allowedValues: ["plan", "fixed", "custom", "none"],
         evidence: "observed",
         note:
-          'The Advanced option ("custom") stores the curve in dividendRateCustom as { type, data: [ { x, y } ] }, beside the Fixed Rate option that uses dividendRate.',
+          'Labelled Stock Dividend Yield ("plan", inherit from Plan Settings > Growth Rates), Fixed Yield ("fixed", which uses dividendRate), Advanced ("custom"), which stores the curve in dividendRateCustom as { type, data: [ { x, y } ] }, and None ("none", no dividend yield).',
       },
       dividendRate: {
         description: "Custom annual dividend yield for the account.",

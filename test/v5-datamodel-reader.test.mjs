@@ -265,6 +265,22 @@ test("refusedEnumChoices and enumRefusalError work per layout", () => {
   }
 });
 
+test("v5 account growth and dividend sources accept every option the app offers", () => {
+  // The build's Stock Growth Rate and Stock Dividend Yield menus each offer
+  // plan, fixed, custom and none, with no account-type filter.
+  const sources = ["plan", "fixed", "custom", "none"];
+  for (const field of ["investmentGrowthType", "dividendType"]) {
+    for (const value of sources) {
+      assert.equal(
+        refusedEnumChoices("accounts", field, value, "v5"),
+        undefined,
+        `${field} refuses "${value}"`,
+      );
+    }
+    assert.deepEqual(refusedEnumChoices("accounts", field, "rate", "v5"), sources);
+  }
+});
+
 test("projectionlab://data-model resource renders v5 layout correctly", async () => {
   const server = fakeServer();
   const bridge = fakeBridge(2);

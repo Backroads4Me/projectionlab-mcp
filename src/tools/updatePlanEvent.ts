@@ -9,6 +9,7 @@ import { log } from "../logger.js";
 import {
   applyExistingPathChanges,
   listAddressableValues,
+  pathValueUnchanged,
   findPathChangeMismatches,
   type PathChangeMismatch,
   type PathValueChange,
@@ -55,7 +56,8 @@ const UNSAFE_NEW_FIELDS = new Set([
  * The legacy shallow top-level patch, validated like pathChanges. Existing
  * fields go through applyExistingPathChanges (same existence, JSON-type,
  * unsafe-key and secret-name checks); values replacing a whole nested object
- * are still checked leaf by leaf against the observed enums. New fields stay
+ * are still checked leaf by leaf against the observed enums, except where the
+ * event already holds the value the patch sends. New fields stay
  * allowed only as plain, non-secret names.
  */
 function applyEventPatch(
@@ -68,6 +70,7 @@ function applyEventPatch(
     assertMutableEventPath(key);
   }
   for (const { path, value } of listAddressableValues(patch)) {
+    if (pathValueUnchanged(event, path, value)) continue;
     const refusal = enumRefusalError(section, path, value, layout);
     if (refusal) throw refusal;
   }

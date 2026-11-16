@@ -377,6 +377,9 @@ registry knows the field. Writing a string outside the allowed values of a
 field tagged `observed` is refused with `INVALID_INPUT`, and the refusal lists
 the choices: pick one of them and re-run the dry run. Numbers and booleans are
 never refused this way, and `ui-label` fields are annotated but not enforced.
+The same check reaches inside a whole-object or whole-array value, and it
+applies to a leaf only when the write changes it: an out-of-list value the plan
+already stores rides through a write that changes another field beside it.
 
 Users know plan settings, events and accounts by their on-screen labels, not
 by paths. A listed value can also carry `uiLabel` and `uiLocation`: the control's label and

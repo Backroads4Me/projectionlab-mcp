@@ -110,6 +110,7 @@ test("getDataModelGroups returns appropriate groups per layout", () => {
     "variables.alignment.date",
     "settings.plan.alignment.type",
     "settings.plan.alignment.date",
+    "expenses.fundWithAccounts",
   ]);
   for (const group of v5Groups) {
     for (const [pattern, field] of Object.entries(group.fields)) {
@@ -248,7 +249,8 @@ test("projectionlab://data-model resource renders v5 layout correctly", async ()
 
   // Requirement: solo 401k prose without guessed string
   assert.match(markdown, /Solo 401k, Roth Solo 401k, and SEP IRA/);
-  assert.match(markdown, /export strings are not yet recorded/);
+  assert.match(markdown, /"roth-401k"/);
+  assert.match(markdown, /subtype "sep"/);
   assert.equal(markdown.includes("solo-401k"), false);
 
   // Requirement: no em dashes
@@ -318,7 +320,8 @@ test("projectionlab://knowledge resource renders v5 reference correctly", async 
 
   // Requirement: solo 401k prose without guessed string
   assert.match(markdown, /Solo 401k, Roth Solo 401k, and SEP IRA/);
-  assert.match(markdown, /export strings are not yet recorded/);
+  assert.match(markdown, /"roth-401k"/);
+  assert.match(markdown, /subtype: "sep"/);
   assert.equal(markdown.includes("solo-401k"), false);
 
   // Requirement: no em dashes

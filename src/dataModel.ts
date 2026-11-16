@@ -1595,7 +1595,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
   },
   {
     scope: "accounts",
-    title: "Current Finances accounts and debts (keyed by account ID)",
+    title: "Current Finances accounts and debts (keyed by account ID) and plan account events",
     fields: {
       id: {
         description: "Unique account identifier.",
@@ -1612,13 +1612,16 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       type: {
         description: "Account classification type.",
-        allowedValues: ["taxable", "401k", "savings", "land", "secured-loan"],
+        allowedValues: ["taxable", "401k", "roth-401k", "ira", "savings", "land", "secured-loan"],
         evidence: "export-shape",
-        note: "ProjectionLab 5 supports Solo 401k, Roth Solo 401k, and SEP IRA account types, but their export strings are not yet recorded.",
+        note:
+          'The Solo 401k, Roth Solo 401k, and SEP IRA account types store as type "401k" or "roth-401k" with subtype "solo", and type "ira" with subtype "sep".',
       },
       subtype: {
-        description: "Sub-classification of a real asset (such as lot).",
+        description: "Sub-classification of the record.",
         evidence: "export-shape",
+        note:
+          'Real assets use values such as "lot"; a 401k or roth-401k account uses subtype "solo" for the Solo 401k and Roth Solo 401k types, and an ira account uses subtype "sep" for the SEP IRA type.',
       },
       owner: {
         description: "Which household member owns the account.",
@@ -1680,6 +1683,57 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         description: "Drawdown eligibility rule.",
         evidence: "export-shape",
       },
+      // Plan account events are listed and written under this scope by
+      // section name, so their plan-side fields are carried from the
+      // ProjectionLab 4 registry into this group as well.
+      investmentGrowthRate: {
+        description: "Custom annual growth rate for the account.",
+        units: PCT,
+        enabledBy: 'investmentGrowthType "fixed"',
+        evidence: "export-shape",
+      },
+      dividendRate: {
+        description: "Custom annual dividend yield for the account.",
+        units: PCT,
+        evidence: "export-shape",
+      },
+      yearlyFee: {
+        description: "Recurring account fee.",
+        note: 'Interpreted per yearlyFeeType: a percentage, a percentage of earnings, or a dollar amount.',
+        evidence: "export-shape",
+      },
+      withdrawAge: {
+        description: "Timing reference after which the account becomes eligible for drawdown.",
+        enabledBy: 'withdraw "after"',
+        evidence: "export-shape",
+      },
+      rmdType: {
+        description: "Statutory required minimum distribution regime.",
+        allowedValues: ["us", "none"],
+        evidence: "export-shape",
+      },
+      EWAge: {
+        description: "Age after which the early withdrawal penalty no longer applies.",
+        units: "age",
+        enabledBy: "hasEWPenalty",
+        evidence: "export-shape",
+      },
+      hasEWPenalty: {
+        description: "When true, early withdrawals before EWAge incur a penalty.",
+        evidence: "export-shape",
+      },
+      EWPenaltyRate: {
+        description: "Penalty charged on early withdrawals.",
+        units: PCT,
+        enabledBy: "hasEWPenalty",
+        note: "Commonly 10 for retirement accounts and 20 for an HSA.",
+        evidence: "export-shape",
+      },
+      liquid: {
+        description: "Whether the account counts toward liquid net worth.",
+        evidence: "export-shape",
+        note: 'true, false, or "EWAge" to count only once the penalty age has passed.',
+      },
     },
   },
   {
@@ -1732,6 +1786,91 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       loans: {
         description: "Array of linked financing structures.",
+        evidence: "export-shape",
+      },
+      // Entries carried from the ProjectionLab 4 registry for fields the
+      // ProjectionLab 5 export shows.
+      "start.type": {
+        description: "Kind of the start reference: a fixed date, a keyword, or a milestone.",
+        allowedValues: ["date", "keyword", "milestone"],
+        evidence: "export-shape",
+      },
+      paymentMethod: {
+        description: "Whether the asset was bought outright or financed.",
+        allowedValues: ["pay-in-full", "financed"],
+        evidence: "export-shape",
+      },
+      downPayment: {
+        description: "Cash down payment at acquisition.",
+        units: DOLLARS,
+        enabledBy: 'paymentMethod "financed"',
+        evidence: "export-shape",
+      },
+      interestRate: {
+        description: "Annual percentage rate of the asset's loan.",
+        units: PCT,
+        enabledBy: 'paymentMethod "financed"',
+        evidence: "export-shape",
+      },
+      interestType: {
+        description: "How interest accrues on the asset's loan.",
+        allowedValues: ["simple", "compound"],
+        evidence: "export-shape",
+      },
+      compounding: {
+        description: "Frequency at which loan interest compounds.",
+        allowedValues: ["monthly", "yearly"],
+        enabledBy: 'interestType "compound"',
+        evidence: "export-shape",
+      },
+      monthlyPayment: {
+        description: "Scheduled monthly financing payment.",
+        units: DOLLARS,
+        enabledBy: 'paymentMethod "financed"',
+        evidence: "export-shape",
+      },
+      generateIncome: {
+        description: "When true, the property generates modeled rental income.",
+        evidence: "export-shape",
+      },
+      "yearlyChange.type": {
+        description: "How the asset's value moves each year.",
+        allowedValues: ["inflation+", "inflation-", "depreciate", "appreciate"],
+        evidence: "export-shape",
+      },
+      taxRate: {
+        description: "Annual property tax figure.",
+        note: "A dollar amount or a percentage of assessedValue, per taxRateType.",
+        evidence: "export-shape",
+      },
+      maintenanceRate: {
+        description: "Annual maintenance cost.",
+        note: "A dollar amount or a percentage of market value, per maintenanceRateType.",
+        evidence: "export-shape",
+      },
+      insuranceRate: {
+        description: "Annual insurance cost.",
+        note: "A dollar amount or a percentage of market value, per insuranceRateType.",
+        evidence: "export-shape",
+      },
+      monthlyHOA: {
+        description: "Monthly homeowners association dues.",
+        units: DOLLARS,
+        enabledBy: "generateIncome",
+        evidence: "export-shape",
+      },
+      "end.type": {
+        description: "Kind of the end reference: a fixed date, a keyword, or a milestone.",
+        allowedValues: ["date", "keyword", "milestone"],
+        evidence: "export-shape",
+        note: 'On a one-time event (frequency "once") the end reference is a leftover default: the UI hides it and the simulation ignores it, so it is not a user setting.',
+      },
+      repeat: {
+        description: "When true, the asset is re-acquired on a cadence.",
+        evidence: "export-shape",
+      },
+      sellIfNeeded: {
+        description: "When true, the asset is liquidated automatically if the portfolio depletes.",
         evidence: "export-shape",
       },
     },
@@ -1787,6 +1926,53 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "end.modifier": {
         description: "Optional offset modifier for the end timing.",
+        evidence: "export-shape",
+      },
+      // Entries carried from the ProjectionLab 4 registry for fields the
+      // ProjectionLab 5 export shows.
+      owner: {
+        description: "Which household member the event belongs to.",
+        allowedValues: ["me", "spouse", "joint"],
+        evidence: "export-shape",
+      },
+      estimateIncome: {
+        description:
+          "When true, the Social Security benefit is estimated from earnings history; when false, amount is entered manually.",
+        evidence: "export-shape",
+      },
+      primaryInsuranceAmount: {
+        description:
+          "Monthly benefit at full retirement age used by the automatic estimate.",
+        units: DOLLARS,
+        enabledBy: "estimateIncome",
+        evidence: "export-shape",
+      },
+      expectedPercent: {
+        description: "Share of the statutory benefit expected to be paid.",
+        units: PCT,
+        enabledBy: "estimateIncome",
+        note: "100 assumes full benefits; a lower figure models trust fund exhaustion.",
+        evidence: "export-shape",
+      },
+      "yearlyChange.type": {
+        description: "How the amount changes each year.",
+        allowedValues: [
+          "none",
+          "match-inflation",
+          "fixed-rate",
+          "fixed-amount",
+          "curve",
+        ],
+        evidence: "export-shape",
+      },
+      "yearlyChange.amount": {
+        description: "Magnitude of the yearly change.",
+        note: 'Percentage points when yearlyChange.type is "fixed-rate"; a dollar amount when it is "fixed-amount".',
+        evidence: "export-shape",
+      },
+      "yearlyChange.limit": {
+        description: "Cap applied when yearlyChange.limitEnabled is true.",
+        units: PCT,
         evidence: "export-shape",
       },
     },
@@ -1849,6 +2035,53 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         description: "Optional offset modifier for the end timing.",
         evidence: "export-shape",
       },
+      // Entries carried from the ProjectionLab 4 registry for fields the
+      // ProjectionLab 5 export shows.
+      owner: {
+        description: "Which household member the event belongs to.",
+        allowedValues: ["me", "spouse", "joint"],
+        evidence: "export-shape",
+      },
+      healthcareType: {
+        description: "How health insurance premiums are modeled.",
+        allowedValues: ["standard", "out-of-pocket", "aca", "employer"],
+        evidence: "export-shape",
+      },
+      taxDeductible: {
+        description: "When true, the expense reduces taxable income.",
+        evidence: "export-shape",
+      },
+      repeat: {
+        description: "When true, the event repeats on a cadence instead of occurring once.",
+        evidence: "export-shape",
+      },
+      "yearlyChange.type": {
+        description: "How the amount changes each year.",
+        allowedValues: [
+          "none",
+          "match-inflation",
+          "fixed-rate",
+          "fixed-amount",
+          "curve",
+        ],
+        evidence: "export-shape",
+      },
+      "yearlyChange.amount": {
+        description: "Magnitude of the yearly change.",
+        note: 'Percentage points when yearlyChange.type is "fixed-rate"; a dollar amount when it is "fixed-amount".',
+        evidence: "export-shape",
+      },
+      "yearlyChange.limit": {
+        description: "Cap applied when yearlyChange.limitEnabled is true.",
+        units: PCT,
+        evidence: "export-shape",
+      },
+      fundWithAccounts: {
+        description:
+          "Plan account event IDs prioritized to pay this expense, such as an HSA for health care or a 529 for education.",
+        evidence: "observed",
+        note: "Array of accounts.events[].id values in the same plan, not Current Finances account IDs.",
+      },
     },
   },
   {
@@ -1876,6 +2109,19 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       accountId: {
         description:
           "Identifier of the plan account event this priority routes cash to (an accounts.events[].id in the same plan), not a Current Finances account ID.",
+        evidence: "export-shape",
+      },
+      // Entries carried from the ProjectionLab 4 registry for fields the
+      // ProjectionLab 5 export shows.
+      desiredContribution: {
+        description: "How much the flow receives from surplus cash flow.",
+        allowedValues: ["max", "fixed"],
+        evidence: "export-shape",
+        note: '"max" routes all remaining surplus; "fixed" takes amount.',
+      },
+      amount: {
+        description: "Fixed contribution taken when desiredContribution is \"fixed\".",
+        units: DOLLARS,
         evidence: "export-shape",
       },
     },
@@ -2119,6 +2365,7 @@ export const UI_LABELS_V5: Readonly<
     spendingType: ["Spending Type", `${EXPENSE} > Flexibility`],
     healthcareType: ["Healthcare Type", `${EXPENSE} (health care)`],
     taxDeductible: ["Tax-Deductible", EXPENSE],
+    fundWithAccounts: ["Funding Source", `${EXPENSE} > Pay From`],
     repeat: ["Recurrence", `${EXPENSE} (More Options > Advanced Options on)`],
     ...changeOverTime(EXPENSE),
   },

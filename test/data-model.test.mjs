@@ -21,7 +21,7 @@ process.env.LOG_LEVEL = "error";
 const { registerDataModelResource } = await import(
   "../dist/resources/dataModel.js"
 );
-const { matchDataModelField } = await import("../dist/dataModel.js");
+const { matchDataModelField, UI_LABELS_V5 } = await import("../dist/dataModel.js");
 const { renderDataModelV5Markdown } = await import(
   "../dist/resources/dataModel.js"
 );
@@ -269,6 +269,20 @@ test("UI labels attach to matching fields in both export layouts", () => {
     matchDataModelField("currentFinances", "household.people.me.lifeExpectancy", "v5")?.uiLabel,
     "Life Expectancy",
   );
+});
+
+test("every UI_LABELS_V5 path resolves with its label against the v5 data model", () => {
+  for (const [scope, labels] of Object.entries(UI_LABELS_V5)) {
+    for (const [path, [label, location]] of Object.entries(labels)) {
+      const field = matchDataModelField(scope, path, "v5");
+      assert.ok(
+        field,
+        `UI_LABELS_V5.${scope}.${path} has no ProjectionLab 5 data model entry`,
+      );
+      assert.equal(field.uiLabel, label, `${scope}.${path} uiLabel`);
+      assert.equal(field.uiLocation, location, `${scope}.${path} uiLocation`);
+    }
+  }
 });
 
 test("listPaths for an event annotates the spending type and leaves unknown fields bare", async () => {

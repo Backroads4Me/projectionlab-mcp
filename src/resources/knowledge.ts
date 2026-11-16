@@ -276,9 +276,9 @@ When evaluating plan elements or answering user questions, anchor claims with ta
       with \`balance\` and \`costBasis\`), \`"debt"\` (liabilities with \`balance\` and optional \`securedByAssetId\`),
       or \`"real-asset"\` (physical property with \`value\` and \`purchasePrice\`).
     - Archived accounts carry an \`archivedOn\` ISO date string.
-    - Supported account types: ProjectionLab 5 supports Solo 401k, Roth Solo 401k, and SEP IRA account types,
-      but their export strings are not yet recorded. Observed type strings include \`"taxable"\`, \`"401k"\`,
-      \`"savings"\`, \`"land"\`, and \`"secured-loan"\`.
+    - Supported account types: the Solo 401k, Roth Solo 401k, and SEP IRA account types store as
+      \`"401k"\` or \`"roth-401k"\` with \`subtype: "solo"\`, and \`"ira"\` with \`subtype: "sep"\`.
+      Observed type strings include \`"taxable"\`, \`"401k"\`, \`"savings"\`, \`"land"\`, and \`"secured-loan"\`.
 - **documents.plans[]**: milestone-driven simulation plans.
   - Plans carry no \`active\` flag. \`settings.plan.activeId\` and \`settings.plan.baselineId\` are
     reported as stored; no plan is treated as the selected plan.

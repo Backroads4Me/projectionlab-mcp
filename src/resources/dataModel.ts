@@ -84,7 +84,7 @@ export function renderDataModelV5Markdown(): string {
       "Each account record carries a kind discriminator: account (with balance and costBasis), " +
       "debt (with balance and optional securedByAssetId), or real-asset (with value and purchasePrice). " +
       "Archived accounts carry an archivedOn ISO date string.",
-    "- ProjectionLab 5 supports Solo 401k, Roth Solo 401k, and SEP IRA account types, but their export strings are not yet recorded.",
+    "- The Solo 401k, Roth Solo 401k, and SEP IRA account types store as type \"401k\" or \"roth-401k\" with subtype \"solo\", and type \"ira\" with subtype \"sep\".",
     "- Plan events carry a kind discriminator: account, real-asset, income, expense, or priority. " +
       "Plan account events link to Current Finances accounts via accountId, and asset events link via assetId. " +
       "Event timing is defined by timing objects with type (date, milestone, keyword), value, and optional modifier.",

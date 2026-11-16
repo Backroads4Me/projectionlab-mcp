@@ -2,11 +2,12 @@
 //
 // A write carries the Plugin API version the server read before preparing it.
 // An executor whose hello lists the "expectApiVersion" feature is sent that
-// version in the frame and checks it in the same page turn as the call. An
-// executor without the feature cannot check, so it is trusted only on the
+// version in the frame and checks it in the same page turn as the call.
+// Every executor, with the feature or without, is sent the write only on the
 // socket the version was read from: a guarded write that would reach another
 // socket is refused with CONTRACT_CHANGED before any frame is sent, because
-// the new executor could be driving another ProjectionLab version.
+// the new executor could be driving another ProjectionLab version, and what
+// the server read before the write did not come from it.
 //
 // A public write takes the guard and sends the frame inside one uninterrupted
 // entry on the operation chain, so the two steps only ever straddle an
@@ -164,6 +165,39 @@ test("a guarded write is refused with CONTRACT_CHANGED once another executor hol
   try {
     assert.deepEqual(second.requests, [], "the second executor was sent a frame");
     assert.equal(writeFrame(first), undefined, "the first executor was sent the write either");
+  } finally {
+    second?.ws.close();
+    await second?.closed;
+  }
+});
+
+test("a guarded write is refused when another executor with the feature takes the connection", async () => {
+  const first = connectExecutor({ executor: "fake-first/1.0", features: ["expectApiVersion"] });
+  await first.ready;
+
+  let second;
+  const write = bridge.serialize(async () => {
+    const guard = await bridge.assertWriteSupported("updateAccount", "v5");
+
+    // Another browser on the same ProjectionLab version takes over between
+    // the version check and the write. Its page would pass the version
+    // check, but nothing read before the write came from it.
+    first.ws.close();
+    await first.closed;
+    second = connectExecutor({ executor: "fake-second/1.0", features: ["expectApiVersion"] });
+    await second.ready;
+
+    await bridge.request("updateAccount", WRITE_PARAMS, undefined, guard);
+  });
+
+  await assert.rejects(write, (err) => {
+    assert.equal(err.code, "CONTRACT_CHANGED", JSON.stringify(err));
+    assert.match(err.message, /browser executor changed after the Plugin API version was checked/);
+    return true;
+  });
+  try {
+    assert.deepEqual(second.requests, [], "the second executor was sent a frame");
+    assert.equal(writeFrame(first), undefined, "the first executor was sent the write");
   } finally {
     second?.ws.close();
     await second?.closed;

@@ -281,6 +281,19 @@ function enumRefusalForValue(
 }
 
 /**
+ * Refusal for a field a write adds, where the container holds nothing at
+ * `path` yet: every leaf of the new value counts as changed, arrays included.
+ */
+export function enumRefusalForNewValue(
+  scope: string,
+  path: string,
+  value: unknown,
+  layout: ExportLayout,
+): ProjectionLabError | undefined {
+  return enumRefusalForValue(scope, path, value, ABSENT, layout);
+}
+
+/**
  * Whether writing `value` at `path` of `data` would change anything, compared
  * by value rather than by JSON text. A patch leaf that already holds this
  * value is not a write of that value, so the observed enums do not apply to

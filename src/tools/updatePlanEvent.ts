@@ -3,11 +3,16 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { requireEditsEnabled } from "../editAccess.js";
-import { ProjectionLabError, errorResult } from "../errors.js";
+import {
+  ProjectionLabError,
+  errorResult,
+  redactedSecretsError,
+} from "../errors.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
   applyExistingPathChanges,
+  enumRefusalForNewValue,
   listAddressableValues,
   pathValueUnchanged,
   findPathChangeMismatches,
@@ -15,7 +20,11 @@ import {
   type PathValueChange,
 } from "../pathPatch.js";
 import { enumRefusalError } from "../dataModel.js";
-import { isSecretFieldName, redactSecrets } from "../redact.js";
+import {
+  findRedactedSecretPaths,
+  isSecretFieldName,
+  redactSecrets,
+} from "../redact.js";
 import {
   eventLabel,
   resolveEventIndex,
@@ -93,6 +102,8 @@ function applyEventPatch(
         "New top-level fields must be plain, non-secret names; use pathChanges to change existing nested values",
       );
     }
+    const refusal = enumRefusalForNewValue(section, key, value, layout);
+    if (refusal) throw refusal;
     additions[key] = value;
   }
 
@@ -215,6 +226,14 @@ export function registerUpdatePlanEventTool(
             "Supply exactly one of patch or pathChanges",
             "Use patch for top-level fields or pathChanges for nested dot paths",
           );
+        }
+
+        // A whole-object value can carry a secret-named key a read returned
+        // as [REDACTED]; storing it would replace the real value.
+        const inputName = pathChanges !== undefined ? "pathChanges" : "patch";
+        const redactedPaths = findRedactedSecretPaths(pathChanges ?? patch);
+        if (redactedPaths.length > 0) {
+          throw redactedSecretsError(inputName, redactedPaths);
         }
 
         await assertWritesSupported(bridge, ["restorePlans"]);

@@ -25,6 +25,34 @@ test("planChanges reports saved, removed and added plans", () => {
   assert.deepEqual(planChanges(read, read), []);
 });
 
+test("planChanges compares content for a plan that carries no lastUpdated stamp", () => {
+  const bare = (id, extra = {}) => ({ id, name: id, ...extra });
+  const read = [bare("a", { variables: { inflation: 3 }, simKey: 1, meta: { runKey: 1 } })];
+
+  // The same content, with only computed fields different, is no change.
+  assert.deepEqual(
+    planChanges(read, [bare("a", { variables: { inflation: 3 }, simKey: 2, meta: { runKey: 9 } })]),
+    [],
+  );
+  // A changed value, a removed key and an added key each count.
+  assert.deepEqual(planChanges(read, [bare("a", { variables: { inflation: 4 } })]), [
+    "plan a was changed",
+  ]);
+  assert.deepEqual(planChanges(read, [bare("a", { variables: {} })]), ["plan a was changed"]);
+  assert.deepEqual(
+    planChanges(read, [bare("a", { variables: { inflation: 3, extra: true } })]),
+    ["plan a was changed"],
+  );
+  // A stamp that appears or disappears is a save.
+  assert.deepEqual(planChanges(read, [{ ...read[0], lastUpdated: 5 }]), ["plan a was saved"]);
+  assert.deepEqual(planChanges([{ ...read[0], lastUpdated: 5 }], read), ["plan a was saved"]);
+});
+
+test("planChanges trusts an unmoved stamp over content", () => {
+  // A plan that carries a stamp on both reads is compared by the stamp alone.
+  assert.deepEqual(planChanges([plan("a", 1, { x: 1 })], [plan("a", 1, { x: 2 })]), []);
+});
+
 test("assertPlansUnchanged refuses when a plan was saved after the read", async () => {
   const read = [plan("a", 1)];
   const bridge = (plans) => ({ exportData: async () => ({ plans }) });

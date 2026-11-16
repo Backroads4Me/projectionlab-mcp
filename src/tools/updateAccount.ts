@@ -9,17 +9,26 @@ import {
   findV5Account,
   requireCurrentFinances,
 } from "../currentFinances.js";
-import { ProjectionLabError, errorResult } from "../errors.js";
+import {
+  ProjectionLabError,
+  errorResult,
+  redactedSecretsError,
+} from "../errors.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
   applyExistingPathChanges,
+  enumRefusalForNewValue,
   findPathChangeMismatches,
   type PathChangeMismatch,
   type PathValueChange,
 } from "../pathPatch.js";
 import type { PlanObj } from "../plans.js";
-import { isSecretFieldName, redactSecrets } from "../redact.js";
+import {
+  findRedactedSecretPaths,
+  isSecretFieldName,
+  redactSecrets,
+} from "../redact.js";
 import { exportSections, type ExportLayout } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
@@ -133,6 +142,8 @@ function applyAccountChanges(
         "force=true only permits safe top-level properties",
       );
     }
+    const refusal = enumRefusalForNewValue(scope, key, value, layout);
+    if (refusal) throw refusal;
     additions[key] = value;
   }
 
@@ -236,6 +247,14 @@ export function registerUpdateAccountTool(
             "force=true is only valid with the top-level data patch",
             "Nested pathChanges must address existing fields",
           );
+        }
+
+        // A whole-object value can carry a secret-named key a read returned
+        // as [REDACTED]; storing it would replace the real value.
+        const inputName = pathChanges !== undefined ? "pathChanges" : "data";
+        const redactedPaths = findRedactedSecretPaths(pathChanges ?? data);
+        if (redactedPaths.length > 0) {
+          throw redactedSecretsError(inputName, redactedPaths);
         }
 
         await assertWritesSupported(bridge, ["updateAccount"]);

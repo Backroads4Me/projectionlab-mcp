@@ -12,7 +12,6 @@ import { v5Export } from "./fixtures/v5-export.mjs";
 import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 const SNAPSHOT_DIR = join(mkdtempSync(join(tmpdir(), "plmcp-v5-layout-")), "snapshots");
 process.env.PL_SNAPSHOT_DIR = SNAPSHOT_DIR;
 process.env.LOG_LEVEL = "error";
@@ -112,6 +111,7 @@ function fakeServer() {
 function fakeBridge(data) {
   const bridge = {
     writes: [],
+    async editAccess() { return "enabled"; },
     async apiContract() { return contractOf(data); },
     async exportData() {
       return structuredClone(data);

@@ -39,7 +39,7 @@ Prefer to set it up yourself? See **[Manual setup](https://github.com/Backroads4
 
 ## Safety
 
-- **Read-only by default.** The assistant can read your plan but not change it until you set `PL_READ_ONLY=false`.
+- **Read-only by default.** The assistant can read your plan but not change it until you turn on **Enable agent plan edits** in the browser extension's options. Turning it off stops changes at once.
 - **Preview before saving.** Every change is a preview until the assistant explicitly confirms it, and the assistant is instructed to show you the preview and ask first.
 - **Undo.** Every confirmed change is backed up first, so it can be rolled back.
 - **No overwriting your edits.** If a plan was saved in ProjectionLab after the assistant read it, the change is refused rather than overwriting your edit.

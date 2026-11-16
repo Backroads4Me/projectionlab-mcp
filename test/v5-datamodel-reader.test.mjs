@@ -51,6 +51,9 @@ function fakeBridge(contract = 1, state = undefined) {
     knownApiContract() {
       return contract;
     },
+    async editAccess() {
+      return "enabled";
+    },
     async apiContract() {
       throw new Error("resources must not query the page");
     },
@@ -359,6 +362,9 @@ test("resource handlers render v4 before any contract is known and never query t
   const unknownBridge = {
     knownApiContract() {
       return undefined;
+    },
+    async editAccess() {
+      return "enabled";
     },
     async apiContract() {
       throw new Error("resources must not query the page");

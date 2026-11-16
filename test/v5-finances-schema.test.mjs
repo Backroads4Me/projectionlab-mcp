@@ -6,7 +6,6 @@ import test from "node:test";
 import { v5Export } from "./fixtures/v5-export.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "true";
 process.env.LOG_LEVEL = "error";
 
 const { registerSchemaTool } = await import("../dist/tools/schema.js");

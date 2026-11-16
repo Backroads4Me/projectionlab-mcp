@@ -3,8 +3,9 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { buildBootstrapSnippet } from "./bootstrap.js";
-import type { Bridge, ConnectionStatus } from "./bridge.js";
+import type { Bridge, ConnectionStatus, EditAccess } from "./bridge.js";
 import { config, USER_ENV_FILE } from "./config.js";
+import { editsDisabledError } from "./editAccess.js";
 import { ProjectionLabError } from "./errors.js";
 import {
   contractFromVersion,
@@ -26,6 +27,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   MIN_EXTENSION_VERSION,
   PROTOCOL_VERSION,
+  READ_METHODS,
   type ClientFrame,
   type RequestFrame,
   type ResponseFrame,
@@ -159,6 +161,7 @@ export class ExtensionBridge implements Bridge {
   private connGuardsApiVersion = false;
   /** The contract from the last successful contract read (knownApiContract). */
   private lastContract: ApiContract | undefined;
+  private connEditAccess: EditAccess = "unsupported";
   private readonly pending = new Map<string, Pending>();
   private nextId = 1;
   private heartbeat: NodeJS.Timeout | null = null;
@@ -367,7 +370,13 @@ export class ExtensionBridge implements Bridge {
           : "";
       const guardsApiVersion =
         Array.isArray(hello.features) && hello.features.includes("expectApiVersion");
-      this.admit(ws, hello.executor, instanceId, hello.takeover === true, guardsApiVersion);
+      const editAccess: EditAccess =
+        typeof hello.allowEdits === "boolean"
+          ? hello.allowEdits
+            ? "enabled"
+            : "disabled"
+          : "unsupported";
+      this.admit(ws, hello.executor, instanceId, hello.takeover === true, guardsApiVersion, editAccess);
     });
   }
 
@@ -385,15 +394,16 @@ export class ExtensionBridge implements Bridge {
     instanceId: string,
     takeover: boolean,
     guardsApiVersion: boolean,
+    editAccess: EditAccess,
   ): void {
     const incumbent = this.conn;
     if (!incumbent || incumbent.readyState !== WebSocket.OPEN) {
       if (incumbent) this.dropConnection("dropping a dead executor connection");
-      this.adopt(ws, executor, instanceId, guardsApiVersion);
+      this.adopt(ws, executor, instanceId, guardsApiVersion, editAccess);
       return;
     }
     if (takeover || (instanceId !== "" && instanceId === this.connInstanceId)) {
-      this.adopt(ws, executor, instanceId, guardsApiVersion);
+      this.adopt(ws, executor, instanceId, guardsApiVersion, editAccess);
       return;
     }
     log.info(
@@ -410,6 +420,7 @@ export class ExtensionBridge implements Bridge {
     executor: string,
     instanceId: string,
     guardsApiVersion: boolean,
+    editAccess: EditAccess,
   ): void {
     if (this.conn && this.conn !== ws) {
       log.info("extension", `Replacing ${this.connExecutor} with ${executor}`);
@@ -427,7 +438,8 @@ export class ExtensionBridge implements Bridge {
     this.connExecutor = executor;
     this.connInstanceId = instanceId;
     this.connGuardsApiVersion = guardsApiVersion;
-    log.info("extension", `Executor connected: ${executor}`);
+    this.connEditAccess = editAccess;
+    log.info("extension", `Executor connected: ${executor} (plan edits ${editAccess})`);
     ws.send(
       JSON.stringify({
         type: "helloAck",
@@ -617,6 +629,13 @@ export class ExtensionBridge implements Bridge {
       this.settle(frame);
       return;
     }
+    if (frame.type === "settings" && typeof frame.allowEdits === "boolean") {
+      const access: EditAccess = frame.allowEdits ? "enabled" : "disabled";
+      if (access !== this.connEditAccess) {
+        log.info("extension", `Plan edits ${access} by ${this.connExecutor}`);
+      }
+      this.connEditAccess = access;
+    }
   }
 
   private settle(frame: ResponseFrame): void {
@@ -663,6 +682,11 @@ export class ExtensionBridge implements Bridge {
         );
       case "CONTRACT_CHANGED":
         return contractChangedError(message);
+      case "EDITS_DISABLED":
+        // The browser refused the write; the switch was turned off before
+        // the settings frame saying so arrived.
+        this.connEditAccess = "disabled";
+        return editsDisabledError("disabled");
       default:
         return new ProjectionLabError(
           "UNKNOWN",
@@ -718,6 +742,7 @@ export class ExtensionBridge implements Bridge {
     this.connExecutor = "";
     this.connInstanceId = "";
     this.connGuardsApiVersion = false;
+    this.connEditAccess = "unsupported";
     this.awaitingPong = false;
     this.exportCache = null;
     if (this.heartbeat) {
@@ -796,6 +821,11 @@ export class ExtensionBridge implements Bridge {
     guard?: WriteGuard,
   ): Promise<unknown> {
     const conn = await this.executorSocket();
+    // Every write passes here, inside the operation chain, so no tool can
+    // send one to an executor whose edits are not enabled.
+    if (!READ_METHODS.includes(method) && this.connEditAccess !== "enabled") {
+      throw editsDisabledError(this.connEditAccess);
+    }
     const id = String(this.nextId++);
     const frame: RequestFrame = { type: "request", id, method, params };
     if (guard) {
@@ -839,6 +869,7 @@ export class ExtensionBridge implements Bridge {
       apiAvailable: false,
       apiKeyValid: false,
       errors: [],
+      writesEnabled: false,
     };
     return this.serialize(async () => {
       if (!config.apiKey) {
@@ -857,6 +888,7 @@ export class ExtensionBridge implements Bridge {
       }
       result.browser = true;
       result.executor = this.connExecutor || undefined;
+      result.writesEnabled = this.connEditAccess === "enabled";
       try {
         await this.request(
           "waitForApi",
@@ -956,6 +988,13 @@ export class ExtensionBridge implements Bridge {
     const live = layoutForContract(contract);
     if (live !== layout) throw layoutChangedError(layout, live);
     return { apiVersion, socket };
+  }
+
+  async editAccess(): Promise<EditAccess> {
+    return this.serialize(async () => {
+      await this.executorSocket();
+      return this.connEditAccess;
+    });
   }
 
   async describePluginApi(): Promise<Record<string, string>> {

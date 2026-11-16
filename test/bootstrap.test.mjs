@@ -79,22 +79,22 @@ test("bootstrap snippet acts as a full executor", async () => {
   const data = await bridge.exportData({ fresh: true });
   assert.deepEqual(data.plans, []);
 
-  await bridge.updateAccount("acct-1", { balance: 42 }, true, "v4");
-  // JSON round-trip: the snippet parses frames inside the vm realm, so its
-  // objects have a foreign prototype that deepEqual would reject.
-  assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), [
-    "updateAccount",
-    "acct-1",
-    { balance: 42 },
-    { key: "test-api-key", force: "true" },
-  ]);
+  // The snippet has no plan-edits switch, so it only reads: the bridge
+  // refuses the write before sending it, and the page never sees it.
+  assert.equal(status.writesEnabled, false);
+  assert.equal(await bridge.editAccess(), "unsupported");
+  await assert.rejects(bridge.updateAccount("acct-1", { balance: 42 }, true, "v4"), {
+    code: "READ_ONLY_MODE",
+    message: /no plan-edits switch/,
+  });
+  assert.deepEqual(calls, []);
 
   // A ProjectionLab 5 page reports api.version 2, and restoreProgress, which
   // ProjectionLab 5 removed, is refused before it reaches the API.
   pluginApi.version = 2;
   assert.equal(await bridge.apiContract(), 2);
   await assert.rejects(bridge.restoreProgress({}, "v5"), (err) => err.code === "WRITE_NOT_SUPPORTED");
-  assert.equal(calls.length, 1);
+  assert.deepEqual(calls, []);
   delete pluginApi.version;
 
   // Second install in the same tab is a no-op

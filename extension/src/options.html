@@ -20,6 +20,7 @@ button[type=submit]{margin-top:1.25rem;background:var(--link);border-color:var(-
 .early-access{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border)}
 h2{font-size:1.1rem;margin:0 0 .25rem}
 #eaStatus{margin:.5rem 0}
+#editsState:empty{display:none}
 code{font-size:.9em}a{color:var(--link)}
 footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--muted);font-size:.9rem}
 footer a{margin-right:1rem}
@@ -34,6 +35,13 @@ footer a{margin-right:1rem}
   <p id="error"></p>
   <p id="update"></p>
 </div>
+
+<section class="panel" aria-labelledby="editsHeading">
+  <h2 id="editsHeading">Plan edits</h2>
+  <label class="check"><input id="allowEdits" type="checkbox"> <span>Enable agent plan edits</span></label>
+  <p class="help">Off: your AI assistant can read your ProjectionLab data but cannot change it. On: it can change your plans, but only after you approve each change; every change is backed up first and can be undone. Takes effect at once, without Save or a restart.</p>
+  <p id="editsState" class="help" role="status"></p>
+</section>
 
 <form id="settings">
   <label for="port">Local port</label>

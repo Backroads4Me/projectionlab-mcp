@@ -8,7 +8,6 @@ import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 process.env.HOME = mkdtempSync(join(tmpdir(), "plmcp-diff-home-"));
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-diff-large-")),
@@ -63,6 +62,9 @@ test("a diff over the inline limit is spilled to a file with its summary", async
   changed.income.events.push(...added);
 
   const bridge = {
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       return { plans: [changed], today: {} };
     },

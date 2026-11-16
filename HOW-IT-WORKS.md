@@ -29,7 +29,7 @@ Manifest V3, in `extension/`. A background service worker owns the WebSocket, re
 
 ### The bootstrap snippet
 
-`src/bootstrap.ts` generates a self-contained snippet (returned by the `projectionlab_get_bootstrap` tool) that plays the same executor role from the page's console, with the same protocol and methods. It's the zero-install path and a handy debugging harness, but it lives only until the tab reloads.
+`src/bootstrap.ts` generates a self-contained snippet (returned by the `projectionlab_get_bootstrap` tool) that plays the same executor role from the page's console, with the same protocol and methods. It's the zero-install path and a handy debugging harness, but it lives only until the tab reloads, and it can only read: it has no plan-edits switch.
 
 ## 3. Step-by-Step Execution Lifecycle
 
@@ -64,5 +64,5 @@ The Plugin API provides a targeted `updateAccount` operation for Current Finance
 - The Plugin API key is read only from the MCP host's `env` block, `~/.projectionlab-mcp/.env`, or a development `.env` (gitignored). It is never logged. It stays in the server process and is passed to the page only as an argument to Plugin API calls; the extension does not persist it.
 - The WebSocket binds to `127.0.0.1` only, accepts only the ProjectionLab app and browser-extension origins, and requires a shared token (`PL_WS_TOKEN`, or auto-generated at `~/.projectionlab-mcp/ws-token` with owner-only permissions), so neither other local processes nor arbitrary web pages can drive your data. Native clients without an `Origin` header still need the token.
 - Snapshots scrub the literal Plugin API key while preserving restore data. Exports, plan reads, and the `plan-data` resource additionally redact secret-named fields before they are returned or written to disk.
-- Read-only mode (the default; any `PL_READ_ONLY` other than `false`) rejects mutation tools before they read, snapshot, or write plan data.
+- Writes are off unless the extension's **Enable agent plan edits** switch is on (options page, off by default). The switch is enforced in the browser, where an agent with access to the computer's files cannot change it: the extension refuses every wire method other than `exportData`, `validateApiKey`, `describeApi`, and `waitForApi` while it is off, reading the switch from extension storage for each request. The extension also reports the switch to the server (`allowEdits` in its hello, then a `settings` frame on every change), and the server refuses mutation tools before they read, snapshot, or write plan data unless the connected executor reports it on. An executor that does not report it, such as the bootstrap snippet, can only read.
 - The published npm package ships only `dist/`, the agent skill, and docs (the `files` allowlist in `package.json`), so source and `.env` files are never distributed.

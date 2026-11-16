@@ -11,7 +11,6 @@ import { join } from "node:path";
 import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-ambiguity-")),
   "snapshots",
@@ -122,6 +121,9 @@ function registered() {
   const bridge = {
     writes: [],
     async apiContract() { return contractOf(state); },
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       return structuredClone(state);
     },

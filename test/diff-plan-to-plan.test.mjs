@@ -12,7 +12,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 const SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-diffplans-")),
   "snapshots",
@@ -38,6 +37,9 @@ function fakeBridge(state) {
   const bridge = {
     state,
     exportCalls: 0,
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       bridge.exportCalls++;
       return structuredClone(bridge.state);

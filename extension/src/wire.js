@@ -99,13 +99,43 @@ export const EXECUTOR_FEATURES = ["expectApiVersion"];
 
 /**
  * The hello frame. instanceId and takeover are omitted when absent or not
- * exactly true. features is always sent; servers that predate it ignore it.
+ * exactly true. features and allowEdits are always sent; servers that predate
+ * them ignore them. allowEdits is the "Enable agent plan edits" switch, and a
+ * server treats an absent field as an executor without the switch.
  */
-export function buildHelloFrame({ token, protocolVersion, executor, instanceId, takeover }) {
-  const frame = { type: "hello", token, protocolVersion, executor, features: [...EXECUTOR_FEATURES] };
+export function buildHelloFrame({ token, protocolVersion, executor, instanceId, takeover, allowEdits }) {
+  const frame = { type: "hello", token, protocolVersion, executor, features: [...EXECUTOR_FEATURES], allowEdits: allowEdits === true };
   if (typeof instanceId === "string" && instanceId) frame.instanceId = instanceId;
   if (takeover === true) frame.takeover = true;
   return frame;
+}
+
+/** The frame that reports a change of the switch on an open connection. */
+export function buildSettingsFrame(allowEdits) {
+  return { type: "settings", allowEdits: allowEdits === true };
+}
+
+/**
+ * Wire methods that only read (src/types/wire.ts WireMethod). Every other
+ * method counts as a write, so a method added to the protocol is refused
+ * while the switch is off until it is listed here.
+ */
+export const READ_METHODS = Object.freeze(["exportData", "getAccounts", "validateApiKey", "describeApi", "waitForApi", "apiVersion"]);
+
+export function isWriteMethod(method) {
+  return !READ_METHODS.includes(method);
+}
+
+/**
+ * The error a request gets while "Enable agent plan edits" is off, or null
+ * when it may run. Only exactly true counts as on.
+ */
+export function editRefusal(method, allowEdits) {
+  if (!isWriteMethod(method) || allowEdits === true) return null;
+  return {
+    code: "EDITS_DISABLED",
+    message: "Agent plan edits are turned off in the MCP Bridge for ProjectionLab extension options.",
+  };
 }
 
 /**

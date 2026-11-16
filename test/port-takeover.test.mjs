@@ -55,7 +55,7 @@ function reconnectingExecutor({ reconnectMs = 300, hang = false, plans, response
     const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
     socket = ws;
     ws.on("open", () =>
-      ws.send(JSON.stringify({ type: "hello", token: TOKEN, protocolVersion: PROTOCOL_VERSION, executor: "fake/1.0" })),
+      ws.send(JSON.stringify({ type: "hello", token: TOKEN, protocolVersion: PROTOCOL_VERSION, executor: "fake/1.0", allowEdits: true })),
     );
     ws.on("message", async (raw) => {
       const frame = JSON.parse(String(raw));

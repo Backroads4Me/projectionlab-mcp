@@ -283,7 +283,7 @@ export function registerDiffTool(
       title: "Diff Snapshots Over Time, or Two Plans Against Each Other",
       description:
         "Reports field-level differences, read-only: it never writes and never " +
-        "snapshots, so it works with PL_READ_ONLY=true. Two modes, told apart by the " +
+        "snapshots, so it works while plan edits are turned off. Two modes, told apart by the " +
         "arguments you supply. " +
         "Points in time: from is required and names a saved snapshot with exactly " +
         "one of snapshotId, nBack or beforeTime, resolved the way " +

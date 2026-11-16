@@ -2,9 +2,9 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
-import { config } from "../config.js";
+import { requireEditsEnabled } from "../editAccess.js";
 import { selectPlanForDeletion, verifyPlanDeletion, withoutPlan } from "../deletePlan.js";
-import { ProjectionLabError, errorResult } from "../errors.js";
+import { errorResult } from "../errors.js";
 import { log } from "../logger.js";
 import { toJson } from "../json.js";
 import { getEvents, requirePlans, type PlanObj } from "../plans.js";
@@ -51,13 +51,7 @@ export function registerDeletePlanTool(
     },
     async ({ planId, confirm }) => {
       try {
-        if (config.readOnly) {
-          throw new ProjectionLabError(
-            "READ_ONLY_MODE",
-            "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
-            "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
-          );
-        }
+        await requireEditsEnabled(bridge);
 
         await assertWritesSupported(bridge, ["restorePlans"]);
         const data = await bridge.exportData({ fresh: true });

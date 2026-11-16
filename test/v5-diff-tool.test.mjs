@@ -13,7 +13,6 @@ import { join } from "node:path";
 import { v5Export } from "./fixtures/v5-export.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 const SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-v5-diff-")),
   "snapshots",

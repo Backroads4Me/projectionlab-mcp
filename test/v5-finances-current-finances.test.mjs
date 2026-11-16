@@ -10,7 +10,6 @@ import test from "node:test";
 import { v5Export } from "./fixtures/v5-export.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "true";
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-v5-finances-")),
   "snapshots",

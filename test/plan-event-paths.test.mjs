@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-event-paths-")),
   "snapshots",
@@ -64,6 +63,9 @@ test("get plan section lists typed paths for one event", async () => {
   const server = fakeServer();
   const bridge = {
     async apiContract() { return contractOf(initialState()); },
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       return initialState();
     },
@@ -96,6 +98,9 @@ test("event path changes preserve nested siblings, snapshot, and verify", async 
   const actions = [];
   const bridge = {
     async apiContract() { return contractOf(state); },
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       return state;
     },
@@ -180,6 +185,9 @@ test("event update requires exactly one patch mode before reading", async () => 
     async apiContract() {
       bridgeCalled = true;
       return contractOf(initialState());
+    },
+    async editAccess() {
+      return "enabled";
     },
     async exportData() {
       bridgeCalled = true;

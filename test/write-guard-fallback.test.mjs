@@ -61,7 +61,7 @@ function connectExecutor({ executor, features } = {}) {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   const closed = new Promise((resolve) => ws.on("close", (code) => resolve(code)));
   ws.on("open", () => {
-    const hello = { type: "hello", token: TOKEN, protocolVersion: PROTOCOL_VERSION, executor };
+    const hello = { type: "hello", token: TOKEN, protocolVersion: PROTOCOL_VERSION, executor, allowEdits: true };
     if (features) hello.features = [...features];
     ws.send(JSON.stringify(hello));
   });

@@ -15,7 +15,7 @@ import {
   requirePlans,
   type PlanObj,
 } from "../plans.js";
-import { detectLayout } from "../layout.js";
+import { detectLayout, exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 export function registerClonePlanTool(
@@ -122,11 +122,11 @@ export function registerClonePlanTool(
         await bridge.restorePlansIfUnchanged(plans, [...plans, clone], detectLayout(data));
 
         const verifyData = await bridge.exportData({ fresh: true });
-        const after = Array.isArray(verifyData.plans) ? verifyData.plans : [];
+        const after = exportSections(verifyData).plans;
         const planProblems = verifyPlanClone(plans, after, clone);
         const financeProblems = currentFinancesProblems(
-          data.today,
-          verifyData.today,
+          exportSections(data).currentFinances,
+          exportSections(verifyData).currentFinances,
         );
         const problems = [...planProblems, ...financeProblems];
         const verified = problems.length === 0;

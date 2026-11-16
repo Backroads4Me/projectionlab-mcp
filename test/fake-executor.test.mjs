@@ -331,15 +331,13 @@ test("checkConnection reports contract 2 on a ProjectionLab 5 page", async () =>
   await exec.done;
 });
 
-test("every write is refused on contract 2 before anything is sent", async () => {
+test("writes outside CONTRACT_2_WRITES are refused on contract 2 before anything is sent", async () => {
   const seen = [];
   const exec = connectExecutor({ handler: v5Handler(seen) });
   await exec.ready;
   const writes = [
     () => bridge.updateAccount("a", { balance: 1 }, undefined, "v5"),
     () => bridge.restoreCurrentFinances({}, "v5"),
-    () => bridge.restorePlans([], "v5"),
-    () => bridge.restorePlansIfUnchanged([], [], "v5"),
     () => bridge.restoreProgress({}, "v5"),
     () => bridge.restoreSettings({}, "v5"),
   ];
@@ -349,9 +347,20 @@ test("every write is refused on contract 2 before anything is sent", async () =>
       return true;
     });
   }
-  const writeMethods = ["updateAccount", "updateAccountValues", "restoreCurrentFinances", "restorePlans", "restoreProgress", "restoreSettings"];
-  assert.deepEqual(seen.filter((m) => writeMethods.includes(m)), []);
   assert.deepEqual(seen.filter((m) => m !== "apiVersion"), []);
+  exec.ws.close();
+  await exec.done;
+});
+
+test("plan writes reach a contract 2 page", async () => {
+  const seen = [];
+  const exec = connectExecutor({ handler: v5Handler(seen) });
+  await exec.ready;
+  await bridge.restorePlans([], "v5");
+  await bridge.restorePlansIfUnchanged([], [], "v5");
+  assert.deepEqual(seen.filter((m) => m === "restorePlans"), ["restorePlans", "restorePlans"]);
+  // A plan write prepared from ProjectionLab 4 data is still refused.
+  await assert.rejects(bridge.restorePlans([], "v4"), (err) => err.code === "CONTRACT_CHANGED");
   exec.ws.close();
   await exec.done;
 });

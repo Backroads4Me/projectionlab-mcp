@@ -1,6 +1,8 @@
-// Every write tool on a ProjectionLab 5 account (Plugin API contract 2)
-// refuses with WRITE_NOT_SUPPORTED while CONTRACT_2_WRITES is empty, dry
-// run included, before it previews, snapshots, or writes anything.
+// On a ProjectionLab 5 account (Plugin API contract 2), every write tool
+// whose methods are not in CONTRACT_2_WRITES refuses with
+// WRITE_NOT_SUPPORTED, dry run included, before it previews, snapshots, or
+// writes anything. Plan writes are allowed; test/v5-plan-writes.test.mjs
+// covers them.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -100,20 +102,14 @@ function register(bridge, snapshots) {
 
 const calls = {
   projectionlab_update_account: { accountId: "a1", data: { balance: 1 } },
-  projectionlab_update_plan_settings: { planIdentifier: "p1", section: "variables", changes: { x: 1 } },
-  projectionlab_update_plan_section: { planIdentifier: "p1", section: "milestones", sectionData: [] },
-  projectionlab_clone_plan: { planIdentifier: "p1", newName: "Copy" },
-  projectionlab_delete_plan: { planId: "p1" },
-  projectionlab_update_plan_event: { planIdentifier: "p1", section: "income", eventIdentifier: "e1", patch: { name: "x" } },
   projectionlab_restore_current_finances: { currentFinances: {} },
-  projectionlab_restore_plans: { plans: [] },
   projectionlab_restore_progress: { progress: {} },
   projectionlab_restore_settings: { settings: {} },
   projectionlab_rollback: { snapshotId: "snap-v5" },
 };
 
-test("CONTRACT_2_WRITES is empty, so every tool below must refuse", () => {
-  assert.equal(CONTRACT_2_WRITES.size, 0);
+test("CONTRACT_2_WRITES allows plan writes only, so every tool below must refuse", () => {
+  assert.deepEqual([...CONTRACT_2_WRITES], ["restorePlans"]);
 });
 
 for (const confirm of [false, true]) {

@@ -253,11 +253,16 @@ both layouts; these differences show through:
   follow the layout the last connection check found. Read
   `projectionlab://data-model?layout=v4` or `?layout=v5` (the same for
   `knowledge`) to pick one explicitly.
-- **Writes are not supported yet.** Every write tool, dry runs and
-  `projectionlab_rollback` included, is refused with `WRITE_NOT_SUPPORTED`
-  before it previews or snapshots anything. Tell the user plainly that this
-  server cannot change ProjectionLab 5 data yet, and help them make the change
-  in the ProjectionLab app instead (which item, which field, the new value).
+- **Plan writes work; the others do not yet.** The plan tools
+  (`projectionlab_update_plan_event`, `projectionlab_update_plan_section`,
+  `projectionlab_update_plan_settings`, `projectionlab_clone_plan`,
+  `projectionlab_delete_plan`, `projectionlab_restore_plans`) and a rollback
+  of a plans-only snapshot behave as on ProjectionLab 4. Every other write
+  tool, dry runs included, is refused with `WRITE_NOT_SUPPORTED` before it
+  previews or snapshots anything. For those, tell the user plainly that this
+  server cannot make that change on ProjectionLab 5 yet, and help them make
+  it in the ProjectionLab app instead (which item, which field, the new
+  value).
 - **Old snapshots.** A snapshot taken on ProjectionLab 4 cannot be compared
   with or restored onto ProjectionLab 5 data: `projectionlab_diff` and
   `projectionlab_rollback` refuse it with `LAYOUT_MISMATCH`. A ProjectionLab 4
@@ -421,7 +426,8 @@ Change progress:
 - **`INVALID_INPUT`** usually means an unknown path or a changed JSON type.
   List the paths again and correct the call.
 - **`WRITE_NOT_SUPPORTED`** means the account is on ProjectionLab 5, where
-  this server does not write yet (see "ProjectionLab 5"). Nothing was written;
+  this server does not make that kind of change yet (see "ProjectionLab 5").
+  Nothing was written;
   help the user make the change in the app.
 - **`CONTRACT_CHANGED`** means the ProjectionLab page changed between the
   server's version check and the write (for example, a tab on the other

@@ -18,7 +18,7 @@ import {
   requirePlans,
   type PlanObj,
 } from "../plans.js";
-import { detectLayout } from "../layout.js";
+import { detectLayout, exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 export function registerUpdatePlanSettingsTool(
@@ -143,7 +143,7 @@ export function registerUpdatePlanSettingsTool(
 
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (
-          Array.isArray(verifyData.plans) ? verifyData.plans : []
+          exportSections(verifyData).plans
         ).find(
           (item) =>
             item &&

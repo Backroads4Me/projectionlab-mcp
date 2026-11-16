@@ -8,7 +8,7 @@ import { ProjectionLabError, errorResult } from "../errors.js";
 import { log } from "../logger.js";
 import { toJson } from "../json.js";
 import { getEvents, requirePlans, type PlanObj } from "../plans.js";
-import { detectLayout } from "../layout.js";
+import { detectLayout, exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 export function registerDeletePlanTool(
@@ -100,7 +100,7 @@ export function registerDeletePlanTool(
         await bridge.restorePlansIfUnchanged(plans, withoutPlan(plans, String(target.id)), detectLayout(data));
 
         const verifyData = await bridge.exportData({ fresh: true });
-        const after = Array.isArray(verifyData.plans) ? verifyData.plans : [];
+        const after = exportSections(verifyData).plans;
         const problems = verifyPlanDeletion(plans, after, String(target.id));
         const verified = problems.length === 0;
 

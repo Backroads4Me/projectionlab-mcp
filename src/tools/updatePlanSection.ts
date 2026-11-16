@@ -28,7 +28,7 @@ import {
   verifySectionApplied,
   type PlanObj,
 } from "../plans.js";
-import { detectLayout } from "../layout.js";
+import { detectLayout, exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 interface DiffResult {
@@ -243,7 +243,7 @@ export function registerUpdatePlanSectionTool(
         // transformed, or dropped write can't report false success.
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (
-          Array.isArray(verifyData.plans) ? verifyData.plans : []
+          exportSections(verifyData).plans
         ).find(
           (p) => p && typeof p === "object" && (p as PlanObj).id === plan.id,
         ) as PlanObj | undefined;

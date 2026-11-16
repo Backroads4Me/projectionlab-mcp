@@ -24,7 +24,11 @@ export type ExportLayout = "v4" | "v5";
  * the write tools and the bridge refuse the write. Contract 1 allows every
  * write method.
  */
-export const CONTRACT_2_WRITES: ReadonlySet<WireMethod> = new Set<WireMethod>();
+export const CONTRACT_2_WRITES: ReadonlySet<WireMethod> = new Set<WireMethod>([
+  // ProjectionLab 5's restorePlans(plans, { key }) replaces the whole plans
+  // list, as on ProjectionLab 4: a plan missing from the array is deleted.
+  "restorePlans",
+]);
 
 /** Whether `method` may write to a page offering `contract`. */
 export function writeSupported(contract: ApiContract, method: WireMethod): boolean {

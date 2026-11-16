@@ -14,10 +14,11 @@ process.env.PL_SNAPSHOT_DIR = join(
 process.env.LOG_LEVEL = "error";
 
 const {
+  PLAN_SETTING_CONTEXT,
   applyPlanSettingChanges,
   listPlanSettings,
-  planSettingChangesApplied,
 } = await import("../dist/planSettings.js");
+const { findPathChangeMismatches } = await import("../dist/pathPatch.js");
 const { registerGetPlanSettingsTool } = await import(
   "../dist/tools/getPlanSettings.js"
 );
@@ -139,9 +140,9 @@ test("path patches are immutable and preserve sibling settings", () => {
     inflation: { before: 0.03, after: 0.025 },
     "estate.enabled": { before: false, after: true },
   });
-  assert.equal(
-    planSettingChangesApplied(result.updated, result.changes),
-    true,
+  assert.deepEqual(
+    findPathChangeMismatches(result.updated, result.changes, PLAN_SETTING_CONTEXT),
+    [],
   );
 });
 
@@ -166,9 +167,9 @@ test("path patches update one array control point and preserve schedule siblings
     year: 2035,
     rate: 0.04,
   });
-  assert.equal(
-    planSettingChangesApplied(result.updated, result.changes),
-    true,
+  assert.deepEqual(
+    findPathChangeMismatches(result.updated, result.changes, PLAN_SETTING_CONTEXT),
+    [],
   );
 });
 

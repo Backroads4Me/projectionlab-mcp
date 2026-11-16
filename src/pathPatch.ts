@@ -277,24 +277,115 @@ export function applyExistingPathChanges(
   return { updated, changes };
 }
 
+/** A patched path whose stored value does not match what the write sent. */
+export interface PathChangeMismatch {
+  path: string;
+  /** The value the caller asked to store. */
+  expected: unknown;
+  /** The value the plan holds now; `undefined` when the path is absent. */
+  stored: unknown;
+  /**
+   * `absent` means the path disappeared, `shape` means the stored value is a
+   * different kind of value than the one sent, and `value` means it is the
+   * right kind holding different contents.
+   */
+  reason: "absent" | "shape" | "value";
+}
+
+/**
+ * Match a stored value against the value a write submitted.
+ *
+ * ProjectionLab rewrites objects as it saves them: it emits keys in its own
+ * order and fills in defaults the caller never sent. Comparing JSON text
+ * therefore rejects writes that did land, so every key and array element the
+ * caller sent must be stored with an equal value while keys the app adds on
+ * its own are allowed. A key that vanishes, changes type or changes value
+ * still fails.
+ */
+function storedValueMatches(expected: unknown, stored: unknown): boolean {
+  if (isPlainObject(expected)) {
+    if (!isPlainObject(stored)) return false;
+    return Object.entries(expected).every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(stored, key) &&
+        storedValueMatches(value, stored[key]),
+    );
+  }
+  if (Array.isArray(expected)) {
+    return (
+      Array.isArray(stored) &&
+      stored.length === expected.length &&
+      expected.every((item, index) => storedValueMatches(item, stored[index]))
+    );
+  }
+  return expected === stored;
+}
+
+/**
+ * Report the patched paths the stored object does not carry.
+ *
+ * The reason splits the causes a boolean cannot: a path the app dropped, a
+ * value it changed the type of, and a value whose contents differ.
+ */
+export function findPathChangeMismatches(
+  data: unknown,
+  expected: Record<string, PathValueChange>,
+  context: PathPatchContext,
+): PathChangeMismatch[] {
+  const entries = Object.entries(expected);
+  if (!isPlainObject(data)) {
+    return entries.map(([path, change]) => ({
+      path,
+      expected: change.after,
+      stored: undefined,
+      reason: "absent" as const,
+    }));
+  }
+
+  const mismatches: PathChangeMismatch[] = [];
+  for (const [path, change] of entries) {
+    let actual: unknown = data;
+    let present = true;
+    for (const part of parsePath(path, context)) {
+      if (
+        !isContainer(actual) ||
+        !Object.prototype.hasOwnProperty.call(actual, part)
+      ) {
+        present = false;
+        break;
+      }
+      actual = containerValue(actual, part);
+    }
+    if (!present) {
+      mismatches.push({
+        path,
+        expected: change.after,
+        stored: undefined,
+        reason: "absent",
+      });
+      continue;
+    }
+    if (storedValueMatches(change.after, actual)) continue;
+    const sameKind =
+      Array.isArray(change.after) === Array.isArray(actual) &&
+      change.after !== null &&
+      actual !== null &&
+      typeof change.after === typeof actual;
+    mismatches.push({
+      path,
+      expected: change.after,
+      stored: actual,
+      reason: sameKind ? "value" : "shape",
+    });
+  }
+  return mismatches;
+}
+
 export function pathChangesApplied(
   data: unknown,
   expected: Record<string, PathValueChange>,
   context: PathPatchContext,
 ): boolean {
   if (!isPlainObject(data)) return false;
-  for (const [path, change] of Object.entries(expected)) {
-    let actual: unknown = data;
-    for (const part of parsePath(path, context)) {
-      if (
-        !isContainer(actual) ||
-        !Object.prototype.hasOwnProperty.call(actual, part)
-      ) {
-        return false;
-      }
-      actual = containerValue(actual, part);
-    }
-    if (JSON.stringify(actual) !== JSON.stringify(change.after)) return false;
-  }
-  return true;
+  return findPathChangeMismatches(data, expected, context).length === 0;
 }

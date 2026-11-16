@@ -14,7 +14,8 @@ import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
   applyExistingPathChanges,
-  pathChangesApplied,
+  findPathChangeMismatches,
+  type PathChangeMismatch,
   type PathValueChange,
 } from "../pathPatch.js";
 import type { PlanObj } from "../plans.js";
@@ -317,7 +318,11 @@ export function registerUpdateAccountTool(
         );
         await bridge.updateAccount(entry.writeId, patch, force || undefined, layout);
 
+        // A fresh read that no longer holds the account is a failed
+        // verification, not one that could not run: with no account to look
+        // in, the mismatch walk reports one absent issue per changed path.
         let verified: boolean | undefined;
+        let verificationIssues: PathChangeMismatch[] = [];
         try {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           const freshData = await bridge.exportData({ fresh: true });
@@ -327,13 +332,12 @@ export function registerUpdateAccountTool(
             accountId,
             fresh.layout,
           );
-          verified =
-            !!verifiedEntry &&
-            pathChangesApplied(
-              verifiedEntry.account,
-              result.changes,
-              ACCOUNT_FIELD_CONTEXT,
-            );
+          verificationIssues = findPathChangeMismatches(
+            verifiedEntry?.account,
+            result.changes,
+            ACCOUNT_FIELD_CONTEXT,
+          );
+          verified = verificationIssues.length === 0;
         } catch (err) {
           log.warn("updateAccount", `Post-write verification failed: ${err}`);
         }
@@ -349,12 +353,21 @@ export function registerUpdateAccountTool(
                 ...entry.location,
                 changes: renderedChanges,
                 verified,
+                ...(verified === false
+                  ? {
+                      verificationIssues: redactSecrets(verificationIssues, {
+                        byName: true,
+                      }),
+                    }
+                  : {}),
                 snapshotId: snapshot.id,
                 message:
                   verified === true
                     ? "Account patched and verified. Snapshot saved automatically."
                     : verified === false
-                      ? "Account update was sent but verification did not confirm every value. A snapshot was saved; inspect Current Finances and roll back if needed."
+                      ? `Account update was sent but these fields did not verify: ${verificationIssues
+                          .map((issue) => issue.path)
+                          .join(", ")}. A snapshot was saved; inspect Current Finances and roll back if needed.`
                       : "Account update was sent but verification could not run. A snapshot was saved; inspect Current Finances and roll back if needed.",
               }),
             },

@@ -1425,9 +1425,43 @@ function asExportShapeGroup(group: DataModelGroup): DataModelGroup {
   return { ...group, fields };
 }
 
-const VARIABLES_V5_GROUP = asExportShapeGroup(
+// Year alignment in ProjectionLab 5. Every choice was set in a plan's Override
+// Year Alignment control and read back; Account Settings offers the same
+// choices, and "calendar" and "custom" were read back from it as well.
+const ALIGNMENT_TYPES = ["calendar", "rolling", "au-tax", "uk-tax", "custom"] as const;
+const ALIGNMENT_NOTE =
+  '"calendar" runs January to December; "rolling" stores no date and counts plan years from the current month; "au-tax" stores date "2000-07-01" and "uk-tax" stores "2000-04-01"; "custom" stores the chosen starting month as "2000-MM-01". The plan ends on the last day of the plan year that holds the household\'s latest life expectancy, so changing the alignment can add or remove a plan year.';
+const ALIGNMENT_DATE_DESCRIPTION =
+  'Month each plan year starts, as "2000-MM-01"; only the month is meaningful.';
+
+const VARIABLES_V5_BASE = asExportShapeGroup(
   DATA_MODEL_GROUPS.find((g) => g.scope === "variables")!,
 );
+const VARIABLES_V5_GROUP: DataModelGroup = {
+  ...VARIABLES_V5_BASE,
+  fields: {
+    ...VARIABLES_V5_BASE.fields,
+    "bondSettings.allocation": {
+      ...VARIABLES_V5_BASE.fields["bondSettings.allocation"],
+      evidence: "observed",
+      note:
+        "Array of { x, y } points: x is the plan year (1 is the current plan year) and y is a percentage (0-100). " +
+        "ProjectionLab keeps the last point on the plan's final year. When a change of year alignment shortens the plan, the app moves that point to the new final year; when the plan lengthens again, it adds a point at the new final year and keeps the moved one.",
+    },
+    "alignment.type": {
+      description:
+        "This plan's own year alignment. null or absent means the plan follows the account's settings plan.alignment.",
+      allowedValues: ALIGNMENT_TYPES,
+      evidence: "observed",
+      note: ALIGNMENT_NOTE,
+    },
+    "alignment.date": {
+      description: ALIGNMENT_DATE_DESCRIPTION,
+      enabledBy: 'alignment.type "custom", "au-tax" or "uk-tax"',
+      evidence: "observed",
+    },
+  },
+};
 const MONTECARLO_V5_GROUP = asExportShapeGroup(
   DATA_MODEL_GROUPS.find((g) => g.scope === "montecarlo")!,
 );
@@ -1903,9 +1937,16 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "plan.alignment.type": {
-        description: "Timeline calendar alignment mode.",
-        allowedValues: ["calendar"],
-        evidence: "export-shape",
+        description:
+          "Account year alignment: where each plan year starts, for every plan without its own alignment.",
+        allowedValues: ALIGNMENT_TYPES,
+        evidence: "observed",
+        note: ALIGNMENT_NOTE,
+      },
+      "plan.alignment.date": {
+        description: ALIGNMENT_DATE_DESCRIPTION,
+        enabledBy: 'plan.alignment.type "custom", "au-tax" or "uk-tax"',
+        evidence: "observed",
       },
       "plan.tabs.pinned": {
         description: "Whether plan tabs are pinned in the interface.",

@@ -280,6 +280,23 @@ both layouts; these differences show through:
   `projectionlab_restore_settings` behaves as on ProjectionLab 4: the
   submission replaces every setting, and ProjectionLab refuses a settings
   document it cannot read. Settings are account-wide, not per plan.
+- **Year alignment can change plans.** The account's year alignment
+  (`settings.plan.alignment`) and a plan's override (`variables.alignment`)
+  decide where each plan year starts, and so how many plan years the plan
+  has. When that number changes, ProjectionLab moves the last point of a
+  plan's glide path, such as `bondSettings.allocation`, to the new final year
+  in each plan it saves meanwhile, not only the plan being edited. Changing
+  the alignment back adds a point at the final year and keeps the moved one,
+  and a settings rollback does not undo either change, because settings
+  snapshots hold no plans. Before
+  changing the alignment, warn the user; afterwards, compare the plans with
+  the export from before the change and offer to remove an extra point.
+- **Changes made in the app take time to show.** ProjectionLab saves an
+  edit a minute or two after the user makes it, and reads return only saved
+  data. When the user says they changed something and a read does not show
+  it, wait and read again before calling it a bug. Never write to a plan or
+  document the user has just edited until a read shows the edit: a write
+  replaces the unsaved change.
 - **Progress cannot be written.** ProjectionLab 5 records Progress history
   by itself whenever a current value changes, and removed the way to
   replace it. `projectionlab_restore_progress` and a rollback of a snapshot

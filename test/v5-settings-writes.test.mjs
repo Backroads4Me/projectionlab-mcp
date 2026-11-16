@@ -101,7 +101,7 @@ const STORED_KEY = v5Export().documents.settings.plugins.apiKey;
 function changedSettings() {
   const settings = stampedExport().documents.settings;
   settings.plugins.apiKey = "[REDACTED]";
-  settings.plan.alignment = { type: "age" };
+  settings.plan.alignment = { type: "rolling" };
   return settings;
 }
 
@@ -134,7 +134,7 @@ test("restore_settings on v5 previews, then replaces the settings and verifies d
   written.plugins.apiKey = STORED_KEY;
   assert.deepEqual(bridge.writes, [{ name: "restoreSettings", submitted: written, layout: "v5" }]);
   assert.equal(bridge.state.documents.settings.plugins.apiKey, STORED_KEY);
-  assert.deepEqual(bridge.state.documents.settings.plan.alignment, { type: "age" });
+  assert.deepEqual(bridge.state.documents.settings.plan.alignment, { type: "rolling" });
   assert.notEqual(bridge.state.documents.settings.lastUpdated, settings.lastUpdated);
 });
 

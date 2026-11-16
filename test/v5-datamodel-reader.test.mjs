@@ -100,13 +100,21 @@ test("getDataModelGroups returns appropriate groups per layout", () => {
   assert.ok(scopes.has("settings"));
   assert.ok(scopes.has("accountHistory"));
 
-  // All v5 fields must have evidence: "export-shape"
+  // v5 fields are export-shape unless a stored-value test on ProjectionLab 5 confirmed them
+  const observedV5 = new Set([
+    "variables.bondSettings.allocation",
+    "variables.alignment.type",
+    "variables.alignment.date",
+    "settings.plan.alignment.type",
+    "settings.plan.alignment.date",
+  ]);
   for (const group of v5Groups) {
     for (const [pattern, field] of Object.entries(group.fields)) {
+      const key = `${group.scope}.${pattern}`;
       assert.equal(
         field.evidence,
-        "export-shape",
-        `Field ${group.scope}.${pattern} should have evidence 'export-shape'`,
+        observedV5.has(key) ? "observed" : "export-shape",
+        `Field ${key} has the wrong evidence`,
       );
     }
   }
@@ -197,6 +205,14 @@ test("refusedEnumChoices and enumRefusalError work per layout", () => {
   const v4Error = enumRefusalError("variables", "assumptionsMode", "invalid");
   assert.ok(v4Error);
   assert.equal(v4Error.code, "INVALID_INPUT");
+
+  // v5 year alignment is an observed enum, on a plan and in settings
+  const alignments = ["calendar", "rolling", "au-tax", "uk-tax", "custom"];
+  assert.deepEqual(refusedEnumChoices("variables", "alignment.type", "fiscal", "v5"), alignments);
+  assert.deepEqual(refusedEnumChoices("settings", "plan.alignment.type", "fiscal", "v5"), alignments);
+  for (const value of alignments) {
+    assert.equal(refusedEnumChoices("variables", "alignment.type", value, "v5"), undefined);
+  }
 });
 
 test("projectionlab://data-model resource renders v5 layout correctly", async () => {
@@ -223,7 +239,9 @@ test("projectionlab://data-model resource renders v5 layout correctly", async ()
 
   // Evidence legend check
   assert.match(markdown, /Evidence tags: \[export-shape\] means/);
-  assert.equal(markdown.includes("[observed]"), false);
+  assert.match(markdown, /\[observed\] means a value was set through the ProjectionLab 5 UI/);
+  assert.match(markdown, /`plan\.alignment\.type` \[observed\]/);
+  assert.match(markdown, /Allowed values: calendar, rolling, au-tax, uk-tax, custom/);
 
   // Requirement: solo 401k prose without guessed string
   assert.match(markdown, /Solo 401k, Roth Solo 401k, and SEP IRA/);

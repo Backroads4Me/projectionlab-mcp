@@ -301,7 +301,9 @@ When evaluating plan elements or answering user questions, anchor claims with ta
   - Event names need not be unique within a section; address an event by id when its name is ambiguous.
 - **documents.settings**:
   - **plan**: viewing preferences including \`activeId\` and \`baselineId\` (reported as stored),
-    calendar alignment (\`alignment.type: "calendar"\`), and pinned tabs.
+    the account's year alignment (\`alignment.type\`: \`"calendar"\`, \`"rolling"\`, \`"au-tax"\`,
+    \`"uk-tax"\` or \`"custom"\`), and pinned tabs. A plan can override the alignment in
+    \`variables.alignment\`; null or absent means it follows the account.
   - **plugins**: plugin configuration with \`enabled\` status and \`apiKey\` (authentication secret,
     redacted on reads; sits at \`documents.settings.plugins.apiKey\`).
 - **documents.accountHistory**:

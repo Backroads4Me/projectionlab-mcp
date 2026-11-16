@@ -81,7 +81,9 @@ export function renderDataModelV5Markdown(): string {
       "without a separate progress section.",
     "",
     "Evidence tags: [export-shape] means the field and its value type appear in a " +
-      "ProjectionLab 5 export; its meaning is not yet confirmed by a stored-value test.",
+      "ProjectionLab 5 export; its meaning is not yet confirmed by a stored-value test. " +
+      "[observed] means a value was set through the ProjectionLab 5 UI and the stored value " +
+      "was read back. Writes are refused only on [observed] option lists.",
     "",
   ];
   for (const group of DATA_MODEL_V5_GROUPS) {

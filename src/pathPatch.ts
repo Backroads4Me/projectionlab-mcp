@@ -203,11 +203,41 @@ function replaceAtPath(
 }
 
 /**
+ * Refusal for a value a write sets outside an observed enum's choices. A whole
+ * object or array is walked and each leaf is checked with the joined path, so
+ * `yearlyChange.type` is enforced whether the caller addressed that leaf or
+ * sent the container around it. Array elements are addressed by numeric index,
+ * the syntax `parsePath` accepts and the registry wildcards match, so a
+ * `criteria.*.type` entry matches `criteria.0.type`.
+ */
+function enumRefusalForValue(
+  scope: string,
+  path: string,
+  value: unknown,
+  layout: ExportLayout,
+): ProjectionLabError | undefined {
+  const refusal = enumRefusalError(scope, path, value, layout);
+  if (refusal) return refusal;
+  if (!isContainer(value)) return undefined;
+  for (const key of Object.keys(value)) {
+    const nested = enumRefusalForValue(
+      scope,
+      `${path}.${key}`,
+      containerValue(value, key),
+      layout,
+    );
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+/**
  * Apply path-addressed changes immutably. Paths must already exist and values
  * must retain their JSON type. When `scope` names a group in the data model
  * registry (a settings section, event section, or Current Finances
  * collection) of the `layout` data model, a string value outside an observed
- * enum's choices is refused with INVALID_INPUT.
+ * enum's choices is refused with INVALID_INPUT, at the addressed path and at
+ * every path nested inside a whole-object or whole-array value.
  */
 export function applyExistingPathChanges(
   data: unknown,
@@ -247,14 +277,21 @@ export function applyExistingPathChanges(
     }
   }
 
-  let updated = data;
-  const changes: Record<string, PathValueChange> = {};
+  // Every refusal is raised before anything is applied, so a later path cannot
+  // leave a half-patched container.
+  const checked: { path: string; parts: string[]; after: unknown }[] = [];
   for (const [path, after] of Object.entries(incoming)) {
     const parts = parsePath(path, context);
     if (scope !== undefined) {
-      const refusal = enumRefusalError(scope, path, after, layout);
+      const refusal = enumRefusalForValue(scope, path, after, layout);
       if (refusal) throw refusal;
     }
+    checked.push({ path, parts, after });
+  }
+
+  let updated = data;
+  const changes: Record<string, PathValueChange> = {};
+  for (const { path, parts, after } of checked) {
     let before: unknown = data;
     for (const part of parts) {
       if (

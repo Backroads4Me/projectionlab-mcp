@@ -256,3 +256,133 @@ test("update_plan_event enforces the recorded v5 spending types on an expense", 
   assert.equal(done.success, true, JSON.stringify(done));
   assert.equal(planById(bridge.writes[0].plans, "plan_main").expenses.events[0].spendingType, "hybrid");
 });
+
+test("a whole yearlyChange object is refused value by value against the v5 enum", async () => {
+  // The Change Over Time object is usually replaced whole rather than leaf by
+  // leaf, so its nested `type` is enforced at the joined path just as it is
+  // when the caller addresses `yearlyChange.type` directly.
+  const state = v5Export();
+  const salary = planById(state.documents.plans, "plan_main").income.events[0];
+  salary.yearlyChange = {
+    type: "match-inflation",
+    amount: 3,
+    limitEnabled: false,
+    limit: 0,
+    limitType: "today$",
+  };
+  const bridge = v5Bridge(state);
+  const snapshots = snapshotStore();
+  const call = tools(bridge, snapshots);
+  const yearlyChange = (type) => ({
+    type,
+    amount: 3,
+    limitEnabled: false,
+    limit: 0,
+    limitType: "today$",
+  });
+  const write = (change) =>
+    call("projectionlab_update_plan_event", {
+      planIdentifier: "plan_main",
+      section: "income",
+      eventIdentifier: "plan_main_ev_salary",
+      pathChanges: { yearlyChange: change },
+      confirm: true,
+    });
+
+  const refused = await write(yearlyChange("fixed-rate"));
+  assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
+  assert.match(refused.message, /"income\.yearlyChange\.type"/);
+  assert.match(
+    refused.message,
+    /Allowed values: none, increase, decrease, custom, match-inflation, inflation\+, inflation-\./,
+  );
+  assert.deepEqual(bridge.writes, []);
+  assert.deepEqual(snapshots.created, []);
+  assert.equal(
+    planById(bridge.state.documents.plans, "plan_main").income.events[0].yearlyChange.type,
+    "match-inflation",
+  );
+
+  const done = await write(yearlyChange("increase"));
+  assert.equal(done.success, true, JSON.stringify(done));
+  assert.equal(done.verified, true, JSON.stringify(done));
+  assert.equal(
+    planById(bridge.writes[0].plans, "plan_main").income.events[0].yearlyChange.type,
+    "increase",
+  );
+});
+
+test("a v5 yearlyChange enum is refused by its leaf path as well as inside the object", async () => {
+  // Both layouts of the same change answer the same way, which is what the
+  // whole-object walk is for.
+  const state = v5Export();
+  const salary = planById(state.documents.plans, "plan_main").income.events[0];
+  salary.yearlyChange = { type: "increase", amount: 3 };
+  const bridge = v5Bridge(state);
+  const call = tools(bridge, snapshotStore());
+
+  const refused = await call("projectionlab_update_plan_event", {
+    planIdentifier: "plan_main",
+    section: "income",
+    eventIdentifier: "plan_main_ev_salary",
+    pathChanges: { "yearlyChange.type": "fixed-rate" },
+    confirm: true,
+  });
+  assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
+  assert.match(refused.message, /"income\.yearlyChange\.type"/);
+  assert.deepEqual(bridge.writes, []);
+});
+
+test("a refusal on one path leaves every other path of the request unapplied", async () => {
+  // The amount is a valid change and the yearlyChange object is not. The write
+  // is refused outright, so the valid path is never sent either.
+  const state = v5Export();
+  const salary = planById(state.documents.plans, "plan_main").income.events[0];
+  salary.yearlyChange = { type: "increase", amount: 3 };
+  const bridge = v5Bridge(state);
+  const snapshots = snapshotStore();
+  const call = tools(bridge, snapshots);
+
+  const refused = await call("projectionlab_update_plan_event", {
+    planIdentifier: "plan_main",
+    section: "income",
+    eventIdentifier: "plan_main_ev_salary",
+    pathChanges: {
+      amount: 95_000,
+      yearlyChange: { type: "fixed-rate", amount: 3 },
+    },
+    confirm: true,
+  });
+  assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
+  assert.match(refused.message, /"income\.yearlyChange\.type"/);
+  assert.deepEqual(bridge.writes, []);
+  assert.deepEqual(snapshots.created, []);
+  const event = planById(bridge.state.documents.plans, "plan_main").income.events[0];
+  assert.equal(event.amount, 90_000);
+  assert.equal(event.yearlyChange.type, "increase");
+});
+
+test("an entry without observed evidence still accepts any value inside a whole object", async () => {
+  // The walk enforces what the registry enforces: `export-shape` entries are
+  // annotated but never refused, so a milestone criterion keeps its shape.
+  const state = v5Export();
+  const milestone = planById(state.documents.plans, "plan_main").milestones[0];
+  milestone.criteria = [{ type: "year", value: "2040-01-01" }];
+  const bridge = v5Bridge(state);
+  const call = tools(bridge, snapshotStore());
+
+  const done = await call("projectionlab_update_plan_event", {
+    planIdentifier: "plan_main",
+    section: "milestones",
+    eventIdentifier: "plan_main_ms_retire",
+    pathChanges: {
+      criteria: [{ type: "some-future-kind", value: "2045-01-01" }],
+    },
+    confirm: true,
+  });
+  assert.equal(done.success, true, JSON.stringify(done));
+  assert.equal(
+    planById(bridge.writes[0].plans, "plan_main").milestones[0].criteria[0].type,
+    "some-future-kind",
+  );
+});

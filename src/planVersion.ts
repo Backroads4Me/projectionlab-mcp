@@ -1,6 +1,6 @@
 import type { Bridge } from "./bridge.js";
 import { ProjectionLabError } from "./errors.js";
-import type { PlanObj } from "./plans.js";
+import { samePlanContent, type PlanObj } from "./plans.js";
 import { exportSections } from "./layout.js";
 
 /**
@@ -13,27 +13,45 @@ export function planVersion(plan: unknown): string | undefined {
   return stamp === undefined || stamp === null ? undefined : String(stamp);
 }
 
-function versionsById(plans: unknown[]): Map<string, string | undefined> {
-  const out = new Map<string, string | undefined>();
+function plansById(plans: unknown[]): Map<string, PlanObj> {
+  const out = new Map<string, PlanObj>();
   for (const p of plans) {
     if (p && typeof p === "object") {
-      out.set(String((p as PlanObj).id ?? ""), planVersion(p));
+      out.set(String((p as PlanObj).id ?? ""), p as PlanObj);
     }
   }
   return out;
 }
 
 /**
- * Describe how `current` differs from `read`: plans added, removed, or saved
- * since `read` was taken. Empty when nothing changed.
+ * Describe how `current` differs from `read`: plans added, removed, saved, or
+ * changed since `read` was taken. Empty when nothing changed.
+ *
+ * A plan's `lastUpdated` stamp decides when both reads carry one;
+ * ProjectionLab moves it each time it saves the plan. A plan with no stamp
+ * on either read has no version to compare, so its input content is compared
+ * in both directions instead (computed fields left out, see samePlanContent).
  */
 export function planChanges(read: unknown[], current: unknown[]): string[] {
-  const before = versionsById(read);
-  const after = versionsById(current);
+  const before = plansById(read);
+  const after = plansById(current);
   const changes: string[] = [];
-  for (const [id, version] of before) {
-    if (!after.has(id)) changes.push(`plan ${id} was removed`);
-    else if (after.get(id) !== version) changes.push(`plan ${id} was saved`);
+  for (const [id, plan] of before) {
+    const now = after.get(id);
+    if (!now) {
+      changes.push(`plan ${id} was removed`);
+      continue;
+    }
+    const was = planVersion(plan);
+    const is = planVersion(now);
+    if (was !== is) {
+      changes.push(`plan ${id} was saved`);
+    } else if (
+      was === undefined &&
+      !(samePlanContent(plan, now) && samePlanContent(now, plan))
+    ) {
+      changes.push(`plan ${id} was changed`);
+    }
   }
   for (const id of after.keys()) {
     if (!before.has(id)) changes.push(`plan ${id} was added`);

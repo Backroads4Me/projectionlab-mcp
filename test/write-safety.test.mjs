@@ -267,3 +267,20 @@ test("rollback refuses with PLAN_CONFLICT when a plan is saved meanwhile", async
   assert.deepEqual(bridge.writes, []);
   assert.equal(bridge.state.plans[0].name, before[0].name);
 });
+
+for (const confirm of [false, true]) {
+  test(`restore_plans refuses an empty array in ${confirm ? "confirm" : "dry-run"} mode`, async () => {
+    const bridge = fakeBridge({ today: {}, plans: samplePlans() });
+    const server = fakeServer();
+    registerRestoreTools(server, bridge, new SnapshotManager());
+    const result = await server.tools
+      .get("projectionlab_restore_plans")
+      .handler({ plans: [], confirm });
+    assert.equal(result.isError, true);
+    const output = JSON.parse(result.content[0].text);
+    assert.equal(output.error, "INVALID_INPUT");
+    assert.match(output.message, /would delete every plan/);
+    assert.deepEqual(bridge.writes, []);
+    assert.equal(bridge.state.plans.length, 2);
+  });
+}

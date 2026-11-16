@@ -3,10 +3,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { requireEditsEnabled } from "../editAccess.js";
-import { errorResult } from "../errors.js";
+import { errorResult, redactedSecretsError } from "../errors.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
-import { redactSecrets } from "../redact.js";
+import { findRedactedSecretPaths, redactSecrets } from "../redact.js";
 import {
   PLAN_SETTING_CONTEXT,
   PLAN_SETTING_SECTIONS,
@@ -71,6 +71,13 @@ export function registerUpdatePlanSettingsTool(
     async ({ planIdentifier, section, changes: incoming, confirm }) => {
       try {
         await requireEditsEnabled(bridge);
+
+        // A whole-object value can carry a secret-named key a read returned
+        // as [REDACTED]; storing it would replace the real value.
+        const redactedPaths = findRedactedSecretPaths(incoming);
+        if (redactedPaths.length > 0) {
+          throw redactedSecretsError("changes", redactedPaths);
+        }
 
         await assertWritesSupported(bridge, ["restorePlans"]);
         const data = await bridge.exportData({ fresh: true });

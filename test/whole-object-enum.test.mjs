@@ -455,3 +455,26 @@ test("a refused second path applies neither path", async () => {
     "the accepted first path was not applied either",
   );
 });
+
+test("a field the patch adds is checked leaf by leaf, inside an array too", async () => {
+  const state = planState();
+  // A milestone that stores no criteria yet, so the patch adds the field.
+  state.plans[0].milestones.push({ id: "ms-bare", name: "Bare" });
+  const bridge = fakeBridge(state);
+  const call = eventCaller(bridge);
+  const patchCriteria = (type) =>
+    call({
+      planIdentifier: "Retire",
+      section: "milestones",
+      eventIdentifier: "Bare",
+      patch: { criteria: [{ type, value: "2045-01-01" }] },
+    });
+
+  const refused = await patchCriteria("someday");
+  assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
+  assert.match(refused.message, /"milestones\.criteria\.0\.type"/);
+
+  const accepted = await patchCriteria("year");
+  assert.equal(accepted.dryRun, true, JSON.stringify(accepted));
+  assert.deepEqual(bridge.writes, []);
+});

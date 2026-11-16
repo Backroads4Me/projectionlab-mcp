@@ -236,3 +236,91 @@ test("projectionlab_restore_settings on v4 refuses a payload that leaves out the
   assert.match(output.message, /plugins\.apiKey/);
   assert.deepEqual(bridge.writes, []);
 });
+
+// The path tools take whole-object values, which can carry a secret-named
+// key a read returned as [REDACTED].
+
+const { registerUpdatePlanEventTool } = await import(
+  "../dist/tools/updatePlanEvent.js"
+);
+const { registerUpdatePlanSettingsTool } = await import(
+  "../dist/tools/updatePlanSettings.js"
+);
+const { registerUpdateAccountTool } = await import(
+  "../dist/tools/updateAccount.js"
+);
+
+function pathToolState() {
+  return {
+    plans: [
+      {
+        id: "p1",
+        name: "Retire at 55",
+        variables: { inflation: 3, link: { label: "x", token: "stored-token" } },
+        income: {
+          events: [
+            { id: "i1", name: "Salary", details: { note: "a", apiKey: "stored-key" } },
+          ],
+        },
+      },
+    ],
+    today: {
+      investmentAccounts: [
+        { id: "a1", name: "Brokerage", credentials: { label: "x", password: "stored-pass" } },
+      ],
+    },
+  };
+}
+
+function pathToolsRegistered(bridge) {
+  const server = fakeServer();
+  const snapshots = new SnapshotManager();
+  registerUpdatePlanEventTool(server, bridge, snapshots);
+  registerUpdatePlanSettingsTool(server, bridge, snapshots);
+  registerUpdateAccountTool(server, bridge, snapshots);
+  return server;
+}
+
+const event = { planIdentifier: "Retire at 55", section: "income", eventIdentifier: "Salary" };
+const settings = { planIdentifier: "Retire at 55", section: "variables" };
+const pathToolCases = [
+  ["projectionlab_update_plan_event", "pathChanges", event, { details: { note: "b", apiKey: "[REDACTED]" } }, "details.apiKey"],
+  ["projectionlab_update_plan_event", "patch", event, { details: { note: "b", apiKey: "[REDACTED]" } }, "details.apiKey"],
+  ["projectionlab_update_plan_settings", "changes", settings, { link: { label: "y", token: "[REDACTED]" } }, "link.token"],
+  ["projectionlab_update_account", "pathChanges", { accountId: "a1" }, { credentials: { label: "y", password: "[REDACTED]" } }, "credentials.password"],
+  ["projectionlab_update_account", "data", { accountId: "a1" }, { credentials: { label: "y", password: "[REDACTED]" } }, "credentials.password"],
+];
+
+for (const [tool, input, target, payload, secretPath] of pathToolCases) {
+  for (const confirm of [false, true]) {
+    test(`${tool} refuses a sentinel inside a whole-object ${input} value in ${confirm ? "confirm" : "dry-run"} mode`, async () => {
+      const initial = pathToolState();
+      const bridge = fakeBridge(initial);
+      const server = pathToolsRegistered(bridge);
+      const result = await server.tools
+        .get(tool)
+        .handler({ ...target, [input]: structuredClone(payload), force: false, confirm });
+      assert.equal(result.isError, true);
+      const output = JSON.parse(result.content[0].text);
+      assert.equal(output.error, "INVALID_INPUT");
+      assert.match(output.message, new RegExp(`^${input} contains redacted secret values at: ${secretPath.replace(".", "\\.")}$`));
+      assert.deepEqual(bridge.writes, []);
+      assert.deepEqual(bridge.state, initial);
+    });
+  }
+
+  test(`${tool} previews the same ${input} value once the real secret is supplied`, async () => {
+    const bridge = fakeBridge(pathToolState());
+    const server = pathToolsRegistered(bridge);
+    const real = structuredClone(payload);
+    const [container, key] = secretPath.split(".");
+    real[container][key] = "real-value";
+    const result = await server.tools
+      .get(tool)
+      .handler({ ...target, [input]: real, force: false, confirm: false });
+    assert.equal(result.isError, undefined, result.content[0].text);
+    const output = JSON.parse(result.content[0].text);
+    assert.equal(output.dryRun, true);
+    assert.deepEqual(Object.keys(output.changes), [container]);
+  });
+}

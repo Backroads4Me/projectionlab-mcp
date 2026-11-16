@@ -465,13 +465,16 @@ refuses the last remaining plan. Its snapshot lets
 `projectionlab_restore_current_finances`, `projectionlab_restore_plans`,
 `projectionlab_restore_progress` and `projectionlab_restore_settings` replace
 an entire data area. Use them only when the user wants exactly that.
+`projectionlab_restore_plans` refuses an empty array, which would delete every
+plan.
 
 Reads hide secret values: a secret-named field reads back as `[REDACTED]`. A
 `sectionData` or `restore_*` payload that still carries that sentinel under a
 secret-named key is refused with `INVALID_INPUT`, dry runs included, naming the
-paths. Type the real value or change single fields with
-`projectionlab_update_plan_event` or `projectionlab_update_plan_settings`,
-which patch by path and never round-trip hidden values.
+paths. So is a whole-object value sent to `projectionlab_update_plan_event`,
+`projectionlab_update_plan_settings` or `projectionlab_update_account`. Type
+the real value, or change the fields beside it one at a time by path, which
+leaves the hidden value untouched.
 
 `projectionlab_restore_settings` is the exception. Settings hold the Plugin
 API key this server connects with, and the restore replaces the whole

@@ -287,6 +287,7 @@ export function registerRestoreTools(
       description:
         "REPLACES ALL plans with the provided array. " +
         "This is a FULL REPLACEMENT - every existing plan is overwritten. " +
+        "An empty array is refused. " +
         "When confirm is false (default), returns a detailed dry-run diff showing plans " +
         "added/removed/modified with per-section event count changes. " +
         "When confirm is true, auto-snapshots current plans then applies the replacement. " +
@@ -314,6 +315,15 @@ export function registerRestoreTools(
         const redactedPaths = findRedactedSecretPaths(plans);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("plans", redactedPaths);
+        }
+        // restorePlans deletes every plan the array leaves out, and
+        // ProjectionLab always keeps at least one plan.
+        if (plans.length === 0) {
+          throw new ProjectionLabError(
+            "INVALID_INPUT",
+            "plans is empty; replacing the plans with an empty array would delete every plan",
+            "Send the complete array of plans to keep. To remove one plan, use projectionlab_delete_plan. Nothing was written.",
+          );
         }
 
         await assertWritesSupported(bridge, ["restorePlans"]);

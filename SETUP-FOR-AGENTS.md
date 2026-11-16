@@ -33,7 +33,7 @@ The config location varies by host; see [Adding the server to your MCP host](htt
   builds and are unverified, so steer the user to Chrome or Firefox when they
   have a choice, and treat a Brave or Edge report as unverified until reproduced.
 
-- **Quick alternative: no install.** Call the `projectionlab_get_bootstrap` tool, then have the user paste the returned snippet into their ProjectionLab tab's developer console (F12 → Console). It works the same way but must be re-pasted if they reload the page. Good for a first test drive.
+- **Quick alternative: no install.** Call the `projectionlab_get_bootstrap` tool, then have the user paste the returned snippet into their ProjectionLab tab's developer console (F12 → Console). It reads the same way but cannot make changes, and must be re-pasted if they reload the page. Good for a first test drive.
 
 **5. Verify.** Have the user open [ProjectionLab](https://app.projectionlab.com), log in, and confirm plugins are enabled. If ProjectionLab sends them to `ea.projectionlab.com` (v5 Early Access), they also press **Allow ea.projectionlab.com** on the extension's options page and approve the browser's prompt. Then call `projectionlab_check_connection`; it should report all checks passing. Do this before any other tool call.
 

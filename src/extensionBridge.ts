@@ -808,11 +808,12 @@ export class ExtensionBridge implements Bridge {
   /**
    * Send one request to the executor. Call only from the operation chain.
    *
-   * A write passes the guard from assertWriteSupported. An executor that
-   * honors expectApiVersion checks the page's version in the same page turn
-   * as the call. An executor that does not is trusted only on the socket the
-   * guard's version was read from: a write that would reach another one is
-   * refused, since that executor could be on another ProjectionLab version.
+   * A write passes the guard from assertWriteSupported, and is sent only on
+   * the socket the guard's version was read from: a write that would reach
+   * another executor is refused, since that executor could be on another
+   * ProjectionLab version, and a plan write's conflict check was read from
+   * the first one. An executor that honors expectApiVersion also checks the
+   * page's version in the same page turn as the call.
    */
   private async request(
     method: WireMethod,
@@ -829,13 +830,12 @@ export class ExtensionBridge implements Bridge {
     const id = String(this.nextId++);
     const frame: RequestFrame = { type: "request", id, method, params };
     if (guard) {
-      if (this.connGuardsApiVersion) {
-        frame.expectApiVersion = guard.apiVersion;
-      } else if (conn !== guard.socket) {
+      if (conn !== guard.socket) {
         throw contractChangedError(
           "The browser executor changed after the Plugin API version was checked",
         );
       }
+      if (this.connGuardsApiVersion) frame.expectApiVersion = guard.apiVersion;
     }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

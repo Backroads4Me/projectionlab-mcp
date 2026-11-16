@@ -113,10 +113,10 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `projectionlab_delete_plan` | Delete a plan by exact ID; refuses the last plan (dry-run by default) | Yes |
 | `projectionlab_list_snapshots` | List saved pre-mutation snapshots | No |
 | `projectionlab_diff` | Field-level changes between a snapshot and another snapshot or the live data, or between two plans (`planA` and `planB`) | No |
-| `projectionlab_restore_current_finances` | Restore Current Finances from snapshot | Yes |
-| `projectionlab_restore_plans` | Restore Plans from snapshot | Yes |
-| `projectionlab_restore_progress` | Restore Progress from snapshot | Yes |
-| `projectionlab_restore_settings` | Restore Settings from snapshot | Yes |
+| `projectionlab_restore_current_finances` | Replace Current Finances with the supplied data | Yes |
+| `projectionlab_restore_plans` | Replace all plans with the supplied array; an empty array is refused | Yes |
+| `projectionlab_restore_progress` | Replace Progress with the supplied data (ProjectionLab 4 only) | Yes |
+| `projectionlab_restore_settings` | Replace Settings with the supplied data | Yes |
 | `projectionlab_rollback` | Roll back to a previous snapshot | Yes |
 
 ## Resources
@@ -144,7 +144,7 @@ Write operations (`update_*`, `restore_*`, `clone_plan`, `delete_plan`) default 
 
 Every write that replaces the plans array re-reads the plans just before writing and refuses with `PLAN_CONFLICT` if any plan was added, removed, or saved in ProjectionLab since the tool read them, so an edit made in the ProjectionLab UI, or a write by another agent's server instance, is never silently overwritten. `projectionlab_update_plan_section` also returns a `planVersion` in its dry run; pass it back as `expectedPlanVersion` when confirming to refuse the write if the plan was saved after the preview.
 
-Plan reads hide secret values: a secret-named field (`apiKey`, `token`, `password`, …) comes back as `[REDACTED]`. A payload for `projectionlab_update_plan_section` or any `restore_*` tool that still holds that sentinel under a secret-named key is refused with `INVALID_INPUT`, dry runs included, naming the offending dot paths. Supply the real value, or change single fields with `projectionlab_update_plan_event` or `projectionlab_update_plan_settings`, which patch by path and never round-trip hidden values.
+Plan reads hide secret values: a secret-named field (`apiKey`, `token`, `password`, …) comes back as `[REDACTED]`. A write payload that still holds that sentinel under a secret-named key is refused with `INVALID_INPUT`, dry runs included, naming the offending dot paths: `sectionData` for `projectionlab_update_plan_section`, the payload of `projectionlab_restore_plans`, `projectionlab_restore_current_finances` and `projectionlab_restore_progress`, and a whole-object value sent to `projectionlab_update_plan_event`, `projectionlab_update_plan_settings` or `projectionlab_update_account`. Supply the real value, or change the fields beside it one at a time by path with `projectionlab_update_plan_event` or `projectionlab_update_plan_settings`, which leaves the hidden value untouched. `projectionlab_restore_settings` is the exception: a secret field left as `[REDACTED]` keeps its stored value, and a payload that leaves a stored secret out is refused.
 
 `projectionlab_update_plan_section` also refuses `sectionData` that does not match the section's current container shape (array for milestones, `{ events: [...] }` for event sections, plain object for `variables`, `montecarlo` and `withdrawalStrategy`), so a wrong or omitted payload can never delete a section or change its type.
 

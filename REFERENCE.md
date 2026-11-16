@@ -148,8 +148,11 @@ Plan reads hide secret values: a secret-named field (`apiKey`, `token`, `passwor
 
 `projectionlab_update_plan_section` also refuses `sectionData` that does not match the section's current container shape (array for milestones, `{ events: [...] }` for event sections, plain object for `variables`, `montecarlo` and `withdrawalStrategy`), so a wrong or omitted payload can never delete a section or change its type.
 
-A write is refused with `INVALID_INPUT` when it sets a field to a value outside
-the choices the app offers for it, and the refusal lists those choices. The
+`projectionlab_update_plan_event`, `projectionlab_update_plan_settings` and
+`projectionlab_update_account` refuse with `INVALID_INPUT` a write that sets a
+field to a value outside the choices the app offers for it, and the refusal
+lists those choices. `projectionlab_update_plan_section` and the `restore_*`
+tools check the shape of what they write, not these choices. The
 enforced fields are the ones `projectionlab://data-model` tags `observed`, in
 the ProjectionLab 4 and the ProjectionLab 5 layout alike; a listing carries
 `allowedValues` for other fields too, as a hint a write does not enforce. The

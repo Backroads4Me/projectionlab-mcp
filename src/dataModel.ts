@@ -2639,9 +2639,10 @@ export function matchDataModelField(
 
 /**
  * Whether a write of a value outside an entry's `allowedValues` is refused.
- * Only an observed entry carries a list read back from a stored value, so only
- * one binds a write; a ui-label or export-shape list is a hint and may leave
- * choices the app offers out of it.
+ * Only an observed entry binds a write: its field is confirmed by a
+ * stored-value test and its list is held as the app's own set of choices. A
+ * ui-label or export-shape list is a hint and may leave choices the app offers
+ * out of it.
  */
 export function enforcesAllowedValues(field: DataModelField): boolean {
   return field.evidence === "observed";

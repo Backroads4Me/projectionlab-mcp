@@ -375,9 +375,10 @@ For every other field read `projectionlab://data-model`; with `listPaths: true`
 each listed path also comes back with `units` and `allowedValues` when the
 registry knows the field, each list with `allowedValuesEnforced`: only an
 enforced list refuses a write, and an unenforced one is a hint that may leave
-choices the app offers out of it. Writing a string outside the allowed values of a
-field tagged `observed` is refused with `INVALID_INPUT`, and the refusal lists
-the choices: pick one of them and re-run the dry run. Numbers and booleans are
+choices the app offers out of it. In `projectionlab_update_plan_event`,
+`projectionlab_update_plan_settings` and `projectionlab_update_account`,
+writing a string outside the allowed values of a field tagged `observed` is
+refused with `INVALID_INPUT`, and the refusal lists the choices: pick one of them and re-run the dry run. Numbers and booleans are
 never refused this way, and `ui-label` fields are annotated but not enforced.
 The same check reaches inside a whole-object or whole-array value, and it
 applies to a leaf only when the write changes it: an out-of-list value the plan

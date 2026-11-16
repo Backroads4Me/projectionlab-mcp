@@ -129,6 +129,20 @@ test("getDataModelGroups returns appropriate groups per layout", () => {
     "expenses.yearlyChange.limitType",
     "expenses.yearlyChange.custom",
     "priorities.desiredContribution",
+    "accounts.owner",
+    "accounts.liquidity",
+    "accounts.withdraw",
+    "accounts.withdrawAge",
+    "accounts.investmentGrowthType",
+    "accounts.investmentGrowthRate",
+    "accounts.dividendType",
+    "accounts.dividendRate",
+    "accounts.yearlyFee",
+    "accounts.yearlyFeeType",
+    "accounts.rmdType",
+    "accounts.EWAge",
+    "accounts.hasEWPenalty",
+    "accounts.EWPenaltyRate",
   ]);
   for (const group of v5Groups) {
     for (const [pattern, field] of Object.entries(group.fields)) {

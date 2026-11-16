@@ -1625,8 +1625,9 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       owner: {
         description: "Which household member owns the account.",
-        allowedValues: ["me", "spouse", "joint"],
-        evidence: "export-shape",
+        evidence: "observed",
+        note:
+          '"joint" is offered only for savings, taxable and crypto accounts, "spouse" only while the household has a partner, and household person identifiers plus "dependent" are valid for every non-inherited type. No allowedValues list is recorded because the identifiers are app-assigned.',
       },
       order: {
         description: "Display sort order index.",
@@ -1676,63 +1677,110 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       liquidity: {
-        description: "Whether the account balance is treated as liquid capital.",
-        evidence: "export-shape",
+        description:
+          "Whether the balance counts toward liquid net worth: true, false, or a { date, type } object that starts or stops counting on a date.",
+        enabledBy: "the account's Liquidity control",
+        evidence: "observed",
+        note:
+          'Labelled Liquid, "Whether this counts toward your liquid assets." type "from" is the From Date control and "until" the Until Date control. An EWAge value counts the balance once the qualified withdrawal age has passed. The plan event key liquid does not exist: v5 normalization strips it.',
       },
       withdraw: {
-        description: "Drawdown eligibility rule.",
-        evidence: "export-shape",
+        description:
+          "When the account may be drawn down: true for any time, false for never, \"when-liquid\", \"after\" for a specific year given by withdrawAge, or \"EWAge\" for once the qualified withdrawal age has passed.",
+        evidence: "observed",
+        note:
+          'Labelled Always, Never, When Liquid, Reach Specific Year and After Qualified Withdrawal Age. The control is offered only to account types that support it; When Liquid appears only while it is the stored value, and EWAge only for types with a qualified age. Values are booleans and strings, so no allowedValues list is recorded.',
       },
       // Plan account events are listed and written under this scope by
       // section name, so their plan-side fields are carried from the
       // ProjectionLab 4 registry into this group as well.
+      investmentGrowthType: {
+        description:
+          "Where the account's stock growth rate comes from.",
+        allowedValues: ["plan", "fixed", "custom"],
+        evidence: "observed",
+        note:
+          'Labelled Stock Growth Rate ("plan", inherit from Plan Settings > Growth Rates), Fixed Rate ("fixed") and Advanced ("custom"), which stores the curve in investmentGrowthCustom as { type, data: [ { x, y } ] }.',
+      },
       investmentGrowthRate: {
         description: "Custom annual growth rate for the account.",
         units: PCT,
         enabledBy: 'investmentGrowthType "fixed"',
-        evidence: "export-shape",
+        evidence: "observed",
+      },
+      dividendType: {
+        description: "Where the account's dividend yield comes from.",
+        allowedValues: ["plan", "fixed", "custom"],
+        evidence: "observed",
+        note:
+          'The Advanced option ("custom") stores the curve in dividendRateCustom as { type, data: [ { x, y } ] }, beside the Fixed Rate option that uses dividendRate.',
       },
       dividendRate: {
         description: "Custom annual dividend yield for the account.",
         units: PCT,
-        evidence: "export-shape",
+        enabledBy: 'dividendType "fixed"',
+        evidence: "observed",
       },
       yearlyFee: {
         description: "Recurring account fee.",
-        note: 'Interpreted per yearlyFeeType: a percentage, a percentage of earnings, or a dollar amount.',
-        evidence: "export-shape",
+        enabledBy: "the account's Fees control",
+        evidence: "observed",
+        note:
+          'Labelled Yearly Fee, "Annual fee deducted from this account." Interpreted per yearlyFeeType: a percentage, a percentage of earnings, or a dollar amount.',
+      },
+      yearlyFeeType: {
+        description: "How yearlyFee is read.",
+        allowedValues: ["$", "today$", "%", "%-earnings"],
+        enabledBy: "yearlyFee",
+        evidence: "observed",
+        note:
+          'Rendered as a dollar amount a year ("$"), a dollar amount in today\'s currency ("today$"), a percentage of the balance ("%"), or a percentage of earnings a year ("%-earnings").',
       },
       withdrawAge: {
-        description: "Timing reference after which the account becomes eligible for drawdown.",
+        description:
+          "Timing reference after which the account becomes eligible for drawdown.",
         enabledBy: 'withdraw "after"',
-        evidence: "export-shape",
+        evidence: "observed",
+        note:
+          'The Reach Specific Year withdraw option, shown beside the Years control. Labelled "When withdrawals become available."',
       },
       rmdType: {
         description: "Statutory required minimum distribution regime.",
-        allowedValues: ["us", "none"],
-        evidence: "export-shape",
+        allowedValues: [
+          "us",
+          "us-inherited",
+          "stretch",
+          "ten-year",
+          "CA",
+          "custom",
+          "none",
+        ],
+        evidence: "observed",
+        note:
+          'Options carry applicableAccountTypes and inapplicableAccountTypes, so a given account offers the subset valid for its type and jurisdiction: "us" current US retirement rules, "us-inherited" inherited retirement rules, "stretch" pre-SECURE Act stretch IRA estimates for inherited ira and roth-ira accounts, "ten-year" a smoothed schedule divesting over ten years, "CA" Canadian RRIF rules, "custom" a schedule held in requiredDistributions, and "none".',
       },
       EWAge: {
-        description: "Age after which the early withdrawal penalty no longer applies.",
+        description: "Age used to determine qualified withdrawals.",
         units: "age",
-        enabledBy: "hasEWPenalty",
-        evidence: "export-shape",
+        enabledBy: "account types that support a qualified withdrawal age",
+        evidence: "observed",
+        note:
+          'Labelled Qualified Age, "Age used to determine qualified withdrawals." Offered by the account type rather than gated on hasEWPenalty, and the stored value also backs the liquidity and withdraw "EWAge" options.',
       },
       hasEWPenalty: {
-        description: "When true, early withdrawals before EWAge incur a penalty.",
-        evidence: "export-shape",
+        description:
+          "Whether withdrawals before EWAge incur a penalty.",
+        evidence: "observed",
+        note:
+          'Labelled Early Withdrawal Penalties, "Penalty for withdrawals before the qualified age." Switching it on reveals Penalty Rate and Freely Withdraw Contributions.',
       },
       EWPenaltyRate: {
-        description: "Penalty charged on early withdrawals.",
+        description: "Penalty applied to early withdrawals.",
         units: PCT,
         enabledBy: "hasEWPenalty",
-        note: "Commonly 10 for retirement accounts and 20 for an HSA.",
-        evidence: "export-shape",
-      },
-      liquid: {
-        description: "Whether the account counts toward liquid net worth.",
-        evidence: "export-shape",
-        note: 'true, false, or "EWAge" to count only once the penalty age has passed.',
+        evidence: "observed",
+        note:
+          'Labelled Penalty Rate, "Penalty applied to early withdrawals." Commonly 10 for retirement accounts and 20 for an HSA.',
       },
     },
   },
@@ -2459,7 +2507,6 @@ export const UI_LABELS_V5: Readonly<
     EWAge: ["Qualified Age", ACCOUNT_SETTINGS],
     hasEWPenalty: ["Early Withdrawal Penalties", ACCOUNT_SETTINGS],
     EWPenaltyRate: ["Penalty Rate", ACCOUNT_SETTINGS],
-    liquid: ["Liquid", ACCOUNT_SETTINGS],
   },
   assets: {
     value: ["Current Value", DETAILS],

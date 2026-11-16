@@ -147,6 +147,7 @@ export function registerGetPlanSectionTool(
           sectionData = annotateAddressableValues(
             section,
             listAddressableValues(sectionData),
+            detectLayout(data),
           );
         }
 

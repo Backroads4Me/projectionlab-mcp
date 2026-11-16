@@ -232,6 +232,37 @@ test("get_plan_section selects a v5 event by id and by name", async () => {
   assert.deepEqual(byName.data.end, { type: "keyword", value: "placeholder" });
 });
 
+test("get_plan_section listPaths annotates a v5 event from the v5 data model", async () => {
+  const raw = v5Export();
+  raw.documents.plans[0].income.events[0].yearlyChange = {
+    type: "increase",
+    amount: 3,
+    limitEnabled: true,
+    limit: 100000,
+    limitType: "today$",
+  };
+  const out = parse(
+    await section(raw, {
+      planIdentifier: "plan_main",
+      section: "income",
+      eventIdentifier: "plan_main_ev_salary",
+      listPaths: true,
+    }),
+  );
+  const at = (path) => out.data.find((v) => v.path === path);
+  assert.deepEqual(at("yearlyChange.type").allowedValues, [
+    "none",
+    "increase",
+    "decrease",
+    "custom",
+    "match-inflation",
+    "inflation+",
+    "inflation-",
+  ]);
+  assert.equal(at("yearlyChange.limit").units, "dollars");
+  assert.equal(at("yearlyChange.limitType").description, "Unit of yearlyChange.limit.");
+});
+
 test("get_plan_section selects a v5 account or asset event by the Current Finances id it links", async () => {
   const raw = v5Export();
   const account = parse(
@@ -440,6 +471,14 @@ test("get_plan_settings reports every selection field as not reported when the e
     alignment: "not reported",
     tabs: "not reported",
   });
+});
+
+test("get_plan_settings annotates v5 settings from the v5 data model", async () => {
+  const raw = v5Export();
+  raw.documents.plans[0].variables = { alignment: { type: "calendar" } };
+  const out = parse(await settings(raw, { planIdentifier: "plan_main", section: "variables" }));
+  const alignment = out.sections[0].settings.find((s) => s.path === "alignment.type");
+  assert.deepEqual(alignment.allowedValues, ["calendar", "rolling", "au-tax", "uk-tax", "custom"]);
 });
 
 test("get_plan_settings returns one v5 section and treats a missing section as empty", async () => {

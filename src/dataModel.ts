@@ -1625,8 +1625,9 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       owner: {
         description: "Which household member owns the account.",
-        allowedValues: ["me", "spouse", "joint"],
-        evidence: "export-shape",
+        evidence: "observed",
+        note:
+          '"joint" is offered only for savings, taxable and crypto accounts, "spouse" only while the household has a partner, and household person identifiers plus "dependent" are valid for every non-inherited type. No allowedValues list is recorded because the identifiers are app-assigned.',
       },
       order: {
         description: "Display sort order index.",
@@ -1676,63 +1677,110 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       liquidity: {
-        description: "Whether the account balance is treated as liquid capital.",
-        evidence: "export-shape",
+        description:
+          "Whether the balance counts toward liquid net worth: true, false, \"EWAge\" for once the account's qualified withdrawal age has passed, or a { date, type } object that starts or stops counting on a date.",
+        enabledBy: "the account's Liquidity control",
+        evidence: "observed",
+        note:
+          'Labelled Liquid, "Whether this counts toward your liquid assets." type "from" is the From Date control and "until" the Until Date control. An EWAge value counts the balance once the qualified withdrawal age has passed. The plan event key liquid does not exist: v5 normalization strips it.',
       },
       withdraw: {
-        description: "Drawdown eligibility rule.",
-        evidence: "export-shape",
+        description:
+          "When the account may be drawn down: true for any time, false for never, \"when-liquid\", \"after\" for a specific year given by withdrawAge, or \"EWAge\" for once the qualified withdrawal age has passed.",
+        evidence: "observed",
+        note:
+          'Labelled Always, Never, When Liquid, Reach Specific Year and After Qualified Withdrawal Age. The control is offered only to account types that support it; When Liquid appears only while it is the stored value, and EWAge only for types with a qualified age. No allowedValues list is recorded: the list holds strings only, so listing "when-liquid", "after" and "EWAge" would read as ruling out the true and false values the field also takes.',
       },
       // Plan account events are listed and written under this scope by
       // section name, so their plan-side fields are carried from the
       // ProjectionLab 4 registry into this group as well.
+      investmentGrowthType: {
+        description:
+          "Where the account's stock growth rate comes from.",
+        allowedValues: ["plan", "fixed", "custom", "none"],
+        evidence: "observed",
+        note:
+          'Labelled Stock Growth Rate ("plan", inherit from Plan Settings > Growth Rates), Fixed Rate ("fixed"), Advanced ("custom"), which stores the curve in investmentGrowthCustom as { type, data: [ { x, y } ] }, and None ("none", no investment growth).',
+      },
       investmentGrowthRate: {
         description: "Custom annual growth rate for the account.",
         units: PCT,
         enabledBy: 'investmentGrowthType "fixed"',
-        evidence: "export-shape",
+        evidence: "observed",
+      },
+      dividendType: {
+        description: "Where the account's dividend yield comes from.",
+        allowedValues: ["plan", "fixed", "custom", "none"],
+        evidence: "observed",
+        note:
+          'Labelled Stock Dividend Yield ("plan", inherit from Plan Settings > Growth Rates), Fixed Yield ("fixed", which uses dividendRate), Advanced ("custom"), which stores the curve in dividendRateCustom as { type, data: [ { x, y } ] }, and None ("none", no dividend yield).',
       },
       dividendRate: {
         description: "Custom annual dividend yield for the account.",
         units: PCT,
-        evidence: "export-shape",
+        enabledBy: 'dividendType "fixed"',
+        evidence: "observed",
       },
       yearlyFee: {
         description: "Recurring account fee.",
-        note: 'Interpreted per yearlyFeeType: a percentage, a percentage of earnings, or a dollar amount.',
-        evidence: "export-shape",
+        enabledBy: "the account's Fees control",
+        evidence: "observed",
+        note:
+          'Labelled Yearly Fee, "Annual fee deducted from this account." Interpreted per yearlyFeeType: a percentage, a percentage of earnings, or a dollar amount.',
+      },
+      yearlyFeeType: {
+        description: "How yearlyFee is read.",
+        allowedValues: ["$", "today$", "%", "%-earnings"],
+        enabledBy: "yearlyFee",
+        evidence: "observed",
+        note:
+          'Rendered as a dollar amount a year ("$"), a dollar amount in today\'s currency ("today$"), a percentage of the balance ("%"), or a percentage of earnings a year ("%-earnings").',
       },
       withdrawAge: {
-        description: "Timing reference after which the account becomes eligible for drawdown.",
+        description:
+          "Timing reference after which the account becomes eligible for drawdown.",
         enabledBy: 'withdraw "after"',
-        evidence: "export-shape",
+        evidence: "observed",
+        note:
+          'The Reach Specific Year withdraw option, shown beside the Years control. Labelled "When withdrawals become available."',
       },
       rmdType: {
         description: "Statutory required minimum distribution regime.",
-        allowedValues: ["us", "none"],
-        evidence: "export-shape",
+        allowedValues: [
+          "us",
+          "us-inherited",
+          "stretch",
+          "ten-year",
+          "CA",
+          "custom",
+          "none",
+        ],
+        evidence: "observed",
+        note:
+          'Options carry applicableAccountTypes and inapplicableAccountTypes, so a given account offers the subset valid for its type and jurisdiction: "us" current US retirement rules, "us-inherited" inherited retirement rules, "stretch" pre-SECURE Act stretch IRA estimates for inherited ira and roth-ira accounts, "ten-year" a smoothed schedule divesting over ten years, "CA" Canadian RRIF rules, "custom" a schedule held in requiredDistributions, and "none".',
       },
       EWAge: {
-        description: "Age after which the early withdrawal penalty no longer applies.",
+        description: "Age used to determine qualified withdrawals.",
         units: "age",
-        enabledBy: "hasEWPenalty",
-        evidence: "export-shape",
+        enabledBy: "account types that support a qualified withdrawal age",
+        evidence: "observed",
+        note:
+          'Labelled Qualified Age, "Age used to determine qualified withdrawals." Offered by the account type rather than gated on hasEWPenalty, and the stored value also backs the liquidity and withdraw "EWAge" options.',
       },
       hasEWPenalty: {
-        description: "When true, early withdrawals before EWAge incur a penalty.",
-        evidence: "export-shape",
+        description:
+          "Whether withdrawals before EWAge incur a penalty.",
+        evidence: "observed",
+        note:
+          'Labelled Early Withdrawal Penalties, "Penalty for withdrawals before the qualified age." Switching it on reveals Penalty Rate and Freely Withdraw Contributions.',
       },
       EWPenaltyRate: {
-        description: "Penalty charged on early withdrawals.",
+        description: "Penalty applied to early withdrawals.",
         units: PCT,
         enabledBy: "hasEWPenalty",
-        note: "Commonly 10 for retirement accounts and 20 for an HSA.",
-        evidence: "export-shape",
-      },
-      liquid: {
-        description: "Whether the account counts toward liquid net worth.",
-        evidence: "export-shape",
-        note: 'true, false, or "EWAge" to count only once the penalty age has passed.',
+        evidence: "observed",
+        note:
+          'Labelled Penalty Rate, "Penalty applied to early withdrawals." Commonly 10 for retirement accounts and 20 for an HSA.',
       },
     },
   },
@@ -1791,8 +1839,17 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       // Entries carried from the ProjectionLab 4 registry for fields the
       // ProjectionLab 5 export shows.
       "start.type": {
-        description: "Kind of the start reference: a fixed date, a keyword, or a milestone.",
-        allowedValues: ["date", "keyword", "milestone"],
+        description:
+          "Kind of the start reference: a calendar year, an age, a fixed date, a milestone, a life expectancy, or a keyword.",
+        allowedValues: [
+          "date",
+          "year",
+          "age",
+          "milestone",
+          "lifeExpectancy",
+          "lastLifeExpectancy",
+          "keyword",
+        ],
         evidence: "export-shape",
       },
       paymentMethod: {
@@ -1815,13 +1872,16 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       interestType: {
         description: "How interest accrues on the asset's loan.",
         allowedValues: ["simple", "compound"],
-        evidence: "export-shape",
+        evidence: "observed",
+        note: 'Defaults to "simple"; "compound" is what reveals the Compounding control.',
       },
       compounding: {
         description: "Frequency at which loan interest compounds.",
-        allowedValues: ["monthly", "yearly"],
+        allowedValues: ["daily", "monthly"],
         enabledBy: 'interestType "compound"',
-        evidence: "export-shape",
+        evidence: "observed",
+        note:
+          'The Financing panel offers Daily and Monthly and defaults to monthly. It is a companion of Interest Type and stays hidden while Interest Type is "simple".',
       },
       monthlyPayment: {
         description: "Scheduled monthly financing payment.",
@@ -1834,9 +1894,20 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "yearlyChange.type": {
-        description: "How the asset's value moves each year.",
-        allowedValues: ["inflation+", "inflation-", "depreciate", "appreciate"],
-        evidence: "export-shape",
+        description:
+          "How the asset's value moves each year. \"custom\" stores the curve in yearlyChange.custom.",
+        allowedValues: [
+          "none",
+          "appreciate",
+          "depreciate",
+          "custom",
+          "match-inflation",
+          "inflation+",
+          "inflation-",
+        ],
+        evidence: "observed",
+        note:
+          "The asset control labels the pair Appreciate and Depreciate and the curve option Advanced, where income and expense spell the same option Increase and Decrease. The app validates nothing on write, so a token outside this list stores and renders as nothing.",
       },
       taxRate: {
         description: "Annual property tax figure.",
@@ -1860,8 +1931,17 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "end.type": {
-        description: "Kind of the end reference: a fixed date, a keyword, or a milestone.",
-        allowedValues: ["date", "keyword", "milestone"],
+        description:
+          "Kind of the end reference: a calendar year, an age, a fixed date, a milestone, a life expectancy, or a keyword.",
+        allowedValues: [
+          "date",
+          "year",
+          "age",
+          "milestone",
+          "lifeExpectancy",
+          "lastLifeExpectancy",
+          "keyword",
+        ],
         evidence: "export-shape",
         note: 'On a one-time event (frequency "once") the end reference is a leftover default: the UI hides it and the simulation ignores it, so it is not a user setting.',
       },
@@ -1904,7 +1984,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "start.type": {
         description: "Timing reference mode for when the income event begins.",
-        allowedValues: ["date", "milestone", "keyword"],
+        allowedValues: ["date", "year", "age", "milestone", "lifeExpectancy", "lastLifeExpectancy", "keyword"],
         evidence: "export-shape",
       },
       "start.value": {
@@ -1917,7 +1997,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "end.type": {
         description: "Timing reference mode for when the income event ends.",
-        allowedValues: ["date", "milestone", "keyword"],
+        allowedValues: ["date", "year", "age", "milestone", "lifeExpectancy", "lastLifeExpectancy", "keyword"],
         evidence: "export-shape",
       },
       "end.value": {
@@ -1955,25 +2035,53 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "yearlyChange.type": {
-        description: "How the amount changes each year.",
+        description:
+          "How the amount changes each year. \"increase\" and \"decrease\" take yearlyChange.amount as a percent, \"custom\" stores a curve in yearlyChange.custom, and \"match-inflation\", \"inflation+\" and \"inflation-\" follow the plan's inflation rate.",
         allowedValues: [
           "none",
+          "increase",
+          "decrease",
+          "custom",
           "match-inflation",
-          "fixed-rate",
-          "fixed-amount",
-          "curve",
+          "inflation+",
+          "inflation-",
         ],
-        evidence: "export-shape",
+        enabledBy: 'frequency other than "once", or amountType "grow$"',
+        evidence: "observed",
+        note:
+          'The Change control offers Increase, Decrease, Advanced ("custom"), Match inflation, and Match inflation plus or minus a percent. A once-frequency event such as an inheritance or a windfall shows no Change control at all, and an amountType of "grow$" brings it back. The app validates nothing on write.',
       },
       "yearlyChange.amount": {
-        description: "Magnitude of the yearly change.",
-        note: 'Percentage points when yearlyChange.type is "fixed-rate"; a dollar amount when it is "fixed-amount".',
-        evidence: "export-shape",
+        description:
+          "Percent per year applied by yearlyChange.type \"increase\" or \"decrease\".",
+        units: PCT,
+        enabledBy: 'yearlyChange.type "increase" or "decrease"',
+        evidence: "observed",
+        note: "The percent per year field in the Change Over Time dialog, beside the Maximum field.",
       },
       "yearlyChange.limit": {
-        description: "Cap applied when yearlyChange.limitEnabled is true.",
-        units: PCT,
-        evidence: "export-shape",
+        description: "Dollar ceiling on the value the yearly change may reach.",
+        units: DOLLARS,
+        enabledBy: 'yearlyChange.limitEnabled with yearlyChange.type "increase" or "decrease"',
+        evidence: "observed",
+        note:
+          'The Maximum field in the Change Over Time dialog is a dollar field. Its unit is held by yearlyChange.limitType, so a percent token there changes nothing on screen.',
+      },
+      "yearlyChange.limitType": {
+        description: "Unit of yearlyChange.limit.",
+        allowedValues: ["$", "today$"],
+        enabledBy: "yearlyChange.limitEnabled",
+        evidence: "observed",
+        note:
+          'Present on every yearlyChange object examined and always written "today$". The Maximum control offers no percent form.',
+      },
+      "yearlyChange.custom": {
+        description:
+          "The curve behind yearlyChange.type \"custom\": { type, data } where type is \"%\", \"$\" or \"today$\" and data is an array of { x, y } points.",
+        enabledBy: 'yearlyChange.type "custom"',
+        evidence: "observed",
+        note:
+          "Advanced opens a separate window with the curve editor. x is the year offset from the event start and y is the rate or amount in the unit named by type.",
       },
     },
   },
@@ -2000,9 +2108,11 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       spendingType: {
-        description: "Spending classification category.",
-        allowedValues: ["essential", "discretionary"],
-        evidence: "export-shape",
+        description: "How the expense counts towards total spending.",
+        allowedValues: ["essential", "discretionary", "hybrid", "none"],
+        evidence: "observed",
+        note:
+          'Offered as Essential, Discretionary, Hybrid ("Count a percentage of this expense as discretionary", the only state that uses discretionaryPercent) and Not Spending.',
       },
       amount: {
         description: "Scheduled expense amount in dollars.",
@@ -2011,7 +2121,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "start.type": {
         description: "Timing reference mode for when the expense event begins.",
-        allowedValues: ["date", "milestone", "keyword"],
+        allowedValues: ["date", "year", "age", "milestone", "lifeExpectancy", "lastLifeExpectancy", "keyword"],
         evidence: "export-shape",
       },
       "start.value": {
@@ -2024,7 +2134,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "end.type": {
         description: "Timing reference mode for when the expense event ends.",
-        allowedValues: ["date", "milestone", "keyword"],
+        allowedValues: ["date", "year", "age", "milestone", "lifeExpectancy", "lastLifeExpectancy", "keyword"],
         evidence: "export-shape",
       },
       "end.value": {
@@ -2043,9 +2153,11 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       healthcareType: {
-        description: "How health insurance premiums are modeled.",
-        allowedValues: ["standard", "out-of-pocket", "aca", "employer"],
-        evidence: "export-shape",
+        description: "How a healthcare expense is modeled for tax treatment.",
+        allowedValues: ["standard", "aca"],
+        evidence: "observed",
+        note:
+          'Labelled Healthcare Type. Offered as Standard, "Regular healthcare expense with no special tax treatment.", and ACA Marketplace, "ACA marketplace plan, with estimated Premium Tax Credit subsidy." The control is offered only on a US plan. The Auto and Manual deductibility selector is a derived chip, not a stored field: taxDeductible is the stored value.',
       },
       taxDeductible: {
         description: "When true, the expense reduces taxable income.",
@@ -2056,25 +2168,53 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "yearlyChange.type": {
-        description: "How the amount changes each year.",
+        description:
+          "How the amount changes each year. \"increase\" and \"decrease\" take yearlyChange.amount as a percent, \"custom\" stores a curve in yearlyChange.custom, and \"match-inflation\", \"inflation+\" and \"inflation-\" follow the plan's inflation rate.",
         allowedValues: [
           "none",
+          "increase",
+          "decrease",
+          "custom",
           "match-inflation",
-          "fixed-rate",
-          "fixed-amount",
-          "curve",
+          "inflation+",
+          "inflation-",
         ],
-        evidence: "export-shape",
+        enabledBy: 'frequency other than "once", or amountType "grow$"',
+        evidence: "observed",
+        note:
+          "On an expense the pair is labelled Increase Spending and Decrease Spending, each described as changing spending by a certain percentage. The app validates nothing on write, so a token outside this list stores and renders as nothing.",
       },
       "yearlyChange.amount": {
-        description: "Magnitude of the yearly change.",
-        note: 'Percentage points when yearlyChange.type is "fixed-rate"; a dollar amount when it is "fixed-amount".',
-        evidence: "export-shape",
+        description:
+          "Percent per year applied by yearlyChange.type \"increase\" or \"decrease\".",
+        units: PCT,
+        enabledBy: 'yearlyChange.type "increase" or "decrease"',
+        evidence: "observed",
+        note: "The percent per year field in the Change Over Time dialog, beside the Maximum field.",
       },
       "yearlyChange.limit": {
-        description: "Cap applied when yearlyChange.limitEnabled is true.",
-        units: PCT,
-        evidence: "export-shape",
+        description: "Dollar ceiling on the value the yearly change may reach.",
+        units: DOLLARS,
+        enabledBy: 'yearlyChange.limitEnabled with yearlyChange.type "increase" or "decrease"',
+        evidence: "observed",
+        note:
+          'The Maximum field in the Change Over Time dialog is a dollar field. Its unit is held by yearlyChange.limitType, so a percent token there changes nothing on screen.',
+      },
+      "yearlyChange.limitType": {
+        description: "Unit of yearlyChange.limit.",
+        allowedValues: ["$", "today$"],
+        enabledBy: "yearlyChange.limitEnabled",
+        evidence: "observed",
+        note:
+          'Present on every yearlyChange object examined and always written "today$". The Maximum control offers no percent form.',
+      },
+      "yearlyChange.custom": {
+        description:
+          "The curve behind yearlyChange.type \"custom\": { type, data } where type is \"%\", \"$\" or \"today$\" and data is an array of { x, y } points.",
+        enabledBy: 'yearlyChange.type "custom"',
+        evidence: "observed",
+        note:
+          "Advanced opens a separate window with the curve editor. x is the year offset from the event start and y is the rate or amount in the unit named by type.",
       },
       fundWithAccounts: {
         description:
@@ -2115,12 +2255,13 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       // ProjectionLab 5 export shows.
       desiredContribution: {
         description: "How much the flow receives from surplus cash flow.",
-        allowedValues: ["max", "fixed"],
-        evidence: "export-shape",
-        note: '"max" routes all remaining surplus; "fixed" takes amount.',
+        allowedValues: ["max", "%-remaining", "amount", "%-balance"],
+        evidence: "observed",
+        note:
+          'Offered as Maximize Contribution ("max"), % of Remaining Income ("%-remaining") and Specific Amount ("amount"). "%-balance", % of Remaining Balance, is a real token the flow editor does not request: only the extra-contribution control asks for it, so a flow normally holds one of the first three.',
       },
       amount: {
-        description: "Fixed contribution taken when desiredContribution is \"fixed\".",
+        description: 'Dollar amount the flow takes when desiredContribution is "amount".',
         units: DOLLARS,
         evidence: "export-shape",
       },
@@ -2269,8 +2410,8 @@ const FLOW = "Plan > Flows > flow";
 const HOUSEHOLD = "Profile menu > Household";
 const changeOverTime = (event: string) => ({
   "yearlyChange.type": ["Change", `${event} > Change Over Time`],
-  "yearlyChange.amount": ["Per Year", `${event} > Change Over Time`],
-  "yearlyChange.limit": ["Maximum", `${event} > Change Over Time`],
+  "yearlyChange.amount": ["Percent per year", `${event} > Change Over Time (Increase or Decrease)`],
+  "yearlyChange.limit": ["Maximum", `${event} > Change Over Time (Increase or Decrease)`],
 }) as const;
 
 export const UI_LABELS_V5: Readonly<
@@ -2386,7 +2527,6 @@ export const UI_LABELS_V5: Readonly<
     EWAge: ["Qualified Age", ACCOUNT_SETTINGS],
     hasEWPenalty: ["Early Withdrawal Penalties", ACCOUNT_SETTINGS],
     EWPenaltyRate: ["Penalty Rate", ACCOUNT_SETTINGS],
-    liquid: ["Liquid", ACCOUNT_SETTINGS],
   },
   assets: {
     value: ["Current Value", DETAILS],
@@ -2411,7 +2551,7 @@ export const UI_LABELS_V5: Readonly<
   priorities: {
     accountId: ["Account", FLOW],
     amount: ["Funding", FLOW],
-    desiredContribution: ["Goal", `${FLOW} ("As much as possible" is the maximum)`],
+    desiredContribution: ["Goal", `${FLOW} (offered as Maximize Contribution, % of Remaining Income or Specific Amount)`],
   },
   currentFinances: {
     "household.people.me.name": ["First Name", HOUSEHOLD],

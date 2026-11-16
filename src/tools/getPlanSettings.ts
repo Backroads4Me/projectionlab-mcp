@@ -68,11 +68,13 @@ export function registerGetPlanSettingsTool(
         const plan = resolvePlan(plans, planIdentifier);
         if (!plan) throw planNotFoundError(plans, planIdentifier);
 
+        const layout = detectLayout(data);
         const selected = section ? [section] : PLAN_SETTING_SECTIONS;
         const sections = selected.map((name) => {
           const settings = annotateAddressableValues(
             name,
             listPlanSettings(plan[name], name),
+            layout,
           );
           return {
             section: name,
@@ -83,7 +85,7 @@ export function registerGetPlanSettingsTool(
         // The update tool writes through restorePlans, which a ProjectionLab 5
         // page refuses until contract 2 allows it.
         const writable =
-          detectLayout(data) === "v4" || CONTRACT_2_WRITES.has("restorePlans");
+          layout === "v4" || CONTRACT_2_WRITES.has("restorePlans");
         // v5 keeps the workspace's active/baseline plan ids, alignment and
         // tabs in documents.settings.plan; v4 output has no such block.
         const selection = planSelection(data);

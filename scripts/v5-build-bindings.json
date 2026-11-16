@@ -1,0 +1,32 @@
+{
+  "projectionLabVersion": "5.0.0",
+  "about": "The option arrays the ProjectionLab web build binds to each enforced v5 list, as option values. An array matches a build array holding the same values in any order. codeValues are options the app's code adds outside any array; each is checked as a quoted string in the build.",
+  "bindings": {
+    "accounts.investmentGrowthType": { "arrays": [["plan", "fixed", "custom", "none"]] },
+    "accounts.dividendType": { "arrays": [["plan", "fixed", "custom", "none"]] },
+    "accounts.yearlyFeeType": { "arrays": [["%", "%-earnings", "today$", "$"]] },
+    "accounts.rmdType": { "arrays": [["us", "us-inherited", "stretch", "ten-year", "CA", "custom", "none"]] },
+    "assets.interestType": { "arrays": [["simple", "compound"]] },
+    "assets.compounding": { "arrays": [["daily", "monthly"]] },
+    "assets.yearlyChange.type": {
+      "arrays": [["none", "appreciate", "depreciate", "custom", "match-inflation", "inflation+", "inflation-"]]
+    },
+    "income.yearlyChange.type": {
+      "arrays": [["none", "increase", "decrease", "custom", "match-inflation", "inflation+", "inflation-"]]
+    },
+    "income.yearlyChange.limitType": { "arrays": [["$", "today$"]] },
+    "expenses.spendingType": { "arrays": [["essential", "discretionary", "hybrid", "none"]] },
+    "expenses.healthcareType": { "arrays": [["standard", "aca"]] },
+    "expenses.yearlyChange.type": {
+      "arrays": [["none", "increase", "decrease", "custom", "match-inflation", "inflation+", "inflation-"]]
+    },
+    "expenses.yearlyChange.limitType": { "arrays": [["$", "today$"]] },
+    "priorities.desiredContribution": {
+      "arrays": [["max", "%-remaining", "amount"]],
+      "codeValues": ["%-balance"],
+      "note": "%-balance is added to the array while the control's showBalanceOption is set."
+    },
+    "variables.alignment.type": { "arrays": [["calendar", "rolling", "au-tax", "uk-tax", "custom"]] },
+    "settings.plan.alignment.type": { "arrays": [["calendar", "rolling", "au-tax", "uk-tax", "custom"]] }
+  }
+}

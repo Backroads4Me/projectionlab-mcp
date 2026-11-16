@@ -78,6 +78,7 @@ checks on Node 20 for every pull request and push to `main`.
   contributors.
 - `extension/`: the Manifest V3 browser extension (its own package).
 - `test/`: server test suites (`node --test`, with a fake executor).
+- `scripts/`: contributor tools, not shipped in the package.
 - `.github/workflows/`: CI, npm publish, and extension release.
 
 ## Conventions
@@ -129,6 +130,38 @@ checks on Node 20 for every pull request and push to `main`.
   `SNAPSHOT_KEY_PLACEHOLDER` (put back on every read, so rollback stays
   exact); exports, plan reads (`get_plan`, `get_plan_section`, and similar),
   and resources are scrubbed by name (`byName: true`) as well as by value.
+
+## Re-checking the ProjectionLab 5 data model
+
+The `allowedValues` lists on `observed` v5 entries refuse writes, so each one
+must hold every option the app offers. They are checked against ProjectionLab's
+shipped web build, version `DATA_MODEL_V5_PROJECTIONLAB_VERSION` in
+`src/dataModel.ts`. `scripts/v5-build-bindings.json` records, for each
+enforced list, the option arrays that build binds to the field.
+
+The app version is in neither the export nor the Plugin API, so the server
+cannot notice a new release. Check by hand from time to time, and whenever
+ProjectionLab announces one:
+
+```bash
+npm run build
+node scripts/check-v5-build.mjs fetch /tmp/pl-build
+node scripts/check-v5-build.mjs check /tmp/pl-build
+```
+
+`check` exits 0 when every enforced list matches the fetched build. Otherwise
+it reports a different app version, a list and its binding that disagree, a
+recorded array the build no longer holds (with the nearest arrays, where a new
+option shows up), or a code-added value that is gone. For each report:
+
+1. Trace the array in the fetched build to the code that binds it to the
+   field. Nearness in a minified chunk is not a binding.
+2. Correct the entry in `DATA_MODEL_V5_GROUPS` and its binding in
+   `v5-build-bindings.json`, with a test for the changed list.
+3. Once `check` passes, set `DATA_MODEL_V5_PROJECTIONLAB_VERSION` and the
+   bindings file's `projectionLabVersion` to the new version, and keep the
+   fetched build read only outside the repository, with a note of its fetch
+   date and origin, so the evidence stays checkable.
 
 ## After changing code
 

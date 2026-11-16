@@ -1839,8 +1839,17 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       // Entries carried from the ProjectionLab 4 registry for fields the
       // ProjectionLab 5 export shows.
       "start.type": {
-        description: "Kind of the start reference: a fixed date, a keyword, or a milestone.",
-        allowedValues: ["date", "keyword", "milestone"],
+        description:
+          "Kind of the start reference: a calendar year, an age, a fixed date, a milestone, a life expectancy, or a keyword.",
+        allowedValues: [
+          "date",
+          "year",
+          "age",
+          "milestone",
+          "lifeExpectancy",
+          "lastLifeExpectancy",
+          "keyword",
+        ],
         evidence: "export-shape",
       },
       paymentMethod: {
@@ -1922,8 +1931,17 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       "end.type": {
-        description: "Kind of the end reference: a fixed date, a keyword, or a milestone.",
-        allowedValues: ["date", "keyword", "milestone"],
+        description:
+          "Kind of the end reference: a calendar year, an age, a fixed date, a milestone, a life expectancy, or a keyword.",
+        allowedValues: [
+          "date",
+          "year",
+          "age",
+          "milestone",
+          "lifeExpectancy",
+          "lastLifeExpectancy",
+          "keyword",
+        ],
         evidence: "export-shape",
         note: 'On a one-time event (frequency "once") the end reference is a leftover default: the UI hides it and the simulation ignores it, so it is not a user setting.',
       },
@@ -1966,7 +1984,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "start.type": {
         description: "Timing reference mode for when the income event begins.",
-        allowedValues: ["date", "milestone", "keyword"],
+        allowedValues: ["date", "year", "age", "milestone", "lifeExpectancy", "lastLifeExpectancy", "keyword"],
         evidence: "export-shape",
       },
       "start.value": {
@@ -1979,7 +1997,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "end.type": {
         description: "Timing reference mode for when the income event ends.",
-        allowedValues: ["date", "milestone", "keyword"],
+        allowedValues: ["date", "year", "age", "milestone", "lifeExpectancy", "lastLifeExpectancy", "keyword"],
         evidence: "export-shape",
       },
       "end.value": {
@@ -2103,7 +2121,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "start.type": {
         description: "Timing reference mode for when the expense event begins.",
-        allowedValues: ["date", "milestone", "keyword"],
+        allowedValues: ["date", "year", "age", "milestone", "lifeExpectancy", "lastLifeExpectancy", "keyword"],
         evidence: "export-shape",
       },
       "start.value": {
@@ -2116,7 +2134,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       "end.type": {
         description: "Timing reference mode for when the expense event ends.",
-        allowedValues: ["date", "milestone", "keyword"],
+        allowedValues: ["date", "year", "age", "milestone", "lifeExpectancy", "lastLifeExpectancy", "keyword"],
         evidence: "export-shape",
       },
       "end.value": {
@@ -2135,9 +2153,11 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
         evidence: "export-shape",
       },
       healthcareType: {
-        description: "How health insurance premiums are modeled.",
-        allowedValues: ["standard", "out-of-pocket", "aca", "employer"],
-        evidence: "export-shape",
+        description: "How a healthcare expense is modeled for tax treatment.",
+        allowedValues: ["standard", "aca"],
+        evidence: "observed",
+        note:
+          'Labelled Healthcare Type. Offered as Standard, "Regular healthcare expense with no special tax treatment.", and ACA Marketplace, "ACA marketplace plan, with estimated Premium Tax Credit subsidy." The control is offered only on a US plan. The Auto and Manual deductibility selector is a derived chip, not a stored field: taxDeductible is the stored value.',
       },
       taxDeductible: {
         description: "When true, the expense reduces taxable income.",

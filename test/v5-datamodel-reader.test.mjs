@@ -143,6 +143,7 @@ test("getDataModelGroups returns appropriate groups per layout", () => {
     "accounts.EWAge",
     "accounts.hasEWPenalty",
     "accounts.EWPenaltyRate",
+    "expenses.healthcareType",
   ]);
   for (const group of v5Groups) {
     for (const [pattern, field] of Object.entries(group.fields)) {
@@ -176,7 +177,15 @@ test("matchDataModelField matches v5 fields and preserves v4 defaults", () => {
   const incomeTypeField = matchDataModelField("income", "start.type", "v5");
   assert.ok(incomeTypeField);
   assert.equal(incomeTypeField.evidence, "export-shape");
-  assert.deepEqual(incomeTypeField.allowedValues, ["date", "milestone", "keyword"]);
+  assert.deepEqual(incomeTypeField.allowedValues, [
+    "date",
+    "year",
+    "age",
+    "milestone",
+    "lifeExpectancy",
+    "lastLifeExpectancy",
+    "keyword",
+  ]);
 
   const expenseTypeField = matchDataModelField("expenses", "spendingType", "v5");
   assert.ok(expenseTypeField);
@@ -273,7 +282,10 @@ test("projectionlab://data-model resource renders v5 layout correctly", async ()
   assert.match(markdown, /`archivedOn` \[export-shape\]/);
   assert.match(markdown, /`securedByAssetId` \[export-shape\]/);
   assert.match(markdown, /`start\.type` \[export-shape\]/);
-  assert.match(markdown, /Allowed values: date, milestone, keyword/);
+  assert.match(
+    markdown,
+    /Allowed values: date, year, age, milestone, lifeExpectancy, lastLifeExpectancy, keyword/,
+  );
   assert.match(markdown, /## Application and plan settings/);
   assert.match(markdown, /`plan\.activeId` \[export-shape\]/);
   assert.match(markdown, /## Account history/);

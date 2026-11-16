@@ -1678,7 +1678,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
       },
       liquidity: {
         description:
-          "Whether the balance counts toward liquid net worth: true, false, or a { date, type } object that starts or stops counting on a date.",
+          "Whether the balance counts toward liquid net worth: true, false, \"EWAge\" for once the account's qualified withdrawal age has passed, or a { date, type } object that starts or stops counting on a date.",
         enabledBy: "the account's Liquidity control",
         evidence: "observed",
         note:
@@ -1689,7 +1689,7 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
           "When the account may be drawn down: true for any time, false for never, \"when-liquid\", \"after\" for a specific year given by withdrawAge, or \"EWAge\" for once the qualified withdrawal age has passed.",
         evidence: "observed",
         note:
-          'Labelled Always, Never, When Liquid, Reach Specific Year and After Qualified Withdrawal Age. The control is offered only to account types that support it; When Liquid appears only while it is the stored value, and EWAge only for types with a qualified age. Values are booleans and strings, so no allowedValues list is recorded.',
+          'Labelled Always, Never, When Liquid, Reach Specific Year and After Qualified Withdrawal Age. The control is offered only to account types that support it; When Liquid appears only while it is the stored value, and EWAge only for types with a qualified age. No allowedValues list is recorded: the list holds strings only, so listing "when-liquid", "after" and "EWAge" would read as ruling out the true and false values the field also takes.',
       },
       // Plan account events are listed and written under this scope by
       // section name, so their plan-side fields are carried from the

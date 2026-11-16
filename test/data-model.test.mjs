@@ -21,6 +21,7 @@ process.env.LOG_LEVEL = "error";
 const { registerDataModelResource } = await import(
   "../dist/resources/dataModel.js"
 );
+const { matchDataModelField } = await import("../dist/dataModel.js");
 const { renderDataModelV5Markdown } = await import(
   "../dist/resources/dataModel.js"
 );
@@ -248,12 +249,26 @@ test("data-model resources show where each labelled plan setting is in the app",
     /`inflation` \[observed\][^\n]*In the app \(ProjectionLab 5\.0\.0\): "Inflation Rate" under Plan Settings > Rates \(Fixed mode\)\./,
   );
   const v5 = renderDataModelV5Markdown();
-  assert.match(v5, /## Plan settings in the app/);
+  assert.match(v5, /## Fields in the app/);
+  assert.match(v5, /- `income\.owner`: "Earner" under Plan > income event\./);
+  assert.match(v5, /## Fields the tools cannot change/);
   assert.match(
     v5,
     /- `withdrawalStrategy\.guyton-klinger\.guardrail`: "Guardrail" under Optimize > Drawdown Strategy > Textbook Withdrawals, Strategy "Guyton-Klinger"\./,
   );
   assert.equal(/`variables\.assumptionsMode`:/.test(v5), false);
+});
+
+test("UI labels attach to matching fields in both export layouts", () => {
+  assert.equal(matchDataModelField("variables", "inflation", "v5")?.uiLabel, "Inflation Rate");
+  assert.equal(matchDataModelField("expenses", "spendingType", "v4")?.uiLabel, "Spending Type");
+  assert.equal(matchDataModelField("expenses", "spendingType", "v5")?.uiLabel, "Spending Type");
+  assert.equal(matchDataModelField("accounts", "EWAge", "v4")?.uiLabel, "Qualified Age");
+  assert.equal(matchDataModelField("accounts", "value", "v5")?.uiLabel, "Current Value");
+  assert.equal(
+    matchDataModelField("currentFinances", "household.people.me.lifeExpectancy", "v5")?.uiLabel,
+    "Life Expectancy",
+  );
 });
 
 test("listPaths for an event annotates the spending type and leaves unknown fields bare", async () => {

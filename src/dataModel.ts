@@ -2002,10 +2002,10 @@ export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
 ];
 
 /**
- * On-screen labels in ProjectionLab 5.0.0 for plan settings, keyed by scope
- * then path. Each was confirmed by writing a distinct value to the field and
- * finding that value under the label in the app. Plan settings keep the same
- * paths in both layouts, so the labels sit on the entries above.
+ * On-screen labels in ProjectionLab 5.0.0, keyed by scope then path. Each was
+ * found in the app by writing a distinct value to the field, or by matching a
+ * stored value to the control that shows it. A label attaches to the entry for
+ * its path in every export layout that lists the path.
  */
 const RATES = "Plan Settings > Rates";
 const TAX = "Plan Settings > Tax";
@@ -2013,6 +2013,19 @@ const ESTATE = "Plan overview > Estate Settings";
 const MC_DATA = "Chance of Success > Data Sources";
 const TEXTBOOK = "Optimize > Drawdown Strategy > Textbook Withdrawals";
 const strategyAt = (name: string) => `${TEXTBOOK}, Strategy "${name}"`;
+const INCOME = "Plan > income event";
+const EXPENSE = "Plan > expense event";
+const DETAILS = "Net Worth > account or asset > Details (also the Details tab in the plan)";
+const ACCOUNT_PLAN = "Plan > Accounts > account > Plan";
+const ACCOUNT_SETTINGS = "Plan > Accounts > account > Settings";
+const ASSET_PLAN = "Plan > real asset > Plan";
+const FLOW = "Plan > Flows > flow";
+const HOUSEHOLD = "Profile menu > Household";
+const changeOverTime = (event: string) => ({
+  "yearlyChange.type": ["Change", `${event} > Change Over Time`],
+  "yearlyChange.amount": ["Per Year", `${event} > Change Over Time`],
+  "yearlyChange.limit": ["Maximum", `${event} > Change Over Time`],
+}) as const;
 
 export const UI_LABELS_V5: Readonly<
   Record<string, Readonly<Record<string, readonly [label: string, location: string]>>>
@@ -2089,15 +2102,93 @@ export const UI_LABELS_V5: Readonly<
     "guyton-klinger.guardrail": ["Guardrail", strategyAt("Guyton-Klinger")],
     "guyton-klinger.adjustment": ["Adjustment", strategyAt("Guyton-Klinger")],
   },
+  income: {
+    amount: ["Amount", `${INCOME} (Enter Amount mode for Social Security)`],
+    owner: ["Earner", INCOME],
+    estimateIncome: ["Estimate Benefit or Enter Amount", `${INCOME} (Social Security)`],
+    primaryInsuranceAmount: [
+      "Primary Insurance Amount",
+      `${INCOME} (Social Security, Estimate Benefit mode)`,
+    ],
+    expectedPercent: ["Expected Percentage", `${INCOME} (Social Security)`],
+    ...changeOverTime(INCOME),
+  },
+  expenses: {
+    amount: ["Amount", EXPENSE],
+    owner: ["Spender", EXPENSE],
+    spendingType: ["Spending Type", `${EXPENSE} > Flexibility`],
+    healthcareType: ["Healthcare Type", `${EXPENSE} (health care)`],
+    taxDeductible: ["Tax-Deductible", EXPENSE],
+    repeat: ["Recurrence", `${EXPENSE} (More Options > Advanced Options on)`],
+    ...changeOverTime(EXPENSE),
+  },
+  accounts: {
+    name: ["Name", DETAILS],
+    owner: ["Owner", DETAILS],
+    type: ["Type", DETAILS],
+    balance: ["Balance", DETAILS],
+    costBasis: ["Cost Basis", `${DETAILS} ("Past Contributions" on a Roth account)`],
+    value: ["Current Value", DETAILS],
+    purchasePrice: ["Purchase Price", DETAILS],
+    investmentGrowthRate: ["Growth Rate", `${ACCOUNT_PLAN} > Growth`],
+    dividendRate: ["Dividend Yield", `${ACCOUNT_PLAN} > Growth`],
+    yearlyFee: ["Yearly Fee", `${ACCOUNT_PLAN} > Fees`],
+    withdraw: ["Withdrawals", `${ACCOUNT_PLAN} > Withdrawals`],
+    withdrawAge: ["Withdrawals", `${ACCOUNT_PLAN} > Withdrawals`],
+    rmdType: ["Rules", `${ACCOUNT_PLAN} > RMDs`],
+    EWAge: ["Qualified Age", ACCOUNT_SETTINGS],
+    hasEWPenalty: ["Early Withdrawal Penalties", ACCOUNT_SETTINGS],
+    EWPenaltyRate: ["Penalty Rate", ACCOUNT_SETTINGS],
+    liquid: ["Liquid", ACCOUNT_SETTINGS],
+  },
+  assets: {
+    value: ["Current Value", DETAILS],
+    purchasePrice: ["Purchase Price", DETAILS],
+    "start.type": ["Purchase Date", `${ASSET_PLAN} > Purchase (future purchase)`],
+    paymentMethod: ["Payment Method", `${ASSET_PLAN} > Purchase (future purchase)`],
+    downPayment: ["Down Payment", `${ASSET_PLAN} > Financing`],
+    interestRate: ["Annual Percentage Rate", `${ASSET_PLAN} > Financing`],
+    interestType: ["Interest Type", `${ASSET_PLAN} > Financing`],
+    compounding: ["Compounding", `${ASSET_PLAN} > Financing`],
+    monthlyPayment: ["Monthly Payment", `${ASSET_PLAN} > Financing`],
+    generateIncome: ["Generate rental income", `${ASSET_PLAN} > Usage`],
+    "yearlyChange.type": ["Change Over Time", `${ASSET_PLAN} > Change Over Time`],
+    taxRate: ["Yearly Property Tax", `${ASSET_PLAN} > Taxes ("Taxes" on a vehicle)`],
+    maintenanceRate: ["Yearly Maintenance Costs", `${ASSET_PLAN} > Expenses`],
+    insuranceRate: ["Yearly Insurance Costs", `${ASSET_PLAN} > Expenses`],
+    monthlyHOA: ["Monthly HOA Fees", `${ASSET_PLAN} > Expenses`],
+    "end.type": ["Timing", `${ASSET_PLAN} > Sale`],
+    repeat: ["Repeat", `${ASSET_PLAN} > Recurrence`],
+    sellIfNeeded: ["Liquidate if Necessary", `${ASSET_PLAN} > More Options`],
+  },
+  priorities: {
+    accountId: ["Account", FLOW],
+    amount: ["Funding", FLOW],
+    desiredContribution: ["Goal", `${FLOW} ("As much as possible" is the maximum)`],
+  },
+  currentFinances: {
+    "household.people.me.name": ["First Name", HOUSEHOLD],
+    "household.people.me.birthYear": ["Born", HOUSEHOLD],
+    "household.people.me.lifeExpectancy": ["Life Expectancy", HOUSEHOLD],
+    "household.people.spouse.name": ["First Name", `${HOUSEHOLD} (partner)`],
+    "household.people.spouse.birthYear": ["Born", `${HOUSEHOLD} (partner)`],
+    "household.people.spouse.lifeExpectancy": ["Life Expectancy", `${HOUSEHOLD} (partner)`],
+  },
 };
 
 for (const [scope, labels] of Object.entries(UI_LABELS_V5)) {
-  const group = DATA_MODEL_GROUPS.find((candidate) => candidate.scope === scope);
+  const groups = [...DATA_MODEL_GROUPS, ...DATA_MODEL_V5_GROUPS].filter(
+    (candidate) => candidate.scope === scope,
+  );
   for (const [path, [label, location]] of Object.entries(labels)) {
-    const field = group?.fields[path];
-    if (!field) throw new Error(`UI label for unknown data model path ${scope}.${path}`);
-    field.uiLabel = label;
-    field.uiLocation = location;
+    const fields = groups.flatMap((group) => group.fields[path] ?? []);
+    if (fields.length === 0) {
+      throw new Error(`UI label for unknown data model path ${scope}.${path}`);
+    }
+    for (const field of fields) {
+      field.uiLabel = label;
+      field.uiLocation = location;
+    }
   }
 }
 

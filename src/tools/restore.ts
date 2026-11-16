@@ -38,11 +38,19 @@ function withoutPlanStamps(plans: unknown): unknown {
   });
 }
 
+/** Strip the top-level `lastUpdated` stamp ProjectionLab sets when it saves a document. */
+function withoutStamp(document: unknown): unknown {
+  if (!document || typeof document !== "object" || Array.isArray(document)) return document;
+  const { lastUpdated: _stamp, ...rest } = document as Obj;
+  return rest;
+}
+
 /**
  * True when a fresh export shows the restored `expected` data for `section`.
- * The app may add fields of its own and re-stamps each saved plan's
- * `lastUpdated`, so this checks that every restored value is present rather
- * than requiring byte-for-byte equality.
+ * The app may add fields of its own and re-stamps `lastUpdated` on each saved
+ * plan and on the Current Finances document, so this checks that every
+ * restored value other than those stamps is present rather than requiring
+ * byte-for-byte equality.
  */
 export function restoredSectionMatches(
   section: string,
@@ -51,6 +59,9 @@ export function restoredSectionMatches(
 ): boolean {
   if (section === "plans") {
     return containsSubset(withoutPlanStamps(expected), actual);
+  }
+  if (section === "currentFinances") {
+    return containsSubset(withoutStamp(expected), actual);
   }
   return containsSubset(expected, actual);
 }

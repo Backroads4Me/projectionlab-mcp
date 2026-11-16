@@ -3,7 +3,8 @@
 // 5 does: updateAccount assigns top-level fields over one
 // `currentFinances.accounts` record, and restoreCurrentFinances takes every
 // non-account field from the submission, replaces each submitted account
-// whole, and keeps any stored account the submission leaves out.
+// whole, keeps any stored account the submission leaves out, and re-stamps
+// the document's `lastUpdated`.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -52,6 +53,7 @@ function v5Bridge(state = v5Export()) {
       writes.push({ name: "restoreCurrentFinances", submitted: structuredClone(submitted), layout });
       const next = structuredClone(submitted);
       next.accounts = { ...finances().accounts, ...next.accounts };
+      next.lastUpdated = (finances().lastUpdated ?? 0) + 1;
       state.documents.currentFinances = next;
     },
     restorePlans: refuse("restorePlans"),
@@ -213,7 +215,9 @@ test("rollback undoes a v5 account change exactly", async () => {
   assert.deepEqual(done.restoredSections, ["currentFinances"]);
   assert.equal(bridge.writes.at(-1).name, "restoreCurrentFinances");
   assert.equal(bridge.writes.at(-1).layout, "v5");
-  assert.deepEqual(bridge.state.documents.currentFinances, v5Export().documents.currentFinances);
+  const { lastUpdated: _restamped, ...restored } = bridge.state.documents.currentFinances;
+  const { lastUpdated: _original, ...original } = v5Export().documents.currentFinances;
+  assert.deepEqual(restored, original);
 });
 
 test("rollback names a v5 account added since the snapshot, which it keeps", async () => {

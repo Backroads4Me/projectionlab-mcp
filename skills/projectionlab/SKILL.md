@@ -516,8 +516,8 @@ must-have." Same plan and event as the example above.
    `{"spendingType": {"before": "discretionary", "after": "essential"}}`.
    Show it, get the user's approval, then confirm.
 
-**Change a Current Finances account.** User: "Our rental property is worth
-480000 now; update Current Finances."
+**Change a Current Finances account (ProjectionLab 4).** User: "Our rental
+property is worth 480000 now; update Current Finances."
 
 1. `projectionlab_describe_schema` gives the asset's exact `accountId` (a
    property reads as `type: "real-estate"`). Then
@@ -531,6 +531,35 @@ must-have." Same plan and event as the example above.
    market value is stored in `amount`; `balance` is its outstanding loan, so
    a value change goes in `amount`, never `balance`. Show the preview.
 3. After the user approves, repeat the call with `"confirm": true`. The reply
+   gives `verified` and saves a snapshot of Current Finances.
+
+**The same change on ProjectionLab 5.** When `projectionlab_check_connection`
+reports `apiContract: 2`, Current Finances accounts are records of
+`documents.currentFinances.accounts`, keyed by id and narrowed by `kind`, and
+a property keeps its loan in a separate debt record.
+
+1. `projectionlab_describe_schema` reports `layout: "v5"` and lists every
+   account with its stored `kind` and `type`: the property is a
+   `kind: "real-asset"` record such as `asset_abc123`, and its loan is its own
+   `kind: "debt"` record such as `debt_abc123`, which names the property in
+   `securedByAssetId` and holds the outstanding loan in `balance`. A real
+   asset's row reports `value` and `purchasePrice` instead of a `balance`.
+2. `projectionlab_get_current_finances` with `accountId: "asset_abc123"`
+   returns the record with a `realAsset` block: `value`, `loanBalance`,
+   `equity`, and the `securedDebts` that make up that loan. That is where to
+   read the loan figure and confirm which debt carries it before editing.
+3. `projectionlab_get_current_finances` with the same `accountId` and
+   `listPaths: true` lists the record's editable paths, including `value` and
+   `purchasePrice`. Then `projectionlab_update_account` with
+   `{"accountId": "asset_abc123", "pathChanges": {"value": 480000}}` returns
+   `dryRun: true`, the `accountName`, `kind: "real-asset"` where the
+   ProjectionLab 4 reply carries a `collection`, and `changes` such as
+   `{"value": {"before": 450000, "after": 480000}}`. A property's market value
+   is stored in `value`, never in `balance`: `balance` belongs to the debt, so
+   the loan itself changes only by patching `debt_abc123`. Say in the preview
+   that Current Finances is shared by every plan, so this changes what every
+   plan starts from. Show the preview.
+4. After the user approves, repeat the call with `"confirm": true`. The reply
    gives `verified` and saves a snapshot of Current Finances.
 
 **Clone a plan.** User: "Copy my Retire at 55 plan so I can try retiring

@@ -126,7 +126,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `projectionlab://plan-data` | Full export of all plans/finances/progress/settings (refreshed per access) |
 | `projectionlab://summary` | High-level snapshot: net worth, account breakdown, plan count |
 | `projectionlab://knowledge` | Curated ProjectionLab data-model + FIRE/tax reference (static) |
-| `projectionlab://data-model` | Field meanings, units, and allowed values for `listPaths` writes, version-stamped to ProjectionLab 4.6.0 (static) |
+| `projectionlab://data-model` | Field meanings, units, and allowed values for path-addressable reads and writes, version-stamped to ProjectionLab 4.6.0 (v4) and 5.0.0 (v5); follows the connected ProjectionLab version once `projectionlab_check_connection` has run, and `?layout=v4` or `?layout=v5` chooses |
 | `projectionlab://guide` | Agent guide: setup walkthrough, tool selection, change workflow, privacy rules (static) |
 
 ## Prompts
@@ -147,6 +147,20 @@ Every write that replaces the plans array re-reads the plans just before writing
 Plan reads hide secret values: a secret-named field (`apiKey`, `token`, `password`, …) comes back as `[REDACTED]`. A payload for `projectionlab_update_plan_section` or any `restore_*` tool that still holds that sentinel under a secret-named key is refused with `INVALID_INPUT`, dry runs included, naming the offending dot paths. Supply the real value, or change single fields with `projectionlab_update_plan_event` or `projectionlab_update_plan_settings`, which patch by path and never round-trip hidden values.
 
 `projectionlab_update_plan_section` also refuses `sectionData` that does not match the section's current container shape (array for milestones, `{ events: [...] }` for event sections, plain object for `variables`, `montecarlo` and `withdrawalStrategy`), so a wrong or omitted payload can never delete a section or change its type.
+
+A write is refused with `INVALID_INPUT` when it sets a field to a value outside
+the choices the app offers for it, and the refusal lists those choices. The
+enforced fields are the ones `projectionlab://data-model` tags `observed`, in
+the ProjectionLab 4 and the ProjectionLab 5 layout alike; a listing carries
+`allowedValues` for other fields too, as a hint a write does not enforce. The
+check reaches inside a whole-object write and applies to a leaf only when the
+write changes it, so a value the plan already stores outside the list rides
+through while the field beside it is written.
+
+A confirmed write is checked against a fresh re-read. When a requested path is
+missing, holds another JSON type, or holds other contents, the result reports
+`verified: false` and names each failed path in `verificationIssues` with a
+reason of `absent`, `shape`, or `value`.
 
 For a small assumptions or strategy change, first call
 `projectionlab_get_plan_settings` with the plan name. It returns the current

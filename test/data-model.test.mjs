@@ -21,6 +21,10 @@ process.env.LOG_LEVEL = "error";
 const { registerDataModelResource } = await import(
   "../dist/resources/dataModel.js"
 );
+const { matchDataModelField, UI_LABELS_V5 } = await import("../dist/dataModel.js");
+const { renderDataModelV5Markdown } = await import(
+  "../dist/resources/dataModel.js"
+);
 const { registerGetPlanSettingsTool } = await import(
   "../dist/tools/getPlanSettings.js"
 );
@@ -216,6 +220,69 @@ test("listPaths for variables carries units for inflation and bracketRate", asyn
   const mode = settings.find((item) => item.path === "assumptionsMode");
   assert.deepEqual(mode.allowedValues, ["fixed", "historical", "custom"]);
   assert.equal(mode.units, undefined);
+});
+
+test("plan settings listings carry the app's label and location where recorded", async () => {
+  const server = fakeServer();
+  const getSettings = caller(server, "projectionlab_get_plan_settings", fakeBridge(planState()));
+  const output = text(await getSettings({ planIdentifier: "Retire" }));
+  const find = (section, path) =>
+    output.sections
+      .find((entry) => entry.section === section)
+      .settings.find((item) => item.path === path);
+  const inflation = find("variables", "inflation");
+  assert.equal(inflation.uiLabel, "Inflation Rate");
+  assert.equal(inflation.uiLocation, "Plan Settings > Rates (Fixed mode)");
+  assert.equal(find("withdrawalStrategy", "enabled").uiLabel, "Textbook Strategy");
+  // A field with no recorded label gains neither key.
+  const mode = find("variables", "assumptionsMode");
+  assert.equal("uiLabel" in mode, false);
+  assert.equal("uiLocation" in mode, false);
+});
+
+test("data-model resources show where each labelled plan setting is in the app", async () => {
+  const server = fakeServer();
+  registerDataModelResource(server);
+  const v4 = await resourceText(server, "projectionlab://data-model");
+  assert.match(
+    v4,
+    /`inflation` \[observed\][^\n]*In the app \(ProjectionLab 5\.0\.0\): "Inflation Rate" under Plan Settings > Rates \(Fixed mode\)\./,
+  );
+  const v5 = renderDataModelV5Markdown();
+  assert.match(v5, /## Fields in the app/);
+  assert.match(v5, /- `income\.owner`: "Earner" under Plan > income event\./);
+  assert.match(v5, /## Fields the tools cannot change/);
+  assert.match(
+    v5,
+    /- `withdrawalStrategy\.guyton-klinger\.guardrail`: "Guardrail" under Optimize > Drawdown Strategy > Textbook Withdrawals, Strategy "Guyton-Klinger"\./,
+  );
+  assert.equal(/`variables\.assumptionsMode`:/.test(v5), false);
+});
+
+test("UI labels attach to matching fields in both export layouts", () => {
+  assert.equal(matchDataModelField("variables", "inflation", "v5")?.uiLabel, "Inflation Rate");
+  assert.equal(matchDataModelField("expenses", "spendingType", "v4")?.uiLabel, "Spending Type");
+  assert.equal(matchDataModelField("expenses", "spendingType", "v5")?.uiLabel, "Spending Type");
+  assert.equal(matchDataModelField("accounts", "EWAge", "v4")?.uiLabel, "Qualified Age");
+  assert.equal(matchDataModelField("accounts", "value", "v5")?.uiLabel, "Current Value");
+  assert.equal(
+    matchDataModelField("currentFinances", "household.people.me.lifeExpectancy", "v5")?.uiLabel,
+    "Life Expectancy",
+  );
+});
+
+test("every UI_LABELS_V5 path resolves with its label against the v5 data model", () => {
+  for (const [scope, labels] of Object.entries(UI_LABELS_V5)) {
+    for (const [path, [label, location]] of Object.entries(labels)) {
+      const field = matchDataModelField(scope, path, "v5");
+      assert.ok(
+        field,
+        `UI_LABELS_V5.${scope}.${path} has no ProjectionLab 5 data model entry`,
+      );
+      assert.equal(field.uiLabel, label, `${scope}.${path} uiLabel`);
+      assert.equal(field.uiLocation, location, `${scope}.${path} uiLocation`);
+    }
+  }
 });
 
 test("listPaths for an event annotates the spending type and leaves unknown fields bare", async () => {

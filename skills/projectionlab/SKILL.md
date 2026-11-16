@@ -378,6 +378,44 @@ field tagged `observed` is refused with `INVALID_INPUT`, and the refusal lists
 the choices: pick one of them and re-run the dry run. Numbers and booleans are
 never refused this way, and `ui-label` fields are annotated but not enforced.
 
+Users know plan settings, events and accounts by their on-screen labels, not
+by paths. A listed value can also carry `uiLabel` and `uiLocation`: the control's label and
+where it is in ProjectionLab 5.0.0, with any mode that must be selected for it
+to appear in parentheses (for example `inflation` is "Inflation Rate" under
+"Plan Settings > Rates (Fixed mode)"). Use them when describing a change or
+telling the user where to check it, and say "inflation rate", not
+`variables.inflation`. A value without them has no recorded label; describe
+it from its `description`. `projectionlab://data-model` lists every recorded
+label under "Fields in the app".
+
+### Fields you cannot change
+
+Some things the user sees in the app cannot be changed through these tools.
+Do not guess a path for them or force a change through another field; tell the
+user where to change them in the app.
+
+- Milestone settings (Whose Milestone, Count Progress From, Start a Chapter,
+  Active in This Plan, Marker on Charts, Warn if Never Reached) are not in the
+  export.
+- Built-in milestones (retirement, life expectancy) cannot be deleted.
+- Events ProjectionLab generates, such as the Medicare expenses, carry
+  `_meta.deletion: "locked"`. Leave them in place.
+- Monthly Benefit, Full Retirement Age, Years to Pay Off, Real Return, and a
+  real asset's equity and loan balance are computed by the app and have no
+  stored field.
+- Keys starting with an underscore (`_rothConversions`,
+  `bondSettings._allocation`) are switched-off copies. Editing them changes
+  nothing in the app.
+- A field that only applies in a mode, such as `incomeRate` while
+  `generateIncome` is off, has no effect until the user selects that mode.
+- A plan asset with an `assetId` shows its Details (Name, Owner, Purchase
+  Price, Current Value, Type) from Current Finances, so changing them changes
+  every plan. Say so before proposing the change.
+- Progress history is recorded by ProjectionLab 5, and writing it is refused.
+- Switching a Social Security income to Estimate Benefit in the app also
+  changes its end and `taxExempt`. Read the event again after the user
+  switches modes.
+
 ### Choose the write tool
 
 Every tool below also takes `confirm` (default `false`, a dry run).

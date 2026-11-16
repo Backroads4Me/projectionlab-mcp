@@ -6,6 +6,7 @@ import {
   DATA_MODEL_V5_GROUPS,
   DATA_MODEL_V5_PROJECTIONLAB_VERSION,
   type DataModelField,
+  UI_LABELS_V5,
 } from "../dataModel.js";
 import type { ExportLayout } from "../layout.js";
 import { registerLayoutResource } from "./layoutResource.js";
@@ -18,7 +19,21 @@ function renderField(pattern: string, field: DataModelField): string {
   }
   if (field.enabledBy) parts.push(`Enabled by: ${field.enabledBy}.`);
   if (field.note) parts.push(`Note: ${field.note}`);
+  if (field.uiLabel && field.uiLocation) {
+    parts.push(`In the app (ProjectionLab 5.0.0): "${field.uiLabel}" under ${field.uiLocation}.`);
+  }
   return parts.join(" ");
+}
+
+/** Every field whose ProjectionLab 5.0.0 label is recorded. */
+function renderUiLabels(): string[] {
+  const lines: string[] = [];
+  for (const [scope, labels] of Object.entries(UI_LABELS_V5)) {
+    for (const [path, [label, location]] of Object.entries(labels)) {
+      lines.push(`- \`${scope}.${path}\`: "${label}" under ${location}.`);
+    }
+  }
+  return lines;
 }
 
 export function renderDataModelV4Markdown(): string {
@@ -69,7 +84,7 @@ export function renderDataModelV5Markdown(): string {
       "Each account record carries a kind discriminator: account (with balance and costBasis), " +
       "debt (with balance and optional securedByAssetId), or real-asset (with value and purchasePrice). " +
       "Archived accounts carry an archivedOn ISO date string.",
-    "- ProjectionLab 5 supports Solo 401k, Roth Solo 401k, and SEP IRA account types, but their export strings are not yet recorded.",
+    "- The Solo 401k, Roth Solo 401k, and SEP IRA account types store as type \"401k\" or \"roth-401k\" with subtype \"solo\", and type \"ira\" with subtype \"sep\".",
     "- Plan events carry a kind discriminator: account, real-asset, income, expense, or priority. " +
       "Plan account events link to Current Finances accounts via accountId, and asset events link via assetId. " +
       "Event timing is defined by timing objects with type (date, milestone, keyword), value, and optional modifier.",
@@ -93,6 +108,43 @@ export function renderDataModelV5Markdown(): string {
     }
     lines.push("");
   }
+  lines.push(
+    "## Fields in the app",
+    "",
+    "Plan settings (variables, montecarlo, withdrawalStrategy) and plan events keep the paths " +
+      "ProjectionLab 4 uses; their meanings, units and allowed values are in " +
+      "projectionlab://data-model?layout=v4. Each field below was found in the app by writing a " +
+      "distinct value to it or by matching a stored value to its control. Use the label and " +
+      "location when telling the user where to look. A location in parentheses names the mode " +
+      "or choice that must be selected for the control to appear.",
+    "",
+    ...renderUiLabels(),
+    "",
+    "## Fields the tools cannot change",
+    "",
+    "Do not write these, and do not try to reach them through another field. Tell the user " +
+      "where to change them in the app instead.",
+    "",
+    "- Milestone settings (Whose Milestone, Count Progress From, Start a Chapter, Active in " +
+      "This Plan, Marker on Charts, Warn if Never Reached) are not in the export.",
+    "- Built-in milestones (retirement, life expectancy) have no `removable: true` and cannot " +
+      "be deleted.",
+    "- Events ProjectionLab generates, such as the Medicare expenses, carry " +
+      '`_meta.deletion: "locked"`; leave them in place.',
+    "- Derived figures are computed by the app and have no stored field: Monthly Benefit, " +
+      "Full Retirement Age, Years to Pay Off, Real Return, and a real asset's equity and loan " +
+      "balance.",
+    "- Keys starting with an underscore (`_rothConversions`, `bondSettings._allocation`) are " +
+      "switched-off copies; editing them changes nothing in the app.",
+    "- A field that only applies in a mode, such as `incomeRate` while `generateIncome` is " +
+      "off, has no effect until the user selects that mode.",
+    "- A plan asset with an `assetId` shows its Details (Name, Owner, Purchase Price, Current " +
+      "Value, Type) from Current Finances, so those values change in every plan.",
+    "- Progress history is recorded by ProjectionLab 5; writing it is refused.",
+    "- Switching a Social Security income to Estimate Benefit in the app also changes its " +
+      "end and `taxExempt`; read the event again after the user switches modes.",
+    "",
+  );
   return lines.join("\n");
 }
 

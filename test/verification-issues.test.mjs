@@ -26,6 +26,9 @@ const { registerUpdateAccountTool } = await import(
 const { registerUpdatePlanSettingsTool } = await import(
   "../dist/tools/updatePlanSettings.js"
 );
+const { registerUpdatePlanEventTool } = await import(
+  "../dist/tools/updatePlanEvent.js"
+);
 
 /** A snapshot store that records every create. */
 function snapshotStore() {
@@ -305,3 +308,86 @@ test("update_plan_settings fails verification when the fresh read lost the plan"
   assert.doesNotMatch(done.message, /could not run/);
   assert.equal(done.snapshotId, snapshots.created[0].id);
 });
+
+/**
+ * A v4 bridge holding one plan with one income event. After the write, the
+ * fresh read can lose the event (`drop: "event"`) or the whole plan
+ * (`drop: "plan"`).
+ */
+function eventBridge({ drop } = {}) {
+  const state = {
+    plans: [
+      {
+        id: "plan_synth",
+        name: "synth",
+        lastUpdated: 1,
+        income: {
+          events: [
+            {
+              id: "income_synth",
+              name: "Synthetic wage",
+              amount: 1000,
+              taxHandling: { type: "wage", withholding: { rate: 0.1 } },
+            },
+          ],
+        },
+      },
+    ],
+  };
+  const actions = [];
+  return {
+    state,
+    actions,
+    async apiContract() {
+      return contractOf(state);
+    },
+    async editAccess() {
+      return "enabled";
+    },
+    async exportData() {
+      const data = structuredClone(state);
+      if (actions.includes("restore")) {
+        if (drop === "plan") data.plans = [];
+        if (drop === "event") data.plans[0].income.events = [];
+      }
+      return data;
+    },
+    restorePlansIfUnchanged,
+    async restorePlans(plans) {
+      actions.push("restore");
+      state.plans = structuredClone(plans);
+    },
+    async restoreCurrentFinances() {
+      throw new Error("restoreCurrentFinances must not be called");
+    },
+  };
+}
+
+const EVENT_CALL = {
+  planIdentifier: "plan_synth",
+  section: "income",
+  eventIdentifier: "income_synth",
+  pathChanges: { amount: 2000, "taxHandling.withholding.rate": 0.2 },
+  confirm: true,
+};
+
+for (const drop of ["event", "plan"]) {
+  test(`update_plan_event fails verification when the fresh read lost the ${drop}`, async () => {
+    const snapshots = snapshotStore();
+    const done = await caller(
+      registerUpdatePlanEventTool,
+      eventBridge({ drop }),
+      snapshots,
+    )("projectionlab_update_plan_event", EVENT_CALL);
+
+    assert.equal(done.success, true, JSON.stringify(done));
+    assert.equal(done.verified, false, JSON.stringify(done));
+    assert.deepEqual(byPath(done.verificationIssues), [
+      ["amount", 2000, "absent"],
+      ["taxHandling.withholding.rate", 0.2, "absent"],
+    ]);
+    assert.match(done.message, /amount/);
+    assert.match(done.message, /taxHandling\.withholding\.rate/);
+    assert.equal(done.snapshotId, snapshots.created[0].id);
+  });
+}

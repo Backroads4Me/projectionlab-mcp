@@ -325,34 +325,28 @@ export function registerUpdatePlanEventTool(
 
         await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
 
-        // Verify the patched fields on a fresh read
-        let verified = false;
-        let verificationIssues: PathChangeMismatch[] = [];
+        // Verify the patched fields on a fresh read. A plan or event the read
+        // no longer carries fails verification: with no event to look in, the
+        // mismatch walk reports one absent issue per changed path.
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (
           exportSections(verifyData).plans
         ).find(
           (p) => p && typeof p === "object" && (p as PlanObj).id === plan.id,
         ) as PlanObj | undefined;
-        if (verifiedPlan) {
-          const verifiedEvents = getEvents(verifiedPlan[section]);
-          const verifiedEvent = verifiedEvents.find(
-            (e) =>
-              e &&
-              typeof e === "object" &&
-              ((event.id !== undefined &&
-                (e as PlanObj).id === event.id) ||
-                eventLabel(e) === eventLabel(patched)),
-          ) as PlanObj | undefined;
-          if (verifiedEvent) {
-            verificationIssues = findPathChangeMismatches(
-              verifiedEvent,
-              changes,
-              EVENT_FIELD_CONTEXT,
-            );
-            verified = verificationIssues.length === 0;
-          }
-        }
+        const verifiedEvent = verifiedPlan
+          ? (getEvents(verifiedPlan[section]).find(
+              (e) =>
+                e &&
+                typeof e === "object" &&
+                ((event.id !== undefined &&
+                  (e as PlanObj).id === event.id) ||
+                  eventLabel(e) === eventLabel(patched)),
+            ) as PlanObj | undefined)
+          : undefined;
+        const verificationIssues: PathChangeMismatch[] =
+          findPathChangeMismatches(verifiedEvent, changes, EVENT_FIELD_CONTEXT);
+        const verified = verificationIssues.length === 0;
 
         return {
           content: [
@@ -375,11 +369,9 @@ export function registerUpdatePlanEventTool(
                     }),
                 message: verified
                   ? "Event patched and verified. Snapshot saved automatically."
-                  : verificationIssues.length
-                    ? `Patch sent but these fields did not verify: ${verificationIssues
-                        .map((issue) => issue.path)
-                        .join(", ")}. Check with projectionlab_get_plan_section.`
-                    : "Patch sent but verification did not confirm all fields - check with projectionlab_get_plan_section.",
+                  : `Patch sent but these fields did not verify: ${verificationIssues
+                      .map((issue) => issue.path)
+                      .join(", ")}. Check with projectionlab_get_plan_section.`,
               }),
             },
           ],

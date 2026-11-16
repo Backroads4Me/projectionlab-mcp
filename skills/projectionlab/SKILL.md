@@ -514,6 +514,21 @@ Change progress:
   dry run to pick up the latest data, show the user the new preview, and
   confirm again. When confirming `projectionlab_update_plan_section`, pass the
   dry run's `planVersion` as `expectedPlanVersion`.
+- **`verified: false`** from `projectionlab_update_plan_event`,
+  `projectionlab_update_plan_settings` or `projectionlab_update_account`
+  means the write was sent and snapshotted, but a fresh read did not show
+  every changed field. The reply lists `verificationIssues`, one per field,
+  each with its `path`, the `expected` value sent, the `stored` value read
+  back (left out when nothing is stored), and a `reason`: `absent` (the
+  field, or the whole event, plan or account, is missing from the read),
+  `shape` (a different kind of value is stored, such as an object where a
+  number was sent, or `null`) or `value` (the same kind of value with
+  different contents). Values are compared by content, so an object stored
+  in a different key order, or with extra fields the app filled in, still
+  verifies. Tell the user which fields did not land, re-read them, and offer
+  `projectionlab_rollback` when the change is partial. A
+  `projectionlab_update_account` reply with no `verified` field means the
+  fresh read itself failed; re-read the account to check.
 - **`INVALID_INPUT`** usually means an unknown path or a changed JSON type.
   List the paths again and correct the call.
 - **`WRITE_NOT_SUPPORTED`** means the account is on ProjectionLab 5, which

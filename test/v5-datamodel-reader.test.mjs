@@ -232,12 +232,25 @@ test("annotateAddressableValues annotates correctly per layout", () => {
   assert.equal(annotatedV5[0].description !== undefined, true);
   assert.deepEqual(annotatedV5[0].allowedValues, ["account", "debt", "real-asset"]);
   assert.equal(annotatedV5[1].units, "dollars");
+  // An export-shape list is a hint: a write is not held to it.
+  assert.equal(annotatedV5[0].allowedValuesEnforced, false);
+  assert.equal(annotatedV5[1].allowedValuesEnforced, undefined);
   assert.equal(annotatedV5[2].description, undefined);
 
   // v4 regression check
   const v4Values = [{ path: "inflation", value: 3 }];
   const annotatedV4 = annotateAddressableValues("variables", v4Values);
   assert.equal(annotatedV4[0].units, "percentage points");
+});
+
+test("annotateAddressableValues flags an observed v5 list as enforced", () => {
+  const [growth] = annotateAddressableValues(
+    "accounts",
+    [{ path: "investmentGrowthType", value: "plan" }],
+    "v5",
+  );
+  assert.deepEqual(growth.allowedValues, ["plan", "fixed", "custom", "none"]);
+  assert.equal(growth.allowedValuesEnforced, true);
 });
 
 test("refusedEnumChoices and enumRefusalError work per layout", () => {
@@ -310,7 +323,15 @@ test("projectionlab://data-model resource renders v5 layout correctly", async ()
   assert.match(markdown, /Evidence tags: \[export-shape\] means/);
   assert.match(markdown, /\[observed\] means a value was set through the ProjectionLab 5 UI/);
   assert.match(markdown, /`plan\.alignment\.type` \[observed\]/);
-  assert.match(markdown, /Allowed values: calendar, rolling, au-tax, uk-tax, custom/);
+  assert.match(
+    markdown,
+    /Allowed values: calendar, rolling, au-tax, uk-tax, custom\. A write of any other value is refused\./,
+  );
+  assert.equal(
+    /Allowed values: account, debt, real-asset\. A write/.test(markdown),
+    false,
+    "an export-shape list is printed without the enforcement sentence",
+  );
 
   // Requirement: solo 401k prose without guessed string
   assert.match(markdown, /Solo 401k, Roth Solo 401k, and SEP IRA/);

@@ -222,6 +222,46 @@ test("listPaths for variables carries units for inflation and bracketRate", asyn
   assert.equal(mode.units, undefined);
 });
 
+test("listPaths marks which allowed values list a write is held to", async () => {
+  const server = fakeServer();
+  const getSettings = caller(server, "projectionlab_get_plan_settings", fakeBridge(planState()));
+  const output = text(
+    await getSettings({ planIdentifier: "Retire", section: "variables" }),
+  );
+  const settings = output.sections[0].settings;
+
+  // variables.assumptionsMode is observed, so a write outside its list fails.
+  const mode = settings.find((item) => item.path === "assumptionsMode");
+  assert.equal(mode.allowedValuesEnforced, true);
+
+  // variables.filingStatus is ui-label: the list is what the app shows, not a rule.
+  const filing = settings.find((item) => item.path === "filingStatus");
+  assert.ok(filing.allowedValues.length > 0, "the entry carries a list");
+  assert.equal(filing.allowedValuesEnforced, false);
+
+  // A field with no list carries neither field.
+  const inflation = settings.find((item) => item.path === "inflation");
+  assert.equal(inflation.allowedValues, undefined);
+  assert.equal(inflation.allowedValuesEnforced, undefined);
+});
+
+test("the data-model resource marks an enforced list and leaves a hint unmarked", async () => {
+  const server = fakeServer();
+  registerDataModelResource(server);
+  const markdown = await resourceText(server, "projectionlab://data-model");
+  const entry = (pattern) =>
+    markdown.split("\n").find((line) => line.startsWith(`- \`${pattern}\` [`));
+
+  assert.match(
+    entry("assumptionsMode"),
+    /Allowed values: fixed, historical, custom\. A write of any other value is refused\./,
+  );
+  assert.equal(
+    entry("filingStatus").includes("A write of any other value is refused"),
+    false,
+  );
+});
+
 test("plan settings listings carry the app's label and location where recorded", async () => {
   const server = fakeServer();
   const getSettings = caller(server, "projectionlab_get_plan_settings", fakeBridge(planState()));

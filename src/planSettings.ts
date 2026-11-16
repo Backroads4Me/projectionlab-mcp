@@ -2,7 +2,6 @@ import { exportSections, type ExportLayout } from "./layout.js";
 import {
   applyExistingPathChanges,
   listAddressableValues,
-  pathChangesApplied,
   type AddressableValue,
   type PathValueChange,
 } from "./pathPatch.js";
@@ -26,7 +25,7 @@ const ADVANCED_RATE_SCHEDULES = new Set([
   "bondDividendRateCustom",
 ]);
 
-const PLAN_SETTING_CONTEXT = {
+export const PLAN_SETTING_CONTEXT = {
   label: "plan setting",
   discoveryTool: "projectionlab_get_plan_settings",
   example: '{ "inflation": 3 }',
@@ -61,13 +60,6 @@ export function applyPlanSettingChanges(
     section,
     layout,
   );
-}
-
-export function planSettingChangesApplied(
-  sectionData: unknown,
-  expected: Record<string, PlanSettingChange>,
-): boolean {
-  return pathChangesApplied(sectionData, expected, PLAN_SETTING_CONTEXT);
 }
 
 /** Workspace plan settings as a ProjectionLab 5 export holds them. */

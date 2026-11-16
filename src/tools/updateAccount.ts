@@ -318,6 +318,9 @@ export function registerUpdateAccountTool(
         );
         await bridge.updateAccount(entry.writeId, patch, force || undefined, layout);
 
+        // A fresh read that no longer holds the account is a failed
+        // verification, not one that could not run: with no account to look
+        // in, the mismatch walk reports one absent issue per changed path.
         let verified: boolean | undefined;
         let verificationIssues: PathChangeMismatch[] = [];
         try {
@@ -329,16 +332,12 @@ export function registerUpdateAccountTool(
             accountId,
             fresh.layout,
           );
-          verificationIssues = verifiedEntry
-            ? findPathChangeMismatches(
-                verifiedEntry.account,
-                result.changes,
-                ACCOUNT_FIELD_CONTEXT,
-              )
-            : [];
-          verified = verifiedEntry
-            ? verificationIssues.length === 0
-            : undefined;
+          verificationIssues = findPathChangeMismatches(
+            verifiedEntry?.account,
+            result.changes,
+            ACCOUNT_FIELD_CONTEXT,
+          );
+          verified = verificationIssues.length === 0;
         } catch (err) {
           log.warn("updateAccount", `Post-write verification failed: ${err}`);
         }

@@ -8,10 +8,11 @@ import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import { redactSecrets } from "../redact.js";
 import {
+  PLAN_SETTING_CONTEXT,
   PLAN_SETTING_SECTIONS,
   applyPlanSettingChanges,
-  planSettingChangesApplied,
 } from "../planSettings.js";
+import { findPathChangeMismatches } from "../pathPatch.js";
 import {
   resolvePlanIndex,
   planNotFoundError,
@@ -145,9 +146,15 @@ export function registerUpdatePlanSettingsTool(
             typeof item === "object" &&
             (item as PlanObj).id === plan.id,
         ) as PlanObj | undefined;
-        const verified =
-          !!verifiedPlan &&
-          planSettingChangesApplied(verifiedPlan[section], changes);
+        // A plan the fresh read no longer carries fails verification: with no
+        // section to look in, the mismatch walk reports one absent issue per
+        // changed setting.
+        const verificationIssues = findPathChangeMismatches(
+          verifiedPlan?.[section],
+          changes,
+          PLAN_SETTING_CONTEXT,
+        );
+        const verified = verificationIssues.length === 0;
 
         return {
           content: [
@@ -159,10 +166,19 @@ export function registerUpdatePlanSettingsTool(
                 section,
                 changes: redactSecrets(changes, { byName: true }),
                 verified,
+                ...(verified
+                  ? {}
+                  : {
+                      verificationIssues: redactSecrets(verificationIssues, {
+                        byName: true,
+                      }),
+                    }),
                 snapshotId: snapshot.id,
                 message: verified
                   ? "Plan settings patched and verified. Snapshot saved automatically."
-                  : "Plan settings update was sent but verification did not confirm every value. A snapshot was saved; inspect the plan settings and roll back if needed.",
+                  : `Plan settings update was sent but these settings did not verify: ${verificationIssues
+                      .map((issue) => issue.path)
+                      .join(", ")}. A snapshot was saved; inspect the plan settings and roll back if needed.`,
               }),
             },
           ],

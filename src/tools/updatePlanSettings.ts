@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
-import { config } from "../config.js";
-import { ProjectionLabError, errorResult } from "../errors.js";
+import { requireEditsEnabled } from "../editAccess.js";
+import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import { redactSecrets } from "../redact.js";
@@ -18,6 +18,8 @@ import {
   requirePlans,
   type PlanObj,
 } from "../plans.js";
+import { detectLayout, exportSections } from "../layout.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
 export function registerUpdatePlanSettingsTool(
   server: McpServer,
@@ -67,14 +69,9 @@ export function registerUpdatePlanSettingsTool(
     },
     async ({ planIdentifier, section, changes: incoming, confirm }) => {
       try {
-        if (config.readOnly) {
-          throw new ProjectionLabError(
-            "READ_ONLY_MODE",
-            "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
-            "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
-          );
-        }
+        await requireEditsEnabled(bridge);
 
+        await assertWritesSupported(bridge, ["restorePlans"]);
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
         const planIndex = resolvePlanIndex(plans, planIdentifier);
@@ -84,6 +81,7 @@ export function registerUpdatePlanSettingsTool(
           plan[section],
           incoming,
           section,
+          detectLayout(data),
         );
 
         if (!confirm) {
@@ -128,7 +126,7 @@ export function registerUpdatePlanSettingsTool(
 
         const snapshot = await snapshots.create("updatePlanSettings", ["plans"], {
           plans,
-        });
+        }, detectLayout(data));
 
         const updatedPlans = [...plans];
         updatedPlans[planIndex] = { ...plan, [section]: updated };
@@ -136,11 +134,11 @@ export function registerUpdatePlanSettingsTool(
           "updatePlanSettings",
           `Patching ${Object.keys(changes).length} setting(s) in "${section}" of plan "${plan.name}"`,
         );
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
 
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (
-          Array.isArray(verifyData.plans) ? verifyData.plans : []
+          exportSections(verifyData).plans
         ).find(
           (item) =>
             item &&

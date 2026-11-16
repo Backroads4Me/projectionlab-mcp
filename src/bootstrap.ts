@@ -2,10 +2,12 @@ import { PROTOCOL_VERSION, type WireMethod } from "./types/wire.js";
 import { VERSION } from "./version.js";
 
 /** The Plugin API calls the snippet will run; the meta-operations
- * `describeApi` and `waitForApi` are handled by the snippet itself. */
-const PLUGIN_METHODS: readonly Exclude<WireMethod, "describeApi" | "waitForApi">[] = [
+ * `describeApi`, `waitForApi`, and `apiVersion` are handled by the snippet itself. */
+const PLUGIN_METHODS: readonly Exclude<WireMethod, "describeApi" | "waitForApi" | "apiVersion">[] = [
   "exportData",
+  "getAccounts",
   "updateAccount",
+  "updateAccountValues",
   "restoreCurrentFinances",
   "restorePlans",
   "restoreProgress",
@@ -61,15 +63,24 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   }
   async function handle(frame, ws) {
     try {
-      if (frame.method !== "waitForApi" && frame.method !== "describeApi" && !PLUGIN_METHODS.includes(frame.method)) {
+      if (frame.method !== "waitForApi" && frame.method !== "describeApi" && frame.method !== "apiVersion" && !PLUGIN_METHODS.includes(frame.method)) {
         throw new Error("Not a wire protocol method: " + frame.method);
       }
       const requested = frame.method === "waitForApi" ? Number((frame.params || [])[0]) : NaN;
       const api = await waitForApi(Number.isFinite(requested) && requested > 0 ? requested : 15000);
       let result;
       if (frame.method === "waitForApi") result = true;
+      else if (frame.method === "apiVersion") result = api.version === undefined ? null : api.version;
       else if (frame.method === "describeApi") result = describeApi(api);
       else {
+        if (Object.prototype.hasOwnProperty.call(frame, "expectApiVersion")) {
+          const actual = api.version === undefined ? null : api.version;
+          if (actual !== frame.expectApiVersion) {
+            const e = new Error("Plugin API version is " + JSON.stringify(actual) + ", not the " + JSON.stringify(frame.expectApiVersion) + " the server checked");
+            e.code = "CONTRACT_CHANGED";
+            throw e;
+          }
+        }
         const fn = api[frame.method];
         if (typeof fn !== "function") throw new Error("Plugin API method unavailable: " + frame.method);
         result = await fn.apply(api, frame.params);
@@ -78,6 +89,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
     } catch (err) {
       const msg = err && err.message ? err.message : String(err);
       const code = err && err.code === "API_NOT_AVAILABLE" ? "API_NOT_AVAILABLE"
+        : err && err.code === "CONTRACT_CHANGED" ? "CONTRACT_CHANGED"
         : /api.?key|invalid key|unauthori[sz]ed|forbidden|\\b401\\b|\\b403\\b/i.test(msg) ? "API_KEY_INVALID" : "UNKNOWN";
       ws.send(JSON.stringify({ type: "response", id: frame.id, ok: false, error: { code, message: msg } }));
     }
@@ -85,7 +97,7 @@ export function buildBootstrapSnippet(port: number, token: string): string {
   function connect() {
     if (stopped) return;
     const ws = new WebSocket("ws://127.0.0.1:" + cfg.port);
-    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", token: cfg.token, protocolVersion: cfg.protocolVersion, executor: cfg.executor, instanceId }));
+    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", token: cfg.token, protocolVersion: cfg.protocolVersion, executor: cfg.executor, instanceId, features: ["expectApiVersion"] }));
     ws.onmessage = (ev) => {
       let frame;
       try { frame = JSON.parse(ev.data); } catch { return; }

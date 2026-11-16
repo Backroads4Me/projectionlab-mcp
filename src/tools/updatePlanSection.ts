@@ -2,12 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
-import { config } from "../config.js";
-import {
-  ProjectionLabError,
-  errorResult,
-  redactedSecretsError,
-} from "../errors.js";
+import { requireEditsEnabled } from "../editAccess.js";
+import { errorResult, redactedSecretsError } from "../errors.js";
 import {
   assertPlanVersion,
   planVersion,
@@ -28,6 +24,8 @@ import {
   verifySectionApplied,
   type PlanObj,
 } from "../plans.js";
+import { detectLayout, exportSections } from "../layout.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
 interface DiffResult {
   currentCount: number;
@@ -172,19 +170,14 @@ export function registerUpdatePlanSectionTool(
       expectedPlanVersion,
     }) => {
       try {
-        if (config.readOnly) {
-          throw new ProjectionLabError(
-            "READ_ONLY_MODE",
-            "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
-            "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
-          );
-        }
+        await requireEditsEnabled(bridge);
 
         const redactedPaths = findRedactedSecretPaths(sectionData);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("sectionData", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restorePlans"]);
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
 
@@ -221,7 +214,7 @@ export function registerUpdatePlanSectionTool(
         // Snapshot all plans before mutation
         const snapshot = await snapshots.create("updatePlanSection", ["plans"], {
           plans,
-        });
+        }, detectLayout(data));
 
         // Rebuild plans array with the one section replaced
         const updatedPlan = { ...plan, [section]: sectionData };
@@ -233,14 +226,14 @@ export function registerUpdatePlanSectionTool(
           `Updating "${section}" of plan "${plan.name}" (${diff.currentCount} → ${diff.newCount} items)`,
         );
 
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
 
         // Verify by re-reading; match by plan id since order may change.
         // Compares submitted content (not just counts) so a rejected,
         // transformed, or dropped write can't report false success.
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (
-          Array.isArray(verifyData.plans) ? verifyData.plans : []
+          exportSections(verifyData).plans
         ).find(
           (p) => p && typeof p === "object" && (p as PlanObj).id === plan.id,
         ) as PlanObj | undefined;

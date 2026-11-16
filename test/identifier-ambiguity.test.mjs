@@ -8,9 +8,9 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 process.env.PL_SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-ambiguity-")),
   "snapshots",
@@ -120,6 +120,10 @@ function registered() {
   const state = { plans: plans() };
   const bridge = {
     writes: [],
+    async apiContract() { return contractOf(state); },
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       return structuredClone(state);
     },

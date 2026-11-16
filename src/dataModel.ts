@@ -1,4 +1,5 @@
 import { ProjectionLabError } from "./errors.js";
+import type { ExportLayout } from "./layout.js";
 
 /**
  * Verified field knowledge for the values this server reads and writes.
@@ -10,12 +11,15 @@ import { ProjectionLabError } from "./errors.js";
  *   read back (or matched field-for-field against a known plan).
  * - "ui-label": the control was seen in the UI but not confirmed by a
  *   stored-value test.
- * Only fields confirmed against ProjectionLab 4.6.0 are listed; fields known
- * from names alone are left out entirely.
+ * - "export-shape": the field and its value type appear in a ProjectionLab 5
+ *   export; its meaning is not yet confirmed by a stored-value test.
+ * Only fields confirmed against ProjectionLab 4.6.0 or 5.0.0 are listed;
+ * fields known from names alone are left out entirely.
  */
 export const DATA_MODEL_PROJECTIONLAB_VERSION = "4.6.0";
+export const DATA_MODEL_V5_PROJECTIONLAB_VERSION = "5.0.0";
 
-export type DataModelEvidence = "observed" | "ui-label";
+export type DataModelEvidence = "observed" | "ui-label" | "export-shape";
 
 export interface DataModelField {
   description: string;
@@ -1413,19 +1417,607 @@ export const DATA_MODEL_GROUPS: readonly DataModelGroup[] = [
   },
 ];
 
+function asExportShapeGroup(group: DataModelGroup): DataModelGroup {
+  const fields: Record<string, DataModelField> = {};
+  for (const [pattern, field] of Object.entries(group.fields)) {
+    fields[pattern] = { ...field, evidence: "export-shape" };
+  }
+  return { ...group, fields };
+}
+
+// Year alignment in ProjectionLab 5. Every choice was set in a plan's Override
+// Year Alignment control and read back; Account Settings offers the same
+// choices, and "calendar" and "custom" were read back from it as well.
+const ALIGNMENT_TYPES = ["calendar", "rolling", "au-tax", "uk-tax", "custom"] as const;
+const ALIGNMENT_NOTE =
+  '"calendar" runs January to December; "rolling" stores no date and counts plan years from the current month; "au-tax" stores date "2000-07-01" and "uk-tax" stores "2000-04-01"; "custom" stores the chosen starting month as "2000-MM-01". The plan ends on the last day of the plan year that holds the household\'s latest life expectancy, so changing the alignment can add or remove a plan year.';
+const ALIGNMENT_DATE_DESCRIPTION =
+  'Month each plan year starts, as "2000-MM-01"; only the month is meaningful.';
+
+const VARIABLES_V5_BASE = asExportShapeGroup(
+  DATA_MODEL_GROUPS.find((g) => g.scope === "variables")!,
+);
+const VARIABLES_V5_GROUP: DataModelGroup = {
+  ...VARIABLES_V5_BASE,
+  fields: {
+    ...VARIABLES_V5_BASE.fields,
+    "bondSettings.allocation": {
+      ...VARIABLES_V5_BASE.fields["bondSettings.allocation"],
+      evidence: "observed",
+      note:
+        "Array of { x, y } points: x is the plan year (1 is the current plan year) and y is a percentage (0-100). " +
+        "ProjectionLab keeps the last point on the plan's final year. When a change of year alignment shortens the plan, the app moves that point to the new final year; when the plan lengthens again, it adds a point at the new final year and keeps the moved one.",
+    },
+    "alignment.type": {
+      description:
+        "This plan's own year alignment. null or absent means the plan follows the account's settings plan.alignment.",
+      allowedValues: ALIGNMENT_TYPES,
+      evidence: "observed",
+      note: ALIGNMENT_NOTE,
+    },
+    "alignment.date": {
+      description: ALIGNMENT_DATE_DESCRIPTION,
+      enabledBy: 'alignment.type "custom", "au-tax" or "uk-tax"',
+      evidence: "observed",
+    },
+  },
+};
+const MONTECARLO_V5_GROUP = asExportShapeGroup(
+  DATA_MODEL_GROUPS.find((g) => g.scope === "montecarlo")!,
+);
+const WITHDRAWAL_STRATEGY_V5_GROUP = asExportShapeGroup(
+  DATA_MODEL_GROUPS.find((g) => g.scope === "withdrawalStrategy")!,
+);
+
+export const DATA_MODEL_V5_GROUPS: readonly DataModelGroup[] = [
+  {
+    scope: "envelope",
+    title: "Document envelope",
+    fields: {
+      schema: {
+        description: "Root envelope schema version (1 in ProjectionLab 5 exports).",
+        units: "count",
+        evidence: "export-shape",
+      },
+      exportedAt: {
+        description: "Timestamp in milliseconds when the export was generated.",
+        units: "milliseconds",
+        evidence: "export-shape",
+      },
+      documents: {
+        description: "Container holding currentFinances, plans, settings, and accountHistory documents.",
+        evidence: "export-shape",
+      },
+    },
+  },
+  {
+    scope: "currentFinances",
+    title: "Current Finances document",
+    fields: {
+      schema: {
+        description: "Current Finances document schema version (5 in ProjectionLab 5).",
+        units: "count",
+        evidence: "export-shape",
+      },
+      lastUpdated: {
+        description: "Timestamp in milliseconds of the last modification.",
+        units: "milliseconds",
+        evidence: "export-shape",
+      },
+      "location.country": {
+        description: "Tax residence country code of the household.",
+        evidence: "export-shape",
+      },
+      "location.state": {
+        description: "State or province code of the household.",
+        evidence: "export-shape",
+      },
+      "household.partnerStatus": {
+        description: "Household partnership status.",
+        evidence: "export-shape",
+      },
+      "household.people.me.id": {
+        description: "Identifier of the primary household person.",
+        evidence: "export-shape",
+      },
+      "household.people.me.name": {
+        description: "Display label of the primary household person.",
+        evidence: "export-shape",
+      },
+      "household.people.me.birthYear": {
+        description: "Birth year of the primary household person.",
+        units: "count",
+        evidence: "export-shape",
+      },
+      "household.people.me.birthMonth": {
+        description: "Birth month index of the primary household person.",
+        units: "count",
+        evidence: "export-shape",
+      },
+      "household.people.me.lifeExpectancy": {
+        description: "Target life expectancy age for modeling the primary household person.",
+        units: "age",
+        evidence: "export-shape",
+      },
+      "household.people.me.color": {
+        description: "Display color code for the primary household person.",
+        evidence: "export-shape",
+      },
+      "household.people.me.icon": {
+        description: "Icon identifier for the primary household person.",
+        evidence: "export-shape",
+      },
+      "household.people.me.character": {
+        description: "Character avatar string for the primary household person.",
+        evidence: "export-shape",
+      },
+      "household.people.spouse.id": {
+        description: "Identifier of the spouse.",
+        evidence: "export-shape",
+      },
+      "household.people.spouse.name": {
+        description: "Display label of the spouse.",
+        evidence: "export-shape",
+      },
+      "household.people.spouse.birthYear": {
+        description: "Birth year of the spouse.",
+        units: "count",
+        evidence: "export-shape",
+      },
+      "household.people.spouse.birthMonth": {
+        description: "Birth month index of the spouse.",
+        units: "count",
+        evidence: "export-shape",
+      },
+      "household.people.spouse.lifeExpectancy": {
+        description: "Target life expectancy age for modeling the spouse.",
+        units: "age",
+        evidence: "export-shape",
+      },
+      "household.people.spouse.color": {
+        description: "Display color code for the spouse.",
+        evidence: "export-shape",
+      },
+      "household.people.spouse.icon": {
+        description: "Icon identifier for the spouse.",
+        evidence: "export-shape",
+      },
+      "household.people.spouse.character": {
+        description: "Character avatar string for the spouse.",
+        evidence: "export-shape",
+      },
+    },
+  },
+  {
+    scope: "accounts",
+    title: "Current Finances accounts and debts (keyed by account ID)",
+    fields: {
+      id: {
+        description: "Unique account identifier.",
+        evidence: "export-shape",
+      },
+      name: {
+        description: "Display label of the account.",
+        evidence: "export-shape",
+      },
+      kind: {
+        description: "Account category discriminator.",
+        allowedValues: ["account", "debt", "real-asset"],
+        evidence: "export-shape",
+      },
+      type: {
+        description: "Account classification type.",
+        allowedValues: ["taxable", "401k", "savings", "land", "secured-loan"],
+        evidence: "export-shape",
+        note: "ProjectionLab 5 supports Solo 401k, Roth Solo 401k, and SEP IRA account types, but their export strings are not yet recorded.",
+      },
+      subtype: {
+        description: "Sub-classification of a real asset (such as lot).",
+        evidence: "export-shape",
+      },
+      owner: {
+        description: "Which household member owns the account.",
+        allowedValues: ["me", "spouse", "joint"],
+        evidence: "export-shape",
+      },
+      order: {
+        description: "Display sort order index.",
+        units: "count",
+        evidence: "export-shape",
+      },
+      icon: {
+        description: "Icon identifier displayed in the interface.",
+        evidence: "export-shape",
+      },
+      archivedOn: {
+        description: "ISO date string (YYYY-MM-DD) indicating when the account was archived.",
+        evidence: "export-shape",
+        note: "Present only on archived accounts.",
+      },
+      balance: {
+        description: "Current balance in dollars for accounts and outstanding principal for debts.",
+        units: DOLLARS,
+        evidence: "export-shape",
+        note: "Present on account and debt kinds.",
+      },
+      costBasis: {
+        description: "Unadjusted tax cost basis in dollars for capital gains tracking on taxable accounts.",
+        units: DOLLARS,
+        evidence: "export-shape",
+        note: "Present on account kind.",
+      },
+      value: {
+        description: "Estimated fair market value in dollars for real assets.",
+        units: DOLLARS,
+        evidence: "export-shape",
+        note: "Present on real-asset kind.",
+      },
+      purchasePrice: {
+        description: "Historical acquisition cost in dollars for real assets.",
+        units: DOLLARS,
+        evidence: "export-shape",
+        note: "Present on real-asset kind.",
+      },
+      securedByAssetId: {
+        description: "Identifier of the real asset securing this debt.",
+        evidence: "export-shape",
+        note: "Present on debt kind when secured by an asset.",
+      },
+      accountId: {
+        description: "Identifier of the associated Current Finances account on plan events.",
+        evidence: "export-shape",
+      },
+      liquidity: {
+        description: "Whether the account balance is treated as liquid capital.",
+        evidence: "export-shape",
+      },
+      withdraw: {
+        description: "Drawdown eligibility rule.",
+        evidence: "export-shape",
+      },
+    },
+  },
+  {
+    scope: "assets",
+    title: "Plan assets and real property",
+    fields: {
+      id: {
+        description: "Unique event identifier.",
+        evidence: "export-shape",
+      },
+      name: {
+        description: "Display label of the asset.",
+        evidence: "export-shape",
+      },
+      kind: {
+        description: "Event category discriminator.",
+        allowedValues: ["real-asset"],
+        evidence: "export-shape",
+      },
+      assetId: {
+        description: "Identifier of the corresponding Current Finances real asset.",
+        evidence: "export-shape",
+      },
+      type: {
+        description: "Asset classification type.",
+        allowedValues: ["land"],
+        evidence: "export-shape",
+      },
+      subtype: {
+        description: "Sub-classification of the asset (such as lot).",
+        evidence: "export-shape",
+      },
+      value: {
+        description: "Market value in dollars.",
+        units: DOLLARS,
+        evidence: "export-shape",
+      },
+      valueType: {
+        description: "Currency basis of the asset value.",
+        evidence: "export-shape",
+      },
+      purchasePrice: {
+        description: "Historical acquisition cost in dollars.",
+        units: DOLLARS,
+        evidence: "export-shape",
+      },
+      purchasePriceType: {
+        description: "Currency basis of the purchase price.",
+        evidence: "export-shape",
+      },
+      loans: {
+        description: "Array of linked financing structures.",
+        evidence: "export-shape",
+      },
+    },
+  },
+  {
+    scope: "income",
+    title: "Plan income events",
+    fields: {
+      id: {
+        description: "Unique event identifier.",
+        evidence: "export-shape",
+      },
+      name: {
+        description: "Display label of the income event.",
+        evidence: "export-shape",
+      },
+      kind: {
+        description: "Event category discriminator.",
+        allowedValues: ["income"],
+        evidence: "export-shape",
+      },
+      type: {
+        description: "Income classification type.",
+        allowedValues: ["other"],
+        evidence: "export-shape",
+      },
+      amount: {
+        description: "Scheduled income amount in dollars.",
+        units: DOLLARS,
+        evidence: "export-shape",
+      },
+      "start.type": {
+        description: "Timing reference mode for when the income event begins.",
+        allowedValues: ["date", "milestone", "keyword"],
+        evidence: "export-shape",
+      },
+      "start.value": {
+        description: "Target date, milestone identifier, or keyword for the start timing.",
+        evidence: "export-shape",
+      },
+      "start.modifier": {
+        description: "Optional offset modifier for the start timing.",
+        evidence: "export-shape",
+      },
+      "end.type": {
+        description: "Timing reference mode for when the income event ends.",
+        allowedValues: ["date", "milestone", "keyword"],
+        evidence: "export-shape",
+      },
+      "end.value": {
+        description: "Target date, milestone identifier, or keyword for the end timing.",
+        evidence: "export-shape",
+      },
+      "end.modifier": {
+        description: "Optional offset modifier for the end timing.",
+        evidence: "export-shape",
+      },
+    },
+  },
+  {
+    scope: "expenses",
+    title: "Plan expense events",
+    fields: {
+      id: {
+        description: "Unique event identifier.",
+        evidence: "export-shape",
+      },
+      name: {
+        description: "Display label of the expense event.",
+        evidence: "export-shape",
+      },
+      kind: {
+        description: "Event category discriminator.",
+        allowedValues: ["expense"],
+        evidence: "export-shape",
+      },
+      type: {
+        description: "Expense classification type.",
+        allowedValues: ["living-expenses"],
+        evidence: "export-shape",
+      },
+      spendingType: {
+        description: "Spending classification category.",
+        allowedValues: ["essential", "discretionary"],
+        evidence: "export-shape",
+      },
+      amount: {
+        description: "Scheduled expense amount in dollars.",
+        units: DOLLARS,
+        evidence: "export-shape",
+      },
+      "start.type": {
+        description: "Timing reference mode for when the expense event begins.",
+        allowedValues: ["date", "milestone", "keyword"],
+        evidence: "export-shape",
+      },
+      "start.value": {
+        description: "Target date, milestone identifier, or keyword for the start timing.",
+        evidence: "export-shape",
+      },
+      "start.modifier": {
+        description: "Optional offset modifier for the start timing.",
+        evidence: "export-shape",
+      },
+      "end.type": {
+        description: "Timing reference mode for when the expense event ends.",
+        allowedValues: ["date", "milestone", "keyword"],
+        evidence: "export-shape",
+      },
+      "end.value": {
+        description: "Target date, milestone identifier, or keyword for the end timing.",
+        evidence: "export-shape",
+      },
+      "end.modifier": {
+        description: "Optional offset modifier for the end timing.",
+        evidence: "export-shape",
+      },
+    },
+  },
+  {
+    scope: "priorities",
+    title: "Plan priorities (cash flow routing)",
+    fields: {
+      id: {
+        description: "Unique event identifier.",
+        evidence: "export-shape",
+      },
+      name: {
+        description: "Display label of the priority flow.",
+        evidence: "export-shape",
+      },
+      kind: {
+        description: "Event category discriminator.",
+        allowedValues: ["priority"],
+        evidence: "export-shape",
+      },
+      type: {
+        description: "Priority routing target type.",
+        allowedValues: ["taxable"],
+        evidence: "export-shape",
+      },
+      accountId: {
+        description:
+          "Identifier of the plan account event this priority routes cash to (an accounts.events[].id in the same plan), not a Current Finances account ID.",
+        evidence: "export-shape",
+      },
+    },
+  },
+  {
+    scope: "milestones",
+    title: "Plan milestones",
+    fields: {
+      id: {
+        description: "Unique identifier of the milestone.",
+        evidence: "export-shape",
+      },
+      name: {
+        description: "Display label of the milestone.",
+        evidence: "export-shape",
+      },
+      "criteria.*.type": {
+        description: "Kind of milestone criterion.",
+        allowedValues: ["date", "year", "milestone", "netWorth", "totalDebt", "age"],
+        evidence: "export-shape",
+      },
+      "criteria.*.value": {
+        description: "Target value of the criterion.",
+        evidence: "export-shape",
+      },
+      "criteria.*.modifier": {
+        description: "Offset modifier for the criterion.",
+        evidence: "export-shape",
+      },
+      "criteria.*.years": {
+        description: "Age the criterion is met at, for an age criterion.",
+        units: YEARS,
+        evidence: "export-shape",
+      },
+      "criteria.*.precision": {
+        description: "How finely an age criterion is resolved.",
+        evidence: "export-shape",
+        note: 'Observed value: "yearly".',
+      },
+    },
+  },
+  VARIABLES_V5_GROUP,
+  MONTECARLO_V5_GROUP,
+  WITHDRAWAL_STRATEGY_V5_GROUP,
+  {
+    scope: "settings",
+    title: "Application and plan settings",
+    fields: {
+      schema: {
+        description: "Settings document schema version (5 in ProjectionLab 5).",
+        units: "count",
+        evidence: "export-shape",
+      },
+      seenVersion: {
+        description: "Last recorded application version.",
+        evidence: "export-shape",
+      },
+      "plan.activeId": {
+        description: "Active plan identifier in the application interface. Reported as stored; it does not tell which plan the user is working in, and the server never treats it as the selected plan.",
+        evidence: "export-shape",
+      },
+      "plan.baselineId": {
+        description: "Baseline comparison plan identifier. Reported as stored.",
+        evidence: "export-shape",
+      },
+      "plan.alignment.type": {
+        description:
+          "Account year alignment: where each plan year starts, for every plan without its own alignment.",
+        allowedValues: ALIGNMENT_TYPES,
+        evidence: "observed",
+        note: ALIGNMENT_NOTE,
+      },
+      "plan.alignment.date": {
+        description: ALIGNMENT_DATE_DESCRIPTION,
+        enabledBy: 'plan.alignment.type "custom", "au-tax" or "uk-tax"',
+        evidence: "observed",
+      },
+      "plan.tabs.pinned": {
+        description: "Whether plan tabs are pinned in the interface.",
+        evidence: "export-shape",
+      },
+      "plugins.enabled": {
+        description: "Whether the Plugin API is enabled.",
+        evidence: "export-shape",
+      },
+      "plugins.apiKey": {
+        description: "Secret authentication key for the Plugin API (redacted on reads).",
+        evidence: "export-shape",
+      },
+    },
+  },
+  {
+    scope: "accountHistory",
+    title: "Account history",
+    fields: {
+      "*.*.schema": {
+        description: "History record schema version (5 in ProjectionLab 5).",
+        units: "count",
+        evidence: "export-shape",
+        note: "Keyed by account ID then calendar year.",
+      },
+      "*.*.kind": {
+        description: "Account category discriminator.",
+        allowedValues: ["account", "real-asset"],
+        evidence: "export-shape",
+      },
+      "*.*.balance.*": {
+        description: "Historical end-of-year balance in dollars for an account, keyed by account ID.",
+        units: DOLLARS,
+        evidence: "export-shape",
+      },
+      "*.*.costBasis.*": {
+        description: "Historical end-of-year cost basis in dollars for an account, keyed by account ID.",
+        units: DOLLARS,
+        evidence: "export-shape",
+      },
+      "*.*.value.*": {
+        description: "Historical end-of-year estimated value in dollars for a real asset, keyed by asset ID.",
+        units: DOLLARS,
+        evidence: "export-shape",
+      },
+    },
+  },
+];
+
 interface CompiledEntry {
   pattern: string;
   segments: string[];
   field: DataModelField;
 }
 
-const compiledByScope = new Map<string, CompiledEntry[]>();
+const compiledByScopeV4 = new Map<string, CompiledEntry[]>();
 for (const group of DATA_MODEL_GROUPS) {
   const entries: CompiledEntry[] = [];
   for (const [pattern, field] of Object.entries(group.fields)) {
     entries.push({ pattern, segments: pattern.split("."), field });
   }
-  compiledByScope.set(group.scope, entries);
+  compiledByScopeV4.set(group.scope, entries);
+}
+
+const compiledByScopeV5 = new Map<string, CompiledEntry[]>();
+for (const group of DATA_MODEL_V5_GROUPS) {
+  const entries: CompiledEntry[] = [];
+  for (const [pattern, field] of Object.entries(group.fields)) {
+    entries.push({ pattern, segments: pattern.split("."), field });
+  }
+  compiledByScopeV5.set(group.scope, entries);
 }
 
 function entryMatches(segments: string[], pathSegments: string[]): boolean {
@@ -1436,12 +2028,21 @@ function entryMatches(segments: string[], pathSegments: string[]): boolean {
   return true;
 }
 
+/** Get the data model groups for the specified export layout. */
+export function getDataModelGroups(
+  layout: ExportLayout = "v4",
+): readonly DataModelGroup[] {
+  return layout === "v5" ? DATA_MODEL_V5_GROUPS : DATA_MODEL_GROUPS;
+}
+
 /** Field entry for a scope-prefixed concrete path, or undefined. */
 export function matchDataModelField(
   scope: string,
   path: string,
+  layout: ExportLayout = "v4",
 ): DataModelField | undefined {
-  const entries = compiledByScope.get(scope);
+  const map = layout === "v5" ? compiledByScopeV5 : compiledByScopeV4;
+  const entries = map.get(scope);
   if (!entries) return undefined;
   const exact = entries.find((entry) => entry.pattern === path);
   if (exact) return exact.field;
@@ -1467,9 +2068,10 @@ export interface DataModelAnnotation {
 export function annotateAddressableValues<T extends { path: string }>(
   scope: string | undefined,
   values: readonly T[],
+  layout: ExportLayout = "v4",
 ): (T & DataModelAnnotation)[] {
   return values.map((value) => {
-    const field = scope ? matchDataModelField(scope, value.path) : undefined;
+    const field = scope ? matchDataModelField(scope, value.path, layout) : undefined;
     if (!field) return value;
     const annotated: T & DataModelAnnotation = { ...value };
     annotated.description = field.description;
@@ -1488,9 +2090,10 @@ export function refusedEnumChoices(
   scope: string | undefined,
   path: string,
   value: unknown,
+  layout: ExportLayout = "v4",
 ): readonly string[] | undefined {
   if (scope === undefined || typeof value !== "string") return undefined;
-  const field = matchDataModelField(scope, path);
+  const field = matchDataModelField(scope, path, layout);
   if (!field?.allowedValues || field.evidence !== "observed") return undefined;
   if (field.allowedValues.includes(value)) return undefined;
   return field.allowedValues;
@@ -1501,8 +2104,9 @@ export function enumRefusalError(
   scope: string,
   path: string,
   value: unknown,
+  layout: ExportLayout = "v4",
 ): ProjectionLabError | undefined {
-  const choices = refusedEnumChoices(scope, path, value);
+  const choices = refusedEnumChoices(scope, path, value, layout);
   if (!choices) return undefined;
   const shown = typeof value === "string" ? JSON.stringify(value) : String(value);
   return new ProjectionLabError(

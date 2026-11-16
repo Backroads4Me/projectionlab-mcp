@@ -8,9 +8,9 @@ import test from "node:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "false";
 const SNAPSHOT_DIR = join(
   mkdtempSync(join(tmpdir(), "plmcp-diff-")),
   "snapshots",
@@ -36,6 +36,10 @@ function fakeBridge(state) {
   const bridge = {
     state,
     exportCalls: 0,
+    async apiContract() { return contractOf(bridge.state); },
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       bridge.exportCalls++;
       return structuredClone(bridge.state);

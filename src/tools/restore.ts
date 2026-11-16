@@ -3,34 +3,20 @@ import { toJson } from "../json.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
-import { config } from "../config.js";
+import { requireEditsEnabled } from "../editAccess.js";
 import {
   ProjectionLabError,
   errorResult,
   redactedSecretsError,
 } from "../errors.js";
+import { detectLayout, exportSections, sectionOf } from "../layout.js";
+import { v5AccountsKept } from "../currentFinances.js";
 import { log } from "../logger.js";
 import { containsSubset } from "../plans.js";
-import { findRedactedSecretPaths } from "../redact.js";
+import { findRedactedSecretPaths, keepStoredSecrets } from "../redact.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
 type Obj = Record<string, unknown>;
-
-function checkReadOnly() {
-  if (config.readOnly) {
-    throw new ProjectionLabError(
-      "READ_ONLY_MODE",
-      "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
-      "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
-    );
-  }
-}
-
-function getExportSection(
-  data: Record<string, unknown>,
-  section: string,
-): unknown {
-  return section === "currentFinances" ? data.today : data[section];
-}
 
 /** Strip the `lastUpdated` stamp ProjectionLab sets when it saves a plan. */
 function withoutPlanStamps(plans: unknown): unknown {
@@ -42,11 +28,19 @@ function withoutPlanStamps(plans: unknown): unknown {
   });
 }
 
+/** Strip the top-level `lastUpdated` stamp ProjectionLab sets when it saves a document. */
+function withoutStamp(document: unknown): unknown {
+  if (!document || typeof document !== "object" || Array.isArray(document)) return document;
+  const { lastUpdated: _stamp, ...rest } = document as Obj;
+  return rest;
+}
+
 /**
  * True when a fresh export shows the restored `expected` data for `section`.
- * The app may add fields of its own and re-stamps each saved plan's
- * `lastUpdated`, so this checks that every restored value is present rather
- * than requiring byte-for-byte equality.
+ * The app may add fields of its own and re-stamps `lastUpdated` on each saved
+ * plan and on the Current Finances and Settings documents, so this checks that every
+ * restored value other than those stamps is present rather than requiring
+ * byte-for-byte equality.
  */
 export function restoredSectionMatches(
   section: string,
@@ -55,6 +49,9 @@ export function restoredSectionMatches(
 ): boolean {
   if (section === "plans") {
     return containsSubset(withoutPlanStamps(expected), actual);
+  }
+  if (section === "currentFinances" || section === "settings") {
+    return containsSubset(withoutStamp(expected), actual);
   }
   return containsSubset(expected, actual);
 }
@@ -66,11 +63,8 @@ async function verify(
 ): Promise<{ verified: boolean; detail?: string }> {
   try {
     await new Promise((r) => setTimeout(r, 1000));
-    const fresh = (await bridge.exportData({ fresh: true })) as Record<
-      string,
-      unknown
-    >;
-    const actual = getExportSection(fresh, section);
+    const fresh = await bridge.exportData({ fresh: true });
+    const actual = sectionOf(fresh, section);
     if (actual === undefined) {
       return {
         verified: false,
@@ -188,8 +182,10 @@ export function registerRestoreTools(
     {
       title: "Restore Current Finances",
       description:
-        "REPLACES the entire Current Finances state with the provided data. " +
-        "This is a FULL REPLACEMENT, not a patch - the entire current finances object is overwritten. " +
+        "REPLACES the Current Finances state with the provided data. " +
+        "On ProjectionLab 4 this is a FULL REPLACEMENT, not a patch - the entire current finances object is overwritten. " +
+        "On ProjectionLab 5 every non-account field and each submitted account is replaced whole, but an " +
+        "account missing from the submission is kept, not deleted; the preview lists those as keptAccounts. " +
         "When confirm is false (default), returns a dry-run preview WITHOUT modifying anything. " +
         "When confirm is true, auto-snapshots current state then applies the replacement. " +
         "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
@@ -212,12 +208,18 @@ export function registerRestoreTools(
     },
     async ({ currentFinances, confirm }) => {
       try {
-        checkReadOnly();
+        await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(currentFinances);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("currentFinances", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restoreCurrentFinances"]);
+        const exportData = await bridge.exportData({ fresh: true });
+        const layout = detectLayout(exportData);
+        const stored = sectionOf(exportData, "currentFinances");
+        const kept =
+          layout === "v5" ? { keptAccounts: v5AccountsKept(currentFinances, stored) } : {};
         if (!confirm) {
           const topKeys = Object.keys(currentFinances);
           return {
@@ -229,8 +231,11 @@ export function registerRestoreTools(
                     dryRun: true,
                     operation: "restoreCurrentFinances",
                     topLevelKeys: topKeys,
+                    ...kept,
                     warning:
-                      "This will REPLACE all Current Finances data. Set confirm=true to proceed.",
+                      layout === "v5"
+                        ? "This will replace every Current Finances field and each submitted account. Accounts in keptAccounts are not in the submission and stay as they are. Set confirm=true to proceed."
+                        : "This will REPLACE all Current Finances data. Set confirm=true to proceed.",
                   },
                 ),
               },
@@ -238,12 +243,11 @@ export function registerRestoreTools(
           };
         }
 
-        const exportData = await bridge.exportData({ fresh: true });
         await snapshots.create("restoreCurrentFinances", ["currentFinances"], {
-          currentFinances: exportData.today,
-        });
+          currentFinances: stored,
+        }, layout);
 
-        await bridge.restoreCurrentFinances(currentFinances);
+        await bridge.restoreCurrentFinances(currentFinances, layout);
 
         const { verified, detail } = await verify(
           bridge,
@@ -260,6 +264,7 @@ export function registerRestoreTools(
                   success: true,
                   verified,
                   ...(detail ? { verificationDetail: detail } : {}),
+                  ...kept,
                   message: verified
                     ? "Current Finances replaced and verified. Snapshot saved."
                     : "Current Finances replaced. Snapshot saved. Verification inconclusive - check with projectionlab_get_current_finances.",
@@ -305,14 +310,15 @@ export function registerRestoreTools(
     },
     async ({ plans, confirm }) => {
       try {
-        checkReadOnly();
+        await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(plans);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("plans", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restorePlans"]);
         const exportData = await bridge.exportData({ fresh: true });
-        const currentPlans = Array.isArray(exportData.plans) ? exportData.plans : [];
+        const currentPlans = exportSections(exportData).plans;
         const diff = diffPlans(currentPlans, plans);
 
         if (!confirm) {
@@ -337,10 +343,10 @@ export function registerRestoreTools(
         }
 
         await snapshots.create("restorePlans", ["plans"], {
-          plans: exportData.plans,
-        });
+          plans: sectionOf(exportData, "plans"),
+        }, detectLayout(exportData));
 
-        await bridge.restorePlansIfUnchanged(currentPlans, plans);
+        await bridge.restorePlansIfUnchanged(currentPlans, plans, detectLayout(exportData));
 
         const { verified, detail } = await verify(bridge, "plans", plans);
 
@@ -378,7 +384,8 @@ export function registerRestoreTools(
         "This is a FULL REPLACEMENT, not a patch. " +
         "When confirm is false (default), returns a dry-run preview. " +
         "When confirm is true, auto-snapshots then applies the replacement. " +
-        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
+        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed. " +
+        "Not available on ProjectionLab 5, which records Progress history by itself.",
       inputSchema: {
         progress: z
           .unknown()
@@ -398,12 +405,13 @@ export function registerRestoreTools(
     },
     async ({ progress, confirm }) => {
       try {
-        checkReadOnly();
+        await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(progress);
         if (redactedPaths.length > 0) {
           throw redactedSecretsError("progress", redactedPaths);
         }
 
+        await assertWritesSupported(bridge, ["restoreProgress"]);
         if (!confirm) {
           return {
             content: [
@@ -424,10 +432,10 @@ export function registerRestoreTools(
 
         const exportData = await bridge.exportData({ fresh: true });
         await snapshots.create("restoreProgress", ["progress"], {
-          progress: exportData.progress,
-        });
+          progress: sectionOf(exportData, "progress"),
+        }, detectLayout(exportData));
 
-        await bridge.restoreProgress(progress);
+        await bridge.restoreProgress(progress, detectLayout(exportData));
 
         const { verified, detail } = await verify(bridge, "progress", progress);
 
@@ -462,6 +470,8 @@ export function registerRestoreTools(
       description:
         "REPLACES the Settings state with the provided data. " +
         "This is a FULL REPLACEMENT, not a patch. " +
+        "A secret field that a read returned as [REDACTED], such as the Plugin API key, keeps its stored value; " +
+        "leave it as [REDACTED]. A payload that leaves out a stored secret is refused, since the replacement would erase it. " +
         "When confirm is false (default), returns a dry-run preview. " +
         "When confirm is true, auto-snapshots then applies the replacement. " +
         "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
@@ -482,13 +492,30 @@ export function registerRestoreTools(
         openWorldHint: true,
       },
     },
-    async ({ settings, confirm }) => {
+    async ({ settings: submitted, confirm }) => {
       try {
-        checkReadOnly();
-        const redactedPaths = findRedactedSecretPaths(settings);
-        if (redactedPaths.length > 0) {
-          throw redactedSecretsError("settings", redactedPaths);
+        await requireEditsEnabled(bridge);
+        await assertWritesSupported(bridge, ["restoreSettings"]);
+
+        // Settings hold the Plugin API key, which every read hides. Each
+        // hidden secret takes its stored value, and a payload that leaves a
+        // stored secret out is refused: the whole-document replace would
+        // erase it, and an erased key disconnects this server.
+        const exportData = await bridge.exportData({ fresh: true });
+        const stored = sectionOf(exportData, "settings");
+        const { value: settings, kept, unfilled, dropped } = keepStoredSecrets(submitted, stored);
+        if (unfilled.length > 0) {
+          throw redactedSecretsError("settings", unfilled);
         }
+        if (dropped.length > 0) {
+          throw new ProjectionLabError(
+            "INVALID_INPUT",
+            `settings leaves out stored secret values at: ${dropped.join(", ")}`,
+            "projectionlab_restore_settings replaces the whole settings document, so a secret left out is erased, and erasing the Plugin API key disconnects this server. " +
+              "Include each of these fields as the [REDACTED] value the read returned; the stored value is kept. Nothing was written.",
+          );
+        }
+        const keptSecrets = kept.length > 0 ? { keptSecrets: kept } : {};
 
         if (!confirm) {
           return {
@@ -500,6 +527,7 @@ export function registerRestoreTools(
                     dryRun: true,
                     operation: "restoreSettings",
                     topLevelKeys: Object.keys(settings),
+                    ...keptSecrets,
                     warning:
                       "This will REPLACE all Settings. Set confirm=true to proceed.",
                   },
@@ -509,12 +537,11 @@ export function registerRestoreTools(
           };
         }
 
-        const exportData = await bridge.exportData({ fresh: true });
         await snapshots.create("restoreSettings", ["settings"], {
-          settings: exportData.settings,
-        });
+          settings: stored,
+        }, detectLayout(exportData));
 
-        await bridge.restoreSettings(settings);
+        await bridge.restoreSettings(settings, detectLayout(exportData));
 
         const { verified, detail } = await verify(bridge, "settings", settings);
 
@@ -527,6 +554,7 @@ export function registerRestoreTools(
                   success: true,
                   verified,
                   ...(detail ? { verificationDetail: detail } : {}),
+                  ...keptSecrets,
                   message: verified
                     ? "Settings replaced and verified. Snapshot saved."
                     : "Settings replaced. Snapshot saved. Verification inconclusive.",

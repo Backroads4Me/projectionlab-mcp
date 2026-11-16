@@ -45,11 +45,11 @@ test("an extension at or above MIN_EXTENSION_VERSION says nothing", () => {
   );
   // Higher than MIN, even if server is higher or lower
   assert.deepEqual(
-    versionNotices({ server: "2.0.0", executor: "extension/1.2.1", latest: "2.0.0" }),
+    versionNotices({ server: "2.0.0", executor: "extension/1.3.1", latest: "2.0.0" }),
     [],
   );
   assert.deepEqual(
-    versionNotices({ server: "1.1.0", executor: "extension/1.2.1", latest: "1.1.0" }),
+    versionNotices({ server: "1.1.0", executor: "extension/1.3.1", latest: "1.1.0" }),
     [],
   );
 });

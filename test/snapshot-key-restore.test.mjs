@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { contractOf } from "./helpers/contract.mjs";
 
 const KEY = "pl-key-9f3a-test";
 const HOME = mkdtempSync(join(tmpdir(), "plmcp-key-home-"));
@@ -17,7 +18,6 @@ const SNAPSHOT_DIR = join(HOME, "snapshots");
 
 process.env.HOME = HOME;
 process.env.PL_API_KEY = KEY;
-process.env.PL_READ_ONLY = "false";
 process.env.PL_SNAPSHOT_DIR = SNAPSHOT_DIR;
 process.env.LOG_LEVEL = "error";
 
@@ -48,6 +48,10 @@ function fakeBridge(initial) {
     state,
     writes: [],
     payloads: [],
+    async apiContract() { return contractOf(state); },
+    async editAccess() {
+      return "enabled";
+    },
     async exportData() {
       return structuredClone(state);
     },
@@ -139,7 +143,6 @@ test("rollback refuses a placeholder snapshot when PL_API_KEY is unset", async (
     PATH: process.env.PATH,
     HOME: mkdtempSync(join(tmpdir(), "plmcp-keyless-home-")),
     PL_API_KEY: "",
-    PL_READ_ONLY: "false",
     PL_SNAPSHOT_DIR: SNAPSHOT_DIR,
     LOG_LEVEL: "error",
   };
@@ -149,6 +152,10 @@ test("rollback refuses a placeholder snapshot when PL_API_KEY is unset", async (
     const state = { settings: {}, plans: [], today: {} };
     const writes = [];
     const bridge = {
+      async apiContract() { return contractOf(state); },
+      async editAccess() {
+        return "enabled";
+      },
       async exportData() { return structuredClone(state); },
       async restoreSettings(s) { writes.push(s); state.settings = s; },
     };

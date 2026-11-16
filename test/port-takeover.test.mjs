@@ -55,7 +55,7 @@ function reconnectingExecutor({ reconnectMs = 300, hang = false, plans, response
     const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
     socket = ws;
     ws.on("open", () =>
-      ws.send(JSON.stringify({ type: "hello", token: TOKEN, protocolVersion: PROTOCOL_VERSION, executor: "fake/1.0" })),
+      ws.send(JSON.stringify({ type: "hello", token: TOKEN, protocolVersion: PROTOCOL_VERSION, executor: "fake/1.0", allowEdits: true })),
     );
     ws.on("message", async (raw) => {
       const frame = JSON.parse(String(raw));
@@ -65,6 +65,8 @@ function reconnectingExecutor({ reconnectMs = 300, hang = false, plans, response
         if (frame.method === "exportData") await gate;
         if (responseMs) await sleep(responseMs);
         let result = true;
+        // A ProjectionLab 4 page: its Plugin API has no version.
+        if (frame.method === "apiVersion") result = null;
         if (frame.method === "exportData") {
           result = plans ? { plans: structuredClone(plans) } : { marker: "data" };
         }
@@ -413,6 +415,7 @@ test("two instances writing plans at once: one write lands and the other gets PL
     await bridge.restorePlansIfUnchanged(
       read,
       read.map((p) => ({ ...p, [field]: 1 })),
+      "v4",
     );
   };
   const [a, b] = await Promise.allSettled([

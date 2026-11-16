@@ -7,7 +7,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.PL_API_KEY = "test-api-key";
-process.env.PL_READ_ONLY = "true";
 process.env.LOG_LEVEL = "error";
 
 const { registerSchemaTool } = await import("../dist/tools/schema.js");
@@ -24,6 +23,9 @@ function fakeServer() {
 
 function fakeBridge(state) {
   return {
+    async editAccess() {
+      return "disabled";
+    },
     async exportData() {
       return structuredClone(state);
     },

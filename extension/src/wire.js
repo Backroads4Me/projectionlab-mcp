@@ -94,15 +94,48 @@ export function isForcedConnectChange(changes, { authed = false } = {}) {
   return differs(changes.connectRequestedAt) && !authed;
 }
 
+/** The optional behaviors this executor supports (src/types/wire.ts HelloFrame.features). */
+export const EXECUTOR_FEATURES = ["expectApiVersion"];
+
 /**
  * The hello frame. instanceId and takeover are omitted when absent or not
- * exactly true, so a 1.1.0 server sees exactly the old frame shape.
+ * exactly true. features and allowEdits are always sent; servers that predate
+ * them ignore them. allowEdits is the "Enable agent plan edits" switch, and a
+ * server treats an absent field as an executor without the switch.
  */
-export function buildHelloFrame({ token, protocolVersion, executor, instanceId, takeover }) {
-  const frame = { type: "hello", token, protocolVersion, executor };
+export function buildHelloFrame({ token, protocolVersion, executor, instanceId, takeover, allowEdits }) {
+  const frame = { type: "hello", token, protocolVersion, executor, features: [...EXECUTOR_FEATURES], allowEdits: allowEdits === true };
   if (typeof instanceId === "string" && instanceId) frame.instanceId = instanceId;
   if (takeover === true) frame.takeover = true;
   return frame;
+}
+
+/** The frame that reports a change of the switch on an open connection. */
+export function buildSettingsFrame(allowEdits) {
+  return { type: "settings", allowEdits: allowEdits === true };
+}
+
+/**
+ * Wire methods that only read (src/types/wire.ts WireMethod). Every other
+ * method counts as a write, so a method added to the protocol is refused
+ * while the switch is off until it is listed here.
+ */
+export const READ_METHODS = Object.freeze(["exportData", "getAccounts", "validateApiKey", "describeApi", "waitForApi", "apiVersion"]);
+
+export function isWriteMethod(method) {
+  return !READ_METHODS.includes(method);
+}
+
+/**
+ * The error a request gets while "Enable agent plan edits" is off, or null
+ * when it may run. Only exactly true counts as on.
+ */
+export function editRefusal(method, allowEdits) {
+  if (!isWriteMethod(method) || allowEdits === true) return null;
+  return {
+    code: "EDITS_DISABLED",
+    message: "Agent plan edits are turned off in the MCP Bridge for ProjectionLab extension options.",
+  };
 }
 
 /**
@@ -143,6 +176,55 @@ function compareVersions(a, b) {
     if (left[i] !== right[i]) return left[i] < right[i] ? -1 : 1;
   }
   return 0;
+}
+
+/** The ProjectionLab app, granted at install (manifest `host_permissions`). */
+export const APP_URL_PATTERN = "https://app.projectionlab.com/*";
+/** ProjectionLab v5 Early Access, granted only when the user allows it on the
+ * options page (manifest `optional_host_permissions`). */
+export const EARLY_ACCESS_URL_PATTERN = "https://ea.projectionlab.com/*";
+/** The `tabs.query` URL patterns for the executor's tab: always the main app,
+ * plus Early Access once the user has allowed it. */
+export function tabPatternsFor(earlyAccessGranted) {
+  return earlyAccessGranted ? [APP_URL_PATTERN, EARLY_ACCESS_URL_PATTERN] : [APP_URL_PATTERN];
+}
+
+/** How long a tab the extension opens may take to finish loading. */
+export const NEW_TAB_LOAD_TIMEOUT_MS = 30_000;
+
+// A new tab can report "complete" for its initial about:blank document before
+// it navigates. A tab whose URL the extension may not read (no host
+// permission) has no url and counts as loaded; the injection then reports
+// the missing permission itself.
+const isLoaded = (tab) => tab?.status === "complete" && tab.url !== "about:blank";
+
+/**
+ * Resolves once the tab finishes loading its page, and rejects when the tab
+ * closes first or timeoutMs passes. A script injected into a new tab before
+ * then runs in the blank document and is discarded when the page loads.
+ * `tabs` is the browser.tabs API, passed in so tests can supply a fake.
+ */
+export function waitForTabLoad(tabs, tabId, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let timer;
+    const finish = (settle, value) => {
+      clearTimeout(timer);
+      tabs.onUpdated.removeListener(onUpdated);
+      tabs.onRemoved.removeListener(onRemoved);
+      settle(value);
+    };
+    function onUpdated(id, _changeInfo, tab) {
+      if (id === tabId && isLoaded(tab)) finish(resolve);
+    }
+    function onRemoved(id) {
+      if (id === tabId) finish(reject, new Error("ProjectionLab tab was closed before it finished loading."));
+    }
+    tabs.onUpdated.addListener(onUpdated);
+    tabs.onRemoved.addListener(onRemoved);
+    timer = setTimeout(() => finish(reject, new Error(`ProjectionLab tab did not finish loading within ${timeoutMs / 1000} seconds.`)), timeoutMs);
+    // The page may have finished loading before the listeners were added.
+    tabs.get(tabId).then((tab) => { if (isLoaded(tab)) finish(resolve); }, () => {});
+  });
 }
 
 /**

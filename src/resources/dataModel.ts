@@ -1,9 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { Bridge } from "../bridge.js";
 import {
   DATA_MODEL_GROUPS,
   DATA_MODEL_PROJECTIONLAB_VERSION,
+  DATA_MODEL_V5_GROUPS,
+  DATA_MODEL_V5_PROJECTIONLAB_VERSION,
   type DataModelField,
 } from "../dataModel.js";
+import type { ExportLayout } from "../layout.js";
+import { registerLayoutResource } from "./layoutResource.js";
 
 function renderField(pattern: string, field: DataModelField): string {
   const parts = [`- \`${pattern}\` [${field.evidence}]: ${field.description}`];
@@ -16,7 +21,7 @@ function renderField(pattern: string, field: DataModelField): string {
   return parts.join(" ");
 }
 
-export function renderDataModelMarkdown(): string {
+export function renderDataModelV4Markdown(): string {
   const lines: string[] = [
     `# ProjectionLab Data Model (ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION})`,
     "",
@@ -51,26 +56,60 @@ export function renderDataModelMarkdown(): string {
   return lines.join("\n");
 }
 
-export function registerDataModelResource(server: McpServer) {
-  server.registerResource(
-    "data-model",
-    "projectionlab://data-model",
-    {
-      title: "ProjectionLab Data Model",
-      description:
-        `Field meanings, units, and allowed values for path-addressable reads and writes, ` +
-        `version-stamped to ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION}. Static. ` +
-        "Entries tagged ui-label are not yet confirmed by a stored-value test.",
-      mimeType: "text/markdown",
-    },
-    async (uri) => ({
-      contents: [
-        {
-          uri: uri.href,
-          text: renderDataModelMarkdown(),
-          mimeType: "text/markdown",
-        },
-      ],
-    }),
-  );
+export function renderDataModelV5Markdown(): string {
+  const lines: string[] = [
+    `# ProjectionLab Data Model (ProjectionLab ${DATA_MODEL_V5_PROJECTIONLAB_VERSION})`,
+    "",
+    "Field reference for the values in ProjectionLab 5 exports. " +
+      "The root document envelope carries schema version 1 and an exportedAt timestamp, " +
+      "containing currentFinances, plans, settings, and accountHistory.",
+    "",
+    "Key characteristics of the ProjectionLab 5 layout:",
+    "- Accounts live in documents.currentFinances.accounts keyed by account ID. " +
+      "Each account record carries a kind discriminator: account (with balance and costBasis), " +
+      "debt (with balance and optional securedByAssetId), or real-asset (with value and purchasePrice). " +
+      "Archived accounts carry an archivedOn ISO date string.",
+    "- ProjectionLab 5 supports Solo 401k, Roth Solo 401k, and SEP IRA account types, but their export strings are not yet recorded.",
+    "- Plan events carry a kind discriminator: account, real-asset, income, expense, or priority. " +
+      "Plan account events link to Current Finances accounts via accountId, and asset events link via assetId. " +
+      "Event timing is defined by timing objects with type (date, milestone, keyword), value, and optional modifier.",
+    "- Plans carry no active flag. settings.plan.activeId and baselineId are reported as stored, and " +
+      "no plan is treated as the selected plan.",
+    "- A priority's accountId names the plan account event it routes cash to, not a Current Finances account. " +
+      "Event names need not be unique within a section; address an event by id when its name is ambiguous.",
+    "- Historical records are stored in documents.accountHistory keyed by account ID then calendar year, " +
+      "without a separate progress section.",
+    "",
+    "Evidence tags: [export-shape] means the field and its value type appear in a " +
+      "ProjectionLab 5 export; its meaning is not yet confirmed by a stored-value test. " +
+      "[observed] means a value was set through the ProjectionLab 5 UI and the stored value " +
+      "was read back. Writes are refused only on [observed] option lists.",
+    "",
+  ];
+  for (const group of DATA_MODEL_V5_GROUPS) {
+    lines.push(`## ${group.title}`, "");
+    for (const [pattern, field] of Object.entries(group.fields)) {
+      lines.push(renderField(pattern, field));
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+export function renderDataModelMarkdown(layout: ExportLayout = "v4"): string {
+  return layout === "v5" ? renderDataModelV5Markdown() : renderDataModelV4Markdown();
+}
+
+export function registerDataModelResource(server: McpServer, bridge?: Bridge) {
+  registerLayoutResource(server, bridge, {
+    name: "data-model",
+    uri: "projectionlab://data-model",
+    title: "ProjectionLab Data Model",
+    description:
+      `Field meanings, units, and allowed values for path-addressable reads and writes, ` +
+      `version-stamped to ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION} (v4) and ` +
+      `${DATA_MODEL_V5_PROJECTIONLAB_VERSION} (v5). Follows the connected ProjectionLab version once a connection check has run, and ProjectionLab 4 before that; append ?layout=v4 or ?layout=v5 to choose. ` +
+      "Entries tagged ui-label or export-shape are not yet confirmed by a stored-value test.",
+    render: renderDataModelMarkdown,
+  });
 }

@@ -4,7 +4,8 @@ export async function executePageRequest(request) {
   // The Plugin API calls the wire protocol defines (src/types/wire.ts
   // WireMethod). Kept inside this function because executeScript serializes
   // it into the page without its module scope.
-  const PLUGIN_METHODS = ["exportData", "updateAccount", "restoreCurrentFinances", "restorePlans", "restoreProgress", "restoreSettings", "validateApiKey"];
+  const PLUGIN_METHODS = ["exportData", "getAccounts", "updateAccount", "updateAccountValues", "restoreCurrentFinances", "restorePlans", "restoreProgress", "restoreSettings", "validateApiKey"];
+  const META_METHODS = ["waitForApi", "describeApi", "apiVersion"];
   function waitForApi(timeoutMs) {
     return new Promise((resolve, reject) => {
       const deadline = Date.now() + timeoutMs;
@@ -19,18 +20,20 @@ export async function executePageRequest(request) {
 
   function classifyError(error) {
     if (error?.code === "API_NOT_AVAILABLE") return "API_NOT_AVAILABLE";
+    if (error?.code === "CONTRACT_CHANGED") return "CONTRACT_CHANGED";
     const message = error instanceof Error ? error.message : String(error);
     return /api.?key|invalid key|unauthori[sz]ed|forbidden|\b401\b|\b403\b/i.test(message) ? "API_KEY_INVALID" : "UNKNOWN";
   }
 
   try {
-    if (request.method !== "waitForApi" && request.method !== "describeApi" && !PLUGIN_METHODS.includes(request.method)) {
+    if (!META_METHODS.includes(request.method) && !PLUGIN_METHODS.includes(request.method)) {
       throw new Error(`Not a wire protocol method: ${request.method}`);
     }
     const requested = request.method === "waitForApi" ? Number(request.params?.[0]) : NaN;
     const api = await waitForApi(Number.isFinite(requested) && requested > 0 ? requested : 15_000);
     let result;
     if (request.method === "waitForApi") result = true;
+    else if (request.method === "apiVersion") result = api.version ?? null;
     else if (request.method === "describeApi") {
       result = {};
       const seen = new Set();
@@ -45,6 +48,14 @@ export async function executePageRequest(request) {
         object = Object.getPrototypeOf(object);
       }
     } else {
+      // A write carries the Plugin API version the server checked; a page
+      // that reloaded onto another version since then is not written to.
+      if (Object.prototype.hasOwnProperty.call(request, "expectApiVersion")) {
+        const actual = api.version ?? null;
+        if (actual !== request.expectApiVersion) {
+          throw Object.assign(new Error(`Plugin API version is ${JSON.stringify(actual)}, not the ${JSON.stringify(request.expectApiVersion)} the server checked`), { code: "CONTRACT_CHANGED" });
+        }
+      }
       const operation = api[request.method];
       if (typeof operation !== "function") throw new Error(`Plugin API method is unavailable: ${request.method}`);
       result = await operation.apply(api, request.params);

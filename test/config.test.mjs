@@ -15,7 +15,7 @@ const configUrl = pathToFileURL(
   join(dirname(fileURLToPath(import.meta.url)), "..", "dist", "config.js"),
 ).href;
 
-/** Returns { apiKey, readOnly, wsPort, logLevel, appUrl } as seen by a fresh process. */
+/** Returns { apiKey, prettyJson, wsPort, logLevel, appUrl, keys } as seen by a fresh process. */
 function loadConfig({ env = {}, userEnvFile } = {}) {
   const home = mkdtempSync(join(tmpdir(), "plmcp-home-"));
   if (userEnvFile !== undefined) {
@@ -29,7 +29,7 @@ function loadConfig({ env = {}, userEnvFile } = {}) {
       "--input-type=module",
       "-e",
       `const { config } = await import(${JSON.stringify(configUrl)});
-       console.log(JSON.stringify({ apiKey: config.apiKey ?? null, readOnly: config.readOnly, wsPort: config.wsPort, logLevel: config.logLevel, appUrl: config.appUrl }));`,
+       console.log(JSON.stringify({ apiKey: config.apiKey ?? null, prettyJson: config.prettyJson, wsPort: config.wsPort, logLevel: config.logLevel, appUrl: config.appUrl, keys: Object.keys(config) }));`,
     ],
     { env: childEnv, encoding: "utf8" },
   );
@@ -47,19 +47,19 @@ function startupError(env) {
 }
 
 test("the per-user env file supplies settings", () => {
-  const c = loadConfig({ userEnvFile: "PL_API_KEY=user-key\nPL_READ_ONLY=false\nPL_WS_PORT=9100\n" });
+  const c = loadConfig({ userEnvFile: "PL_API_KEY=user-key\nPL_PRETTY_JSON=true\nPL_WS_PORT=9100\n" });
   assert.equal(c.apiKey, "user-key");
-  assert.equal(c.readOnly, false);
+  assert.equal(c.prettyJson, true);
   assert.equal(c.wsPort, 9100);
 });
 
 test("the host env block takes precedence over the per-user env file", () => {
   const c = loadConfig({
-    env: { PL_API_KEY: "host-key", PL_READ_ONLY: "true" },
-    userEnvFile: "PL_API_KEY=user-key\nPL_READ_ONLY=false\n",
+    env: { PL_API_KEY: "host-key", PL_PRETTY_JSON: "false" },
+    userEnvFile: "PL_API_KEY=user-key\nPL_PRETTY_JSON=true\n",
   });
   assert.equal(c.apiKey, "host-key");
-  assert.equal(c.readOnly, true);
+  assert.equal(c.prettyJson, false);
 });
 
 test("a missing key leaves apiKey unset instead of failing startup", () => {
@@ -67,12 +67,10 @@ test("a missing key leaves apiKey unset instead of failing startup", () => {
   assert.equal(c.apiKey, null);
 });
 
-test("writes stay disabled unless PL_READ_ONLY is exactly false", () => {
-  for (const value of ["", "true", "yes", "0", " TRUE "]) {
-    assert.equal(loadConfig({ env: { PL_READ_ONLY: value } }).readOnly, true, `PL_READ_ONLY=${JSON.stringify(value)}`);
-  }
-  for (const value of ["false", "FALSE", " false "]) {
-    assert.equal(loadConfig({ env: { PL_READ_ONLY: value } }).readOnly, false, `PL_READ_ONLY=${JSON.stringify(value)}`);
+test("no env setting enables writes; only the extension's plan-edits switch does", () => {
+  for (const value of ["false", "true"]) {
+    const c = loadConfig({ env: { PL_READ_ONLY: value }, userEnvFile: `PL_READ_ONLY=${value}\n` });
+    assert.equal(c.keys.some((key) => /read.?only|write|edit/i.test(key)), false, c.keys.join(", "));
   }
 });
 

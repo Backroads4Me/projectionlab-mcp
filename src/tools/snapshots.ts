@@ -3,19 +3,24 @@ import { toJson } from "../json.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import { resolveSnapshot, type SnapshotManager } from "../snapshot.js";
-import { config } from "../config.js";
+import { requireEditsEnabled } from "../editAccess.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { REDACTED, containsText, hasApiKeyPlaceholder } from "../redact.js";
+import { v5AccountsKept } from "../currentFinances.js";
 import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { restoredSectionMatches } from "./restore.js";
+import { assertSnapshotLayout, detectLayout, exportSections, sectionOf } from "../layout.js";
+import type { WireMethod } from "../types/wire.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
-function getExportSection(
-  data: Record<string, unknown>,
-  section: string,
-): unknown {
-  return section === "currentFinances" ? data.today : data[section];
-}
+/** The Plugin API method that writes each snapshot section back. */
+const RESTORE_METHODS: Partial<Record<string, WireMethod>> = {
+  currentFinances: "restoreCurrentFinances",
+  plans: "restorePlans",
+  progress: "restoreProgress",
+  settings: "restoreSettings",
+};
 
 export function registerSnapshotTools(
   server: McpServer,
@@ -106,13 +111,7 @@ export function registerSnapshotTools(
     },
     async ({ snapshotId, nBack, beforeTime, confirm }) => {
       try {
-        if (config.readOnly) {
-          throw new ProjectionLabError(
-            "READ_ONLY_MODE",
-            "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
-            "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
-          );
-        }
+        await requireEditsEnabled(bridge);
 
         const snapshot = await resolveSnapshot(snapshots, {
           snapshotId,
@@ -142,6 +141,28 @@ export function registerSnapshotTools(
           );
         }
 
+        // A snapshot from the other export layout cannot be written back
+        // through the Plugin API; refuse it in the preview as well.
+        const currentData = await bridge.exportData({ fresh: true });
+        const liveLayout = detectLayout(currentData);
+        assertSnapshotLayout(snapshot.layout, liveLayout);
+        await assertWritesSupported(
+          bridge,
+          snapshot.sections.flatMap((section) => RESTORE_METHODS[section] ?? []),
+        );
+
+        // ProjectionLab 5 restores Current Finances account by account and
+        // keeps an account the snapshot does not hold, such as one added
+        // since; name those so the preview does not promise to remove them.
+        const keptAccounts =
+          liveLayout === "v5" && snapshot.data.currentFinances !== undefined
+            ? v5AccountsKept(
+                snapshot.data.currentFinances,
+                sectionOf(currentData, "currentFinances"),
+              )
+            : [];
+        const kept = keptAccounts.length > 0 ? { keptAccounts } : {};
+
         if (!confirm) {
           return {
             content: [
@@ -154,8 +175,11 @@ export function registerSnapshotTools(
                     timestamp: snapshot.timestamp,
                     operation: snapshot.operation,
                     sections: snapshot.sections,
+                    ...kept,
                     message:
-                      "This will restore the data sections listed above. Set confirm=true to proceed.",
+                      keptAccounts.length > 0
+                        ? "This will restore the data sections listed above. The Current Finances accounts in keptAccounts are not in the snapshot and stay as they are. Set confirm=true to proceed."
+                        : "This will restore the data sections listed above. Set confirm=true to proceed.",
                   },
                 ),
               },
@@ -164,26 +188,22 @@ export function registerSnapshotTools(
         }
 
         // Snapshot current state before rolling back
-        const currentData = await bridge.exportData({ fresh: true });
         const sectionsToBackup: Record<string, unknown> = {};
         for (const section of snapshot.sections) {
-          sectionsToBackup[section] = getExportSection(
-            currentData as Record<string, unknown>,
-            section,
-          );
+          sectionsToBackup[section] = sectionOf(currentData, section);
         }
         await snapshots.create(
           `rollback_pre_${snapshot.id}`,
           snapshot.sections,
           sectionsToBackup,
+          liveLayout,
         );
 
         // restorePlans replaces every plan, so refuse when a plan was saved
         // in ProjectionLab since the read above. This early check refuses
         // before any section is applied; the plans write below checks again,
         // atomically with the write.
-        const exportedPlans = (currentData as Record<string, unknown>).plans;
-        const currentPlans = Array.isArray(exportedPlans) ? exportedPlans : [];
+        const currentPlans = exportSections(currentData).plans;
         if (
           snapshot.sections.includes("plans") &&
           snapshot.data.plans !== undefined
@@ -204,19 +224,20 @@ export function registerSnapshotTools(
 
           switch (section) {
             case "currentFinances":
-              await bridge.restoreCurrentFinances(sectionData);
+              await bridge.restoreCurrentFinances(sectionData, liveLayout);
               break;
             case "plans":
               await bridge.restorePlansIfUnchanged(
                 currentPlans,
                 sectionData as unknown[],
+                liveLayout,
               );
               break;
             case "progress":
-              await bridge.restoreProgress(sectionData);
+              await bridge.restoreProgress(sectionData, liveLayout);
               break;
             case "settings":
-              await bridge.restoreSettings(sectionData);
+              await bridge.restoreSettings(sectionData, liveLayout);
               break;
             default:
               continue;
@@ -228,16 +249,13 @@ export function registerSnapshotTools(
         let unverifiedSections: string[] = restoredSections;
         try {
           await new Promise((r) => setTimeout(r, 1000));
-          const fresh = (await bridge.exportData({ fresh: true })) as Record<
-            string,
-            unknown
-          >;
+          const fresh = await bridge.exportData({ fresh: true });
           unverifiedSections = restoredSections.filter(
             (section) =>
               !restoredSectionMatches(
                 section,
                 snapshot.data[section],
-                getExportSection(fresh, section),
+                sectionOf(fresh, section),
               ),
           );
         } catch (err) {
@@ -257,6 +275,7 @@ export function registerSnapshotTools(
                   verified,
                   restoredSections,
                   ...(verified ? {} : { unverifiedSections }),
+                  ...kept,
                   fromSnapshot: snapshot.id,
                   message: verified
                     ? "Rollback complete and verified. A pre-rollback snapshot was also saved."

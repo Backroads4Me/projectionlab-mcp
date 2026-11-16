@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
-import { config } from "../config.js";
 import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { updateCheck } from "../updateCheck.js";
@@ -19,18 +18,22 @@ export function registerConnectionTool(
       description:
         "Verify connectivity to ProjectionLab. Checks that the browser is running, " +
         "the ProjectionLab page is loaded, the Plugin API is accessible, and the API key is valid. " +
-        "Also reports writesEnabled, which is false while the server is in read-only mode " +
-        "(PL_READ_ONLY is not \"false\") and every write tool, dry runs included, is refused. " +
+        "Also reports writesEnabled, which is true only while the connected browser extension's " +
+        "\"Enable agent plan edits\" switch is on; while it is false every write tool, dry runs " +
+        "included, is refused. " +
         "Call this first in every session, before any other ProjectionLab tool. If any check " +
         "fails, read the projectionlab://guide resource and walk the user through the fix. " +
         "The result also carries versions (server, executor, latest npm release) and notices: " +
-        "plain sentences to relay to the user when a release is out of date.",
+        "plain sentences to relay to the user when a release is out of date. apiContract is the " +
+        "Plugin API contract the page offers: 1 on ProjectionLab 4, 2 on ProjectionLab 5, which " +
+        "has no progress write.",
       outputSchema: {
         browser: z.boolean(),
         pageLoaded: z.boolean(),
         apiAvailable: z.boolean(),
         apiKeyValid: z.boolean(),
         executor: z.string().optional(),
+        apiContract: z.union([z.literal(1), z.literal(2)]).optional(),
         errors: z.array(z.string()),
         writesEnabled: z.boolean(),
         versions: z.object({
@@ -48,10 +51,7 @@ export function registerConnectionTool(
     },
     async () => {
       try {
-        const status = {
-          ...(await bridge.checkConnection()),
-          writesEnabled: !config.readOnly,
-        };
+        const status = await bridge.checkConnection();
         const versions = {
           server: VERSION,
           executor: status.executor ?? null,

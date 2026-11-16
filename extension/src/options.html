@@ -17,6 +17,10 @@ input[type=number],input[type=password],input[type=text]{box-sizing:border-box;p
 .check{display:flex;gap:.5rem;align-items:flex-start;font-weight:400}.check input{margin-top:.3rem}
 button{padding:.55rem 1rem;font:inherit;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--fg);cursor:pointer}
 button[type=submit]{margin-top:1.25rem;background:var(--link);border-color:var(--link);color:var(--bg)}
+.early-access{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border)}
+h2{font-size:1.1rem;margin:0 0 .25rem}
+#eaStatus{margin:.5rem 0}
+#editsState:empty{display:none}
 code{font-size:.9em}a{color:var(--link)}
 footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--muted);font-size:.9rem}
 footer a{margin-right:1rem}
@@ -32,6 +36,13 @@ footer a{margin-right:1rem}
   <p id="update"></p>
 </div>
 
+<section class="panel" aria-labelledby="editsHeading">
+  <h2 id="editsHeading">Plan edits</h2>
+  <label class="check"><input id="allowEdits" type="checkbox"> <span>Enable agent plan edits</span></label>
+  <p class="help">Off: your AI assistant can read your ProjectionLab data but cannot change it. On: it can change your plans, but only after you approve each change; every change is backed up first and can be undone. Takes effect at once, without Save or a restart.</p>
+  <p id="editsState" class="help" role="status"></p>
+</section>
+
 <form id="settings">
   <label for="port">Local port</label>
   <input id="port" type="number" min="1" max="65535" required>
@@ -45,6 +56,13 @@ footer a{margin-right:1rem}
 
   <button type="submit">Save</button> <span id="saved" role="status"></span>
 </form>
+
+<section class="early-access" aria-labelledby="eaHeading">
+  <h2 id="eaHeading">ProjectionLab Early Access</h2>
+  <p class="help">If your ProjectionLab account has moved to v5 Early Access, the app runs at <code>ea.projectionlab.com</code>. Allow the extension to use that site so your assistant can reach it. Accounts on <code>app.projectionlab.com</code> do not need this.</p>
+  <p id="eaStatus" role="status"></p>
+  <button type="button" id="eaToggle">Allow ea.projectionlab.com</button>
+</section>
 
 <footer>
   <a href="https://chromewebstore.google.com/detail/mcp-bridge-for-projection/njgjmcihabchffonldcgfjiocjalpoaf" target="_blank" rel="noopener">Chrome Web Store</a>

@@ -3,9 +3,21 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { buildBootstrapSnippet } from "./bootstrap.js";
-import type { Bridge, ConnectionStatus } from "./bridge.js";
+import type { Bridge, ConnectionStatus, EditAccess } from "./bridge.js";
 import { config, USER_ENV_FILE } from "./config.js";
+import { editsDisabledError } from "./editAccess.js";
 import { ProjectionLabError } from "./errors.js";
+import {
+  contractFromVersion,
+  detectLayout,
+  exportSections,
+  layoutForContract,
+  layoutLabel,
+  writeNotSupportedError,
+  writeSupported,
+  type ApiContract,
+  type ExportLayout,
+} from "./layout.js";
 import { log } from "./logger.js";
 import { planChanges, planConflictError } from "./planVersion.js";
 import type { ExportedData } from "./types/projectionlab.js";
@@ -15,6 +27,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   MIN_EXTENSION_VERSION,
   PROTOCOL_VERSION,
+  READ_METHODS,
   type ClientFrame,
   type RequestFrame,
   type ResponseFrame,
@@ -22,17 +35,31 @@ import {
   type WireMethod,
 } from "./types/wire.js";
 
+/** ProjectionLab's own app origins: the main app and v5 Early Access, where
+ * ProjectionLab moves accounts that join Early Access. */
+const PROJECTIONLAB_ORIGINS = ["https://app.projectionlab.com", "https://ea.projectionlab.com"];
+
 /** Origins allowed to open the WebSocket. Extensions plus the PL app itself
  * (Tier 0 bootstrap snippet runs in page context, so the browser sends the
- * app origin). Sockets with no Origin header (native clients, e.g. the fake
- * test executor) are allowed; the hello token still gates them. */
+ * app origin): either ProjectionLab origin, or the one PL_APP_URL names.
+ * Sockets with no Origin header (native clients, e.g. the fake test
+ * executor) are allowed; the hello token still gates them. */
 function originAllowed(origin: string | undefined): boolean {
   if (!origin) return true;
   return (
     origin.startsWith("chrome-extension://") ||
     origin.startsWith("moz-extension://") ||
+    PROJECTIONLAB_ORIGINS.includes(origin) ||
     origin === new URL(config.appUrl).origin
   );
+}
+
+/** One connection-check error line: code, message, then suggestion. The
+ * message may already end in a period (the extension's messages do), so the
+ * separator adds one only when it is missing. */
+function statusLine(err: ProjectionLabError): string {
+  const message = /[.!?]$/.test(err.message) ? err.message : `${err.message}.`;
+  return `${err.code}: ${message} ${err.suggestion}`;
 }
 
 const HELLO_TIMEOUT_MS = 5_000;
@@ -69,6 +96,8 @@ const EXTENSION_HELP =
   "or Firefox Add-ons (https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/); " +
   "the store keeps it up to date. Then enter the token from " +
   "~/.projectionlab-mcp/ws-token on its options page, and open https://app.projectionlab.com. " +
+  "An account on ProjectionLab v5 Early Access runs at https://ea.projectionlab.com instead: " +
+  "press Allow ea.projectionlab.com on the extension's options page, then open that site. " +
   "Or call projectionlab_get_bootstrap and paste the snippet into the ProjectionLab tab's console. " +
   "Install the extension from one source only: an unpacked copy alongside a store copy leaves the " +
   "browser with two extensions competing for the server's single connection, and one of them stands by.";
@@ -91,6 +120,29 @@ function parseFrame(raw: unknown): ClientFrame | null {
   }
 }
 
+/** What a write's request is checked against: the raw Plugin API version
+ * assertWriteSupported read, and the socket it was read on. */
+interface WriteGuard {
+  apiVersion: unknown;
+  socket: WebSocket;
+}
+
+function contractChangedError(message: string): ProjectionLabError {
+  return new ProjectionLabError(
+    "CONTRACT_CHANGED",
+    message,
+    "The ProjectionLab page changed between the version check and the write. Nothing was written. Run projectionlab_check_connection, then retry.",
+  );
+}
+
+/** The refusal for a write prepared from one export layout while the page
+ * now offers the other, as when two tabs run different ProjectionLab builds. */
+function layoutChangedError(prepared: ExportLayout, live: ExportLayout): ProjectionLabError {
+  return contractChangedError(
+    `This write was prepared from ${layoutLabel(prepared)} data, but the ProjectionLab page now offers ${layoutLabel(live)}`,
+  );
+}
+
 /** Best-effort chmod; a file the process does not own keeps its mode. */
 function restrictMode(path: string, mode: number): void {
   try {
@@ -105,6 +157,11 @@ export class ExtensionBridge implements Bridge {
   private conn: WebSocket | null = null;
   private connExecutor = "";
   private connInstanceId = "";
+  /** Whether the connected executor honors RequestFrame.expectApiVersion. */
+  private connGuardsApiVersion = false;
+  /** The contract from the last successful contract read (knownApiContract). */
+  private lastContract: ApiContract | undefined;
+  private connEditAccess: EditAccess = "unsupported";
   private readonly pending = new Map<string, Pending>();
   private nextId = 1;
   private heartbeat: NodeJS.Timeout | null = null;
@@ -311,7 +368,15 @@ export class ExtensionBridge implements Bridge {
         hello.instanceId.length <= 64
           ? hello.instanceId
           : "";
-      this.admit(ws, hello.executor, instanceId, hello.takeover === true);
+      const guardsApiVersion =
+        Array.isArray(hello.features) && hello.features.includes("expectApiVersion");
+      const editAccess: EditAccess =
+        typeof hello.allowEdits === "boolean"
+          ? hello.allowEdits
+            ? "enabled"
+            : "disabled"
+          : "unsupported";
+      this.admit(ws, hello.executor, instanceId, hello.takeover === true, guardsApiVersion, editAccess);
     });
   }
 
@@ -328,15 +393,17 @@ export class ExtensionBridge implements Bridge {
     executor: string,
     instanceId: string,
     takeover: boolean,
+    guardsApiVersion: boolean,
+    editAccess: EditAccess,
   ): void {
     const incumbent = this.conn;
     if (!incumbent || incumbent.readyState !== WebSocket.OPEN) {
       if (incumbent) this.dropConnection("dropping a dead executor connection");
-      this.adopt(ws, executor, instanceId);
+      this.adopt(ws, executor, instanceId, guardsApiVersion, editAccess);
       return;
     }
     if (takeover || (instanceId !== "" && instanceId === this.connInstanceId)) {
-      this.adopt(ws, executor, instanceId);
+      this.adopt(ws, executor, instanceId, guardsApiVersion, editAccess);
       return;
     }
     log.info(
@@ -348,7 +415,13 @@ export class ExtensionBridge implements Bridge {
 
   /** Promote an authenticated socket to the active connection. Replacing a
    * live incumbent (takeover or same instance id) closes it with 4003. */
-  private adopt(ws: WebSocket, executor: string, instanceId: string): void {
+  private adopt(
+    ws: WebSocket,
+    executor: string,
+    instanceId: string,
+    guardsApiVersion: boolean,
+    editAccess: EditAccess,
+  ): void {
     if (this.conn && this.conn !== ws) {
       log.info("extension", `Replacing ${this.connExecutor} with ${executor}`);
       this.conn.close(CLOSE_CODES.REPLACED, "replaced by newer connection");
@@ -364,7 +437,9 @@ export class ExtensionBridge implements Bridge {
     this.conn = ws;
     this.connExecutor = executor;
     this.connInstanceId = instanceId;
-    log.info("extension", `Executor connected: ${executor}`);
+    this.connGuardsApiVersion = guardsApiVersion;
+    this.connEditAccess = editAccess;
+    log.info("extension", `Executor connected: ${executor} (plan edits ${editAccess})`);
     ws.send(
       JSON.stringify({
         type: "helloAck",
@@ -554,6 +629,13 @@ export class ExtensionBridge implements Bridge {
       this.settle(frame);
       return;
     }
+    if (frame.type === "settings" && typeof frame.allowEdits === "boolean") {
+      const access: EditAccess = frame.allowEdits ? "enabled" : "disabled";
+      if (access !== this.connEditAccess) {
+        log.info("extension", `Plan edits ${access} by ${this.connExecutor}`);
+      }
+      this.connEditAccess = access;
+    }
   }
 
   private settle(frame: ResponseFrame): void {
@@ -576,7 +658,9 @@ export class ExtensionBridge implements Bridge {
         return new ProjectionLabError(
           "PAGE_NOT_LOADED",
           `No ProjectionLab tab: ${message}`,
-          "Open https://app.projectionlab.com in the browser running the bridge extension",
+          "Open https://app.projectionlab.com in the browser running the bridge extension. " +
+            "On ProjectionLab v5 Early Access, open https://ea.projectionlab.com and press " +
+            "Allow ea.projectionlab.com on the extension's options page.",
         );
       case "API_NOT_AVAILABLE":
         return new ProjectionLabError(
@@ -596,6 +680,13 @@ export class ExtensionBridge implements Bridge {
           message,
           "The ProjectionLab page did not respond in time - check the tab and try again",
         );
+      case "CONTRACT_CHANGED":
+        return contractChangedError(message);
+      case "EDITS_DISABLED":
+        // The browser refused the write; the switch was turned off before
+        // the settings frame saying so arrived.
+        this.connEditAccess = "disabled";
+        return editsDisabledError("disabled");
       default:
         return new ProjectionLabError(
           "UNKNOWN",
@@ -650,6 +741,8 @@ export class ExtensionBridge implements Bridge {
     this.conn = null;
     this.connExecutor = "";
     this.connInstanceId = "";
+    this.connGuardsApiVersion = false;
+    this.connEditAccess = "unsupported";
     this.awaitingPong = false;
     this.exportCache = null;
     if (this.heartbeat) {
@@ -712,15 +805,38 @@ export class ExtensionBridge implements Bridge {
     return config.apiKey;
   }
 
-  /** Send one request to the executor. Call only from the operation chain. */
+  /**
+   * Send one request to the executor. Call only from the operation chain.
+   *
+   * A write passes the guard from assertWriteSupported. An executor that
+   * honors expectApiVersion checks the page's version in the same page turn
+   * as the call. An executor that does not is trusted only on the socket the
+   * guard's version was read from: a write that would reach another one is
+   * refused, since that executor could be on another ProjectionLab version.
+   */
   private async request(
     method: WireMethod,
     params: unknown[],
     timeoutMs = REQUEST_TIMEOUT_MS,
+    guard?: WriteGuard,
   ): Promise<unknown> {
     const conn = await this.executorSocket();
+    // Every write passes here, inside the operation chain, so no tool can
+    // send one to an executor whose edits are not enabled.
+    if (!READ_METHODS.includes(method) && this.connEditAccess !== "enabled") {
+      throw editsDisabledError(this.connEditAccess);
+    }
     const id = String(this.nextId++);
     const frame: RequestFrame = { type: "request", id, method, params };
+    if (guard) {
+      if (this.connGuardsApiVersion) {
+        frame.expectApiVersion = guard.apiVersion;
+      } else if (conn !== guard.socket) {
+        throw contractChangedError(
+          "The browser executor changed after the Plugin API version was checked",
+        );
+      }
+    }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
@@ -753,6 +869,7 @@ export class ExtensionBridge implements Bridge {
       apiAvailable: false,
       apiKeyValid: false,
       errors: [],
+      writesEnabled: false,
     };
     return this.serialize(async () => {
       if (!config.apiKey) {
@@ -760,7 +877,7 @@ export class ExtensionBridge implements Bridge {
           this.requireApiKey();
         } catch (err) {
           const e = err as ProjectionLabError;
-          result.errors.push(`${e.code}: ${e.message}. ${e.suggestion}`);
+          result.errors.push(statusLine(e));
         }
       }
       try {
@@ -771,6 +888,7 @@ export class ExtensionBridge implements Bridge {
       }
       result.browser = true;
       result.executor = this.connExecutor || undefined;
+      result.writesEnabled = this.connEditAccess === "enabled";
       try {
         await this.request(
           "waitForApi",
@@ -785,10 +903,15 @@ export class ExtensionBridge implements Bridge {
         }
         result.errors.push(
           err instanceof ProjectionLabError
-            ? `${err.code}: ${err.message}. ${err.suggestion}`
+            ? statusLine(err)
             : String(err),
         );
         return result;
+      }
+      try {
+        result.apiContract = await this.fetchContract();
+      } catch (err) {
+        result.errors.push(err instanceof ProjectionLabError ? statusLine(err) : String(err));
       }
       if (!config.apiKey) return result;
       try {
@@ -800,6 +923,77 @@ export class ExtensionBridge implements Bridge {
         );
       }
       return result;
+    });
+  }
+
+  async apiContract(): Promise<ApiContract> {
+    return this.serialize(() => this.fetchContract());
+  }
+
+  knownApiContract(): ApiContract | undefined {
+    return this.lastContract;
+  }
+
+  /**
+   * The Plugin API contract the connected page offers, read fresh on every
+   * call so a page reloaded onto another ProjectionLab version is never
+   * written to under the old contract. Call only from the operation chain.
+   *
+   * An executor that predates the apiVersion meta-operation rejects it; the
+   * API's member list then decides. A page whose API has a `version` member
+   * the executor cannot report is refused rather than assumed to be contract 1.
+   */
+  private async fetchContract(): Promise<ApiContract> {
+    return (await this.readContract()).contract;
+  }
+
+  /** fetchContract, with the raw version and the socket it was read on. */
+  private async readContract(): Promise<{
+    contract: ApiContract;
+    apiVersion: unknown;
+    socket: WebSocket;
+  }> {
+    const socket = await this.executorSocket();
+    let version: unknown;
+    try {
+      version = (await this.request("apiVersion", [])) ?? null;
+    } catch (err) {
+      if (!(err instanceof ProjectionLabError) || err.code !== "UNKNOWN") throw err;
+      const members = (await this.request("describeApi", [])) as Record<string, string>;
+      if (members && typeof members === "object" && "version" in members) {
+        throw new ProjectionLabError(
+          "EXECUTOR_OUTDATED",
+          "The ProjectionLab page reports a Plugin API version that this browser executor cannot read",
+          "Update the MCP Bridge for ProjectionLab extension, or paste a fresh snippet from projectionlab_get_bootstrap. Nothing was written.",
+        );
+      }
+      this.lastContract = 1;
+      return { contract: 1, apiVersion: null, socket };
+    }
+    this.lastContract = contractFromVersion(version);
+    return { contract: this.lastContract, apiVersion: version, socket };
+  }
+
+  /**
+   * Refuses a write the page's contract does not support yet, and returns
+   * the guard to pass to the write's request. Call only from the operation
+   * chain, in the same entry as the write it guards.
+   */
+  private async assertWriteSupported(
+    method: WireMethod,
+    layout: ExportLayout,
+  ): Promise<WriteGuard> {
+    const { contract, apiVersion, socket } = await this.readContract();
+    if (!writeSupported(contract, method)) throw writeNotSupportedError(method);
+    const live = layoutForContract(contract);
+    if (live !== layout) throw layoutChangedError(layout, live);
+    return { apiVersion, socket };
+  }
+
+  async editAccess(): Promise<EditAccess> {
+    return this.serialize(async () => {
+      await this.executorSocket();
+      return this.connEditAccess;
     });
   }
 
@@ -841,7 +1035,8 @@ export class ExtensionBridge implements Bridge {
   async updateAccount(
     accountId: string,
     data: Record<string, unknown>,
-    force?: boolean,
+    force: boolean | undefined,
+    layout: ExportLayout,
   ): Promise<void> {
     await this.serialize(async () => {
       log.info(
@@ -850,48 +1045,62 @@ export class ExtensionBridge implements Bridge {
       );
       const opts: { key: string; force?: string } = { key: this.requireApiKey() };
       if (force) opts.force = "true";
-      await this.request("updateAccount", [accountId, data, opts]);
+      const guard = await this.assertWriteSupported("updateAccount", layout);
+      await this.request("updateAccount", [accountId, data, opts], REQUEST_TIMEOUT_MS, guard);
     });
     this.invalidateCache();
   }
 
-  private async restoreCall(method: WireMethod, payload: unknown): Promise<void> {
+  private async restoreCall(
+    method: WireMethod,
+    payload: unknown,
+    layout: ExportLayout,
+  ): Promise<void> {
     await this.serialize(async () => {
+      const key = this.requireApiKey();
+      const guard = await this.assertWriteSupported(method, layout);
       log.info("extension", `Calling ${method}`);
-      await this.request(method, [payload, { key: this.requireApiKey() }]);
+      await this.request(method, [payload, { key }], REQUEST_TIMEOUT_MS, guard);
     });
     this.invalidateCache();
   }
 
-  async restoreCurrentFinances(state: unknown): Promise<void> {
-    await this.restoreCall("restoreCurrentFinances", state);
+  async restoreCurrentFinances(state: unknown, layout: ExportLayout): Promise<void> {
+    await this.restoreCall("restoreCurrentFinances", state, layout);
   }
 
-  async restorePlans(plans: unknown[]): Promise<void> {
-    await this.restoreCall("restorePlans", plans);
+  async restorePlans(plans: unknown[], layout: ExportLayout): Promise<void> {
+    await this.restoreCall("restorePlans", plans, layout);
   }
 
   /** Re-reads the plans and writes `plans` as one entry on the operation
    * chain, so neither a hand-over to another instance nor another operation
    * of this one can run between the conflict check and the write. */
-  async restorePlansIfUnchanged(read: unknown[], plans: unknown[]): Promise<void> {
+  async restorePlansIfUnchanged(
+    read: unknown[],
+    plans: unknown[],
+    layout: ExportLayout,
+  ): Promise<void> {
     await this.serialize(async () => {
       const key = this.requireApiKey();
-      const data = (await this.request("exportData", [{ key }])) as ExportedData;
-      const changes = planChanges(read, Array.isArray(data.plans) ? data.plans : []);
+      const guard = await this.assertWriteSupported("restorePlans", layout);
+      const data = await this.request("exportData", [{ key }]);
+      const live = detectLayout(data);
+      if (live !== layout) throw layoutChangedError(layout, live);
+      const changes = planChanges(read, exportSections(data).plans);
       if (changes.length > 0) throw planConflictError(changes);
       log.info("extension", "Calling restorePlans");
-      await this.request("restorePlans", [plans, { key }]);
+      await this.request("restorePlans", [plans, { key }], REQUEST_TIMEOUT_MS, guard);
     });
     this.invalidateCache();
   }
 
-  async restoreProgress(progress: unknown): Promise<void> {
-    await this.restoreCall("restoreProgress", progress);
+  async restoreProgress(progress: unknown, layout: ExportLayout): Promise<void> {
+    await this.restoreCall("restoreProgress", progress, layout);
   }
 
-  async restoreSettings(settings: unknown): Promise<void> {
-    await this.restoreCall("restoreSettings", settings);
+  async restoreSettings(settings: unknown, layout: ExportLayout): Promise<void> {
+    await this.restoreCall("restoreSettings", settings, layout);
   }
 
   async close(): Promise<void> {

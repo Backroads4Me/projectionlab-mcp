@@ -83,11 +83,10 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `PL_API_KEY` | Yes | - | ProjectionLab Plugin API key; tools that reach the plan fail until it is set |
 | `PL_WS_PORT` | No | `8788` | Localhost WebSocket port |
 | `PL_WS_TOKEN` | No | auto-generated | Shared auth token; if unset, generated and saved to `~/.projectionlab-mcp/ws-token` |
-| `PL_APP_URL` | No | `https://app.projectionlab.com` | ProjectionLab app URL |
+| `PL_APP_URL` | No | `https://app.projectionlab.com` | An extra page origin allowed to connect the bootstrap snippet. `https://app.projectionlab.com` and `https://ea.projectionlab.com` are always allowed. The extension does not read it. |
 | `PL_API_READY_TIMEOUT_MS` | No | `30000` | Timeout waiting for Plugin API to attach |
 | `PL_EXPORT_CACHE_MS` | No | `90000` | How long a full export may be served from cache (writes always invalidate) |
 | `PL_PRETTY_JSON` | No | `false` | Pretty-print JSON output (uses ~25–40% more tokens) |
-| `PL_READ_ONLY` | No | `true` | Write/mutation tools are disabled unless this is exactly `false` |
 | `PL_SNAPSHOT_DIR` | No | `~/.projectionlab-mcp/snapshots` | Directory for pre-mutation snapshots |
 | `PL_UPDATE_CHECK` | No | `true` | One request to `registry.npmjs.org` per start to read the latest release number; off only when this is exactly `false` |
 | `LOG_LEVEL` | No | `info` | Log verbosity (`debug`, `info`, `warn`, `error`) |
@@ -141,7 +140,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 
 ## Safety model
 
-Write operations (`update_*`, `restore_*`, `clone_plan`, `delete_plan`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Writes are disabled entirely unless `PL_READ_ONLY=false`.
+Write operations (`update_*`, `restore_*`, `clone_plan`, `delete_plan`) default to **dry-run mode**. Pass `confirm: true` to execute. Before any confirmed mutation, the server automatically snapshots the affected data section to disk so you can roll back with `projectionlab_rollback`. Writes are disabled entirely unless the browser extension's **Enable agent plan edits** switch is on (its options page; off by default, takes effect at once). The extension refuses every write in the browser while the switch is off, and the server sends no write to an executor that does not report it on, so the console bootstrap snippet and extension releases without the switch can only read. `projectionlab_check_connection` reports the current state as `writesEnabled`.
 
 Every write that replaces the plans array re-reads the plans just before writing and refuses with `PLAN_CONFLICT` if any plan was added, removed, or saved in ProjectionLab since the tool read them, so an edit made in the ProjectionLab UI, or a write by another agent's server instance, is never silently overwritten. `projectionlab_update_plan_section` also returns a `planVersion` in its dry run; pass it back as `expectedPlanVersion` when confirming to refuse the write if the plan was saved after the preview.
 

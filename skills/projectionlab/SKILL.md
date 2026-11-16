@@ -22,9 +22,13 @@ also serves this guide as the MCP resource `projectionlab://guide`.
 
 Call `projectionlab_check_connection` before any other ProjectionLab tool. It
 returns `browser`, `pageLoaded`, `apiAvailable`, `apiKeyValid`, `errors`,
-`writesEnabled`, `versions` and `notices`. When the first four flags are
-`true`, proceed. Otherwise fix the first failing item with the user, one step
-at a time, then check again.
+`writesEnabled`, `versions` and `notices`, and `apiContract` once the page has
+answered. When the first four flags are `true`, proceed. Otherwise fix the
+first failing item with the user, one step at a time, then check again.
+
+`apiContract` is the Plugin API contract the page offers: `1` on
+ProjectionLab 4 and `2` on ProjectionLab 5 (Early Access, at
+https://ea.projectionlab.com). On `2`, follow "ProjectionLab 5" below.
 
 `notices` are plain sentences about the server's release, never connection
 failures. When the list is not empty, tell the user each one once, in plain
@@ -48,7 +52,7 @@ options page (browsers isolate extension storage by ID, so settings do not trans
 | `browser: false`, port held by a program that is not projectionlab-mcp | Some other program is listening on the WebSocket port | Ask the user to stop that program, or set `PL_WS_PORT` to a free port for this server and enter the same port on the extension's options page |
 | `browser: false`, handing the port over did not complete | Another instance holds the port and the browser did not reconnect here in time | Run `projectionlab_check_connection` again; if it keeps failing, ask the user to close the other agent's session |
 | `browser: false` otherwise | No extension or snippet is connected | See "Connecting the browser" |
-| `pageLoaded: false` | No ProjectionLab tab is open | Ask the user to open https://app.projectionlab.com and log in |
+| `pageLoaded: false` | No ProjectionLab tab is open, or the account is on v5 Early Access and the extension has not been allowed to use it | Ask the user to open https://app.projectionlab.com and log in. If ProjectionLab sends them to https://ea.projectionlab.com, ask them to press **Allow ea.projectionlab.com** on the extension's options page and approve the browser's prompt |
 | `apiAvailable: false` | Plugins are off, or the user is logged out | ProjectionLab -> Account Settings -> Plugins -> enable plugins |
 | `apiKeyValid: false` | The key does not match the account | Ask the user to copy the key again from Account Settings -> Plugins |
 
@@ -88,7 +92,10 @@ Recommended, persistent: the **MCP Bridge for ProjectionLab** browser extension.
    `~/.projectionlab-mcp/ws-token`, which the server creates on first start.
    The status changes to **Connected** and the toolbar icon shows a green
    check.
-4. Open https://app.projectionlab.com and log in.
+4. Open https://app.projectionlab.com and log in. If ProjectionLab sends the
+   user to https://ea.projectionlab.com (v5 Early Access), they press
+   **Allow ea.projectionlab.com** on the options page and approve the
+   browser's prompt.
 
 If another browser is already connected to the server, the status reads
 **Standing by** instead: that extension connects on its own when the other
@@ -143,7 +150,7 @@ narrowest read that answers the question.
   questions about a property's value or equity from that block, not from
   the raw `balance`.
 - `projectionlab_diff` answers "what changed?" in one read-only call, so it
-  works with `PL_READ_ONLY=true`. `from` selects a saved snapshot with exactly
+  works while plan edits are turned off. `from` selects a saved snapshot with exactly
   one of `snapshotId`, `nBack` or `beforeTime`, the same selectors
   `projectionlab_rollback` takes and resolves the same way; `to` selects another
   snapshot, or omit it to compare against the data in ProjectionLab now. Only
@@ -222,6 +229,86 @@ values; it is not an API, and it does not contain the application logic.
 When a change's effect matters, the user has to look at the result in the
 ProjectionLab UI. The stored data cannot show it.
 
+### ProjectionLab 5
+
+When `projectionlab_check_connection` reports `apiContract: 2`, the account is
+on ProjectionLab 5 and its data has a different layout. The read tools handle
+both layouts; these differences show through:
+
+- **No active plan.** A ProjectionLab 5 plan has no `active` flag, so
+  `projectionlab_get_plan` reports `active: "not reported"`. Never call a plan
+  active or inactive from that, and never pick one plan as "the" plan: ask the
+  user which plan they mean.
+- **`planSelection`.** `projectionlab_get_plan_settings` also returns the
+  workspace's plan settings (`activeId`, `baselineId`, `alignment`, `tabs`).
+  Report them as stored values; they do not tell you which plan the user is
+  working in, and a value the export leaves empty reads `"not reported"`.
+- **Events linked to Current Finances.** A plan account or asset event names
+  its Current Finances item in `accountId` or `assetId`, so
+  `projectionlab_get_plan_section` also finds the event by that id when the
+  `eventIdentifier` matches no event id or name. A priority's `accountId` is
+  different: it holds the id of the plan's account event, not the Current
+  Finances account id. Keep the two kinds of id apart.
+- **Current Finances is shared by every plan.** An account has one Current
+  Finances document, not one per plan, so `projectionlab_update_account` and
+  a Current Finances restore change what every plan starts from. Say so in
+  the preview before confirming. Plans keep their own copies of some linked
+  fields, such as an account event's `name` and `balance`. On ProjectionLab
+  5, those copies refresh when a plan is opened, so an export can show an old
+  value in a plan nobody has opened since. Read today's figure from Current
+  Finances, not from a plan event. On ProjectionLab 5, a balance or value
+  edit also overwrites that account's `accountHistory` entry for the current
+  day.
+- **Resources.** `projectionlab://data-model` and `projectionlab://knowledge`
+  follow the layout the last connection check found. Read
+  `projectionlab://data-model?layout=v4` or `?layout=v5` (the same for
+  `knowledge`) to pick one explicitly.
+- **Every write but Progress works.** The plan tools (`projectionlab_update_plan_event`,
+  `projectionlab_update_plan_section`, `projectionlab_update_plan_settings`,
+  `projectionlab_clone_plan`, `projectionlab_delete_plan`,
+  `projectionlab_restore_plans`) and `projectionlab_update_account` behave as
+  on ProjectionLab 4. `projectionlab_update_account` reports the account's
+  `kind` instead of a `collection`.
+- **Current Finances restores keep missing accounts.** On ProjectionLab 5,
+  `projectionlab_restore_current_finances` and a rollback of a Current
+  Finances snapshot replace every non-account field and each account they
+  hold, but never delete an account: one missing from the submission or the
+  snapshot, such as an account added since, stays as it is. The preview
+  lists those as `keptAccounts`; tell the user, and have them archive or
+  delete such an account in the ProjectionLab app if it should go.
+- **Settings restores replace the whole document.**
+  `projectionlab_restore_settings` behaves as on ProjectionLab 4: the
+  submission replaces every setting, and ProjectionLab refuses a settings
+  document it cannot read. Settings are account-wide, not per plan.
+- **Year alignment can change plans.** The account's year alignment
+  (`settings.plan.alignment`) and a plan's override (`variables.alignment`)
+  decide where each plan year starts, and so how many plan years the plan
+  has. When that number changes, ProjectionLab moves the last point of a
+  plan's glide path, such as `bondSettings.allocation`, to the new final year
+  in each plan it saves meanwhile, not only the plan being edited. Changing
+  the alignment back adds a point at the final year and keeps the moved one,
+  and a settings rollback does not undo either change, because settings
+  snapshots hold no plans. Before
+  changing the alignment, warn the user; afterwards, compare the plans with
+  the export from before the change and offer to remove an extra point.
+- **Changes made in the app take time to show.** ProjectionLab saves an
+  edit a minute or two after the user makes it, and reads return only saved
+  data. When the user says they changed something and a read does not show
+  it, wait and read again before calling it a bug. Never write to a plan or
+  document the user has just edited until a read shows the edit: a write
+  replaces the unsaved change.
+- **Progress cannot be written.** ProjectionLab 5 records Progress history
+  by itself whenever a current value changes, and removed the way to
+  replace it. `projectionlab_restore_progress` and a rollback of a snapshot
+  holding progress, dry runs included, are refused with
+  `WRITE_NOT_SUPPORTED` before they preview or snapshot anything. Tell the
+  user plainly; to bring back Progress from a backup file, they use Restore
+  in the ProjectionLab app.
+- **Old snapshots.** A snapshot taken on ProjectionLab 4 cannot be compared
+  with or restored onto ProjectionLab 5 data: `projectionlab_diff` and
+  `projectionlab_rollback` refuse it with `LAYOUT_MISMATCH`. A ProjectionLab 4
+  backup goes back only through the Restore action in the app.
+
 ## Changing the plan
 
 Change the plan only when the user explicitly asks for that change.
@@ -260,9 +347,14 @@ Change the plan only when the user explicitly asks for that change.
 
 **Writes are off by default.** `writesEnabled` in the connection check shows
 the current mode. While it is `false`, every write tool, dry runs included,
-fails with `READ_ONLY_MODE` until the user sets `PL_READ_ONLY=false` (MCP host
-`env` block or `~/.projectionlab-mcp/.env`) and restarts the server. Explain this and let the
-user decide; do not enable writes on your own.
+fails with `READ_ONLY_MODE` until the user turns on **Enable agent plan edits**
+on the browser extension's options page (they click the extension's toolbar
+icon). It takes effect at once, with no restart; no file or environment
+variable enables writes. If the error says the executor has no plan-edits
+switch, the browser is running the console bootstrap snippet or an extension
+release without the switch, which can only read: the fix is the current
+extension from the browser's store. Explain this and let the user decide; do
+not enable writes on your own.
 
 ### Units
 
@@ -337,6 +429,13 @@ paths. Type the real value or change single fields with
 `projectionlab_update_plan_event` or `projectionlab_update_plan_settings`,
 which patch by path and never round-trip hidden values.
 
+`projectionlab_restore_settings` is the exception. Settings hold the Plugin
+API key this server connects with, and the restore replaces the whole
+document. Leave each hidden field as `[REDACTED]`: the server writes the
+stored value back and lists those paths under `keptSecrets`. A payload that
+leaves out a stored secret, such as the key, is refused, since the
+replacement would erase it and disconnect the server.
+
 ### Change workflow
 
 Copy this checklist and work through it for each change:
@@ -379,6 +478,14 @@ Change progress:
   dry run's `planVersion` as `expectedPlanVersion`.
 - **`INVALID_INPUT`** usually means an unknown path or a changed JSON type.
   List the paths again and correct the call.
+- **`WRITE_NOT_SUPPORTED`** means the account is on ProjectionLab 5, which
+  has no way to make that change, such as replacing Progress (see
+  "ProjectionLab 5"). Nothing was written; help the user make the change in
+  the app.
+- **`CONTRACT_CHANGED`** means the ProjectionLab page changed between the
+  server's version check and the write (for example, a tab on the other
+  ProjectionLab version took over). Nothing was written. Run
+  `projectionlab_check_connection`, then re-run the dry run and confirm again.
 
 ## Worked examples
 
@@ -440,8 +547,8 @@ must-have." Same plan and event as the example above.
    `{"spendingType": {"before": "discretionary", "after": "essential"}}`.
    Show it, get the user's approval, then confirm.
 
-**Change a Current Finances account.** User: "Our rental property is worth
-480000 now; update Current Finances."
+**Change a Current Finances account (ProjectionLab 4).** User: "Our rental
+property is worth 480000 now; update Current Finances."
 
 1. `projectionlab_describe_schema` gives the asset's exact `accountId` (a
    property reads as `type: "real-estate"`). Then
@@ -455,6 +562,35 @@ must-have." Same plan and event as the example above.
    market value is stored in `amount`; `balance` is its outstanding loan, so
    a value change goes in `amount`, never `balance`. Show the preview.
 3. After the user approves, repeat the call with `"confirm": true`. The reply
+   gives `verified` and saves a snapshot of Current Finances.
+
+**The same change on ProjectionLab 5.** When `projectionlab_check_connection`
+reports `apiContract: 2`, Current Finances accounts are records of
+`documents.currentFinances.accounts`, keyed by id and narrowed by `kind`, and
+a property keeps its loan in a separate debt record.
+
+1. `projectionlab_describe_schema` reports `layout: "v5"` and lists every
+   account with its stored `kind` and `type`: the property is a
+   `kind: "real-asset"` record such as `asset_abc123`, and its loan is its own
+   `kind: "debt"` record such as `debt_abc123`, which names the property in
+   `securedByAssetId` and holds the outstanding loan in `balance`. A real
+   asset's row reports `value` and `purchasePrice` instead of a `balance`.
+2. `projectionlab_get_current_finances` with `accountId: "asset_abc123"`
+   returns the record with a `realAsset` block: `value`, `loanBalance`,
+   `equity`, and the `securedDebts` that make up that loan. That is where to
+   read the loan figure and confirm which debt carries it before editing.
+3. `projectionlab_get_current_finances` with the same `accountId` and
+   `listPaths: true` lists the record's editable paths, including `value` and
+   `purchasePrice`. Then `projectionlab_update_account` with
+   `{"accountId": "asset_abc123", "pathChanges": {"value": 480000}}` returns
+   `dryRun: true`, the `accountName`, `kind: "real-asset"` where the
+   ProjectionLab 4 reply carries a `collection`, and `changes` such as
+   `{"value": {"before": 450000, "after": 480000}}`. A property's market value
+   is stored in `value`, never in `balance`: `balance` belongs to the debt, so
+   the loan itself changes only by patching `debt_abc123`. Say in the preview
+   that Current Finances is shared by every plan, so this changes what every
+   plan starts from. Show the preview.
+4. After the user approves, repeat the call with `"confirm": true`. The reply
    gives `verified` and saves a snapshot of Current Finances.
 
 **Clone a plan.** User: "Copy my Retire at 55 plan so I can try retiring

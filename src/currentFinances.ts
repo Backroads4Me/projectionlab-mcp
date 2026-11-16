@@ -57,11 +57,165 @@ export function requireCurrentFinances(today: unknown): PlanObj {
   return today as PlanObj;
 }
 
+const isPlainObject = (value: unknown): value is PlanObj =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * A ProjectionLab 5 Current Finances account (`documents.currentFinances
+ * .accounts.<id>`). The `kind` field narrows the record: "account" carries
+ * `balance` and `costBasis`, "debt" carries `balance` and optionally
+ * `securedByAssetId`, "real-asset" carries `value` and `purchasePrice`.
+ * `archivedOn` is present only on archived accounts.
+ */
+export interface V5AccountEntry {
+  /** The record's key in `accounts`. */
+  key: string;
+  /** The record's own `id`, falling back to its key. */
+  id: string;
+  name: string;
+  kind: string | undefined;
+  /** The v5 `type` string, as stored. */
+  type: string | undefined;
+  archived: boolean;
+  account: PlanObj;
+}
+
+const nonEmptyString = (value: unknown): string | undefined =>
+  typeof value === "string" && value !== "" ? value : undefined;
+
+/**
+ * Every account record of a v5 Current Finances document, archived ones
+ * included, in stored order. Empty for a v4 `today`, which keeps its accounts
+ * in per-type arrays and has no `accounts` object.
+ */
+export function listV5Accounts(finances: unknown): V5AccountEntry[] {
+  const accounts = isPlainObject(finances) ? finances.accounts : undefined;
+  if (!isPlainObject(accounts)) return [];
+  const entries: V5AccountEntry[] = [];
+  for (const [key, value] of Object.entries(accounts)) {
+    if (!isPlainObject(value)) continue;
+    entries.push({
+      key,
+      id: nonEmptyString(value.id) ?? key,
+      name: nonEmptyString(value.name) ?? "unknown",
+      kind: nonEmptyString(value.kind),
+      type: nonEmptyString(value.type),
+      archived: value.archivedOn !== undefined && value.archivedOn !== null,
+      account: value,
+    });
+  }
+  return entries;
+}
+
+/** The v5 account with this exact id (or, failing that, key), archived or not. */
+export function findV5Account(
+  finances: unknown,
+  accountId: string,
+): V5AccountEntry | undefined {
+  const entries = listV5Accounts(finances);
+  return (
+    entries.find((entry) => entry.id === accountId) ??
+    entries.find((entry) => entry.key === accountId)
+  );
+}
+
+/** A stored number, or 0 for an absent or non-numeric field. */
+export function finiteNumber(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * The size of a v5 account: `value` for a real asset, `balance` for an account
+ * and the magnitude of `balance` for a debt. Undefined for a kind this server
+ * does not recognize, so its money is reported instead of being silently
+ * dropped from totals.
+ */
+export function v5AccountAmount(entry: V5AccountEntry): number | undefined {
+  switch (entry.kind) {
+    case "account":
+      return finiteNumber(entry.account.balance);
+    case "debt":
+      return Math.abs(finiteNumber(entry.account.balance));
+    case "real-asset":
+      return finiteNumber(entry.account.value);
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * What a v5 account adds to net worth: its balance for an account, its value
+ * for a real asset, minus its balance for a debt. Undefined for an
+ * unrecognized kind.
+ */
+export function v5NetWorthContribution(
+  entry: V5AccountEntry,
+): number | undefined {
+  const amount = v5AccountAmount(entry);
+  if (amount === undefined) return undefined;
+  return entry.kind === "debt" ? -amount : amount;
+}
+
+/** The stub that stands in for an archived account in a default listing. */
+export function v5ArchivedStub(entry: V5AccountEntry): PlanObj {
+  return {
+    id: entry.id,
+    name: entry.name,
+    ...(entry.kind !== undefined ? { kind: entry.kind } : {}),
+    ...(entry.type !== undefined ? { type: entry.type } : {}),
+    archivedOn: entry.account.archivedOn,
+  };
+}
+
+/**
+ * Copy of a v5 Current Finances document without its archived accounts, which
+ * are listed under `archivedAccounts` instead. Records are only dropped,
+ * never mutated, so the cached export stays intact.
+ */
+export function withoutArchivedAccounts(finances: PlanObj): PlanObj {
+  const entries = listV5Accounts(finances);
+  const archivedKeys = new Set(
+    entries.filter((entry) => entry.archived).map((entry) => entry.key),
+  );
+  const stored = isPlainObject(finances.accounts) ? finances.accounts : {};
+  const accounts = Object.fromEntries(
+    Object.entries(stored).filter(([key]) => !archivedKeys.has(key)),
+  );
+  return {
+    ...finances,
+    accounts,
+    archivedAccounts: entries
+      .filter((entry) => entry.archived)
+      .map(v5ArchivedStub),
+  };
+}
+
+/**
+ * The stored ProjectionLab 5 accounts that restoring `submitted` keeps
+ * unchanged because the submission leaves them out. ProjectionLab 5's
+ * restoreCurrentFinances replaces each submitted account and never deletes
+ * one, so these survive the restore as they are. Empty for a v4 `today`.
+ */
+export function v5AccountsKept(
+  submitted: unknown,
+  stored: unknown,
+): { id: string; name: string }[] {
+  const accounts =
+    isPlainObject(submitted) && isPlainObject(submitted.accounts)
+      ? submitted.accounts
+      : {};
+  return listV5Accounts(stored)
+    .filter((entry) => !Object.prototype.hasOwnProperty.call(accounts, entry.key))
+    .map(({ id, name }) => ({ id, name }));
+}
+
 export function currentFinanceAccountNotFoundError(
   today: unknown,
   accountId: string,
 ): ProjectionLabError {
-  const count = listCurrentFinanceEntries(today).length;
+  const count =
+    listCurrentFinanceEntries(today).length + listV5Accounts(today).length;
   return new ProjectionLabError(
     "INVALID_INPUT",
     `No Current Finances account with ID "${accountId}" found`,
@@ -72,12 +226,18 @@ export function currentFinanceAccountNotFoundError(
 /** The money fields of a Current Finances account. */
 const BALANCE_FIELDS = ["balance", "amount", "value", "costBasis"] as const;
 
-/** The id-bearing accounts of one read, keyed by collection and id. */
+/**
+ * The id-bearing accounts of one read, keyed by collection and id. A v5
+ * account is keyed under the `accounts` collection, archived ones included.
+ */
 function accountsById(today: unknown): Map<string, PlanObj> {
   const accounts = new Map<string, PlanObj>();
   for (const entry of listCurrentFinanceEntries(today)) {
     const id = String(entry.account.id ?? "");
     if (id) accounts.set(`${entry.collection} ${id}`, entry.account);
+  }
+  for (const entry of listV5Accounts(today)) {
+    accounts.set(`accounts ${entry.id}`, entry.account);
   }
   return accounts;
 }

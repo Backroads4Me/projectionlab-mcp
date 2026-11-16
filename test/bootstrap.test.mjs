@@ -66,6 +66,8 @@ test("bootstrap snippet acts as a full executor", async () => {
   const status = await bridge.checkConnection();
   assert.equal(status.browser, true);
   assert.equal(status.apiAvailable, true);
+  // The fake API has no version property: a ProjectionLab 4 page.
+  assert.equal(status.apiContract, 1);
   // validateApiKey is absent from the fake API object; the snippet reports
   // "method unavailable" and the bridge records a key error - matching how
   // older PL builds behave. Not asserting apiKeyValid here.
@@ -77,15 +79,23 @@ test("bootstrap snippet acts as a full executor", async () => {
   const data = await bridge.exportData({ fresh: true });
   assert.deepEqual(data.plans, []);
 
-  await bridge.updateAccount("acct-1", { balance: 42 }, true);
-  // JSON round-trip: the snippet parses frames inside the vm realm, so its
-  // objects have a foreign prototype that deepEqual would reject.
-  assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), [
-    "updateAccount",
-    "acct-1",
-    { balance: 42 },
-    { key: "test-api-key", force: "true" },
-  ]);
+  // The snippet has no plan-edits switch, so it only reads: the bridge
+  // refuses the write before sending it, and the page never sees it.
+  assert.equal(status.writesEnabled, false);
+  assert.equal(await bridge.editAccess(), "unsupported");
+  await assert.rejects(bridge.updateAccount("acct-1", { balance: 42 }, true, "v4"), {
+    code: "READ_ONLY_MODE",
+    message: /no plan-edits switch/,
+  });
+  assert.deepEqual(calls, []);
+
+  // A ProjectionLab 5 page reports api.version 2, and restoreProgress, which
+  // ProjectionLab 5 removed, is refused before it reaches the API.
+  pluginApi.version = 2;
+  assert.equal(await bridge.apiContract(), 2);
+  await assert.rejects(bridge.restoreProgress({}, "v5"), (err) => err.code === "WRITE_NOT_SUPPORTED");
+  assert.deepEqual(calls, []);
+  delete pluginApi.version;
 
   // Second install in the same tab is a no-op
   vm.runInContext(bridge.bootstrapSnippet(), sandbox);
@@ -271,6 +281,56 @@ async function snippetCloseScenario(closeCode) {
   });
   return { hellos, logs, retryDelays, sandbox, wss };
 }
+
+test("the snippet lists expectApiVersion and refuses a write on another API version", async () => {
+  const port = await freePort();
+  const wss = new WebSocketServer({ host: "127.0.0.1", port });
+  await new Promise((resolve) => wss.once("listening", resolve));
+  const calls = [];
+  const sandbox = {
+    window: { projectionlabPluginAPI: { restorePlans: async (plans) => { calls.push(plans); } } },
+    WebSocket,
+    crypto: { randomUUID: () => "sandbox-instance-id" },
+    console: { log: () => {} },
+    setTimeout: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      t.unref();
+      return t;
+    },
+    clearTimeout,
+  };
+  const responses = new Map();
+  let hello;
+  const done = new Promise((resolve) => {
+    wss.on("connection", (ws) => {
+      ws.on("message", (raw) => {
+        const frame = JSON.parse(String(raw));
+        if (frame.type === "hello") {
+          hello = frame;
+          ws.send(JSON.stringify({ type: "helloAck", protocolVersion: frame.protocolVersion }));
+          ws.send(JSON.stringify({ type: "request", id: "1", method: "restorePlans", params: [["a"]], expectApiVersion: 2 }));
+          ws.send(JSON.stringify({ type: "request", id: "2", method: "restorePlans", params: [["b"]], expectApiVersion: null }));
+        } else if (frame.type === "response") {
+          responses.set(frame.id, frame);
+          if (responses.size === 2) resolve();
+        }
+      });
+    });
+  });
+  vm.createContext(sandbox);
+  vm.runInContext(buildBootstrapSnippet(port, "test-token"), sandbox);
+  try {
+    await done;
+    assert.deepEqual(hello.features, ["expectApiVersion"]);
+    assert.equal(responses.get("1").ok, false);
+    assert.equal(responses.get("1").error.code, "CONTRACT_CHANGED");
+    assert.equal(responses.get("2").ok, true);
+    // JSON round-trip: the plans array was parsed inside the vm realm.
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [["b"]]);
+  } finally {
+    await cleanupScenario(sandbox, wss);
+  }
+});
 
 async function cleanupScenario(sandbox, wss) {
   sandbox.WebSocket = class {

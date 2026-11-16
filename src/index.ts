@@ -91,15 +91,14 @@ async function main() {
   // Register resources
   registerPlanDataResource(server, bridge);
   registerSummaryResource(server, bridge);
-  registerKnowledgeResource(server);
+  registerKnowledgeResource(server, bridge);
   registerGuideResource(server);
-  registerDataModelResource(server);
+  registerDataModelResource(server, bridge);
 
   // Register prompts
   registerPrompts(server, bridge);
 
   log.info("server", `WebSocket port: ${config.wsPort}`);
-  log.info("server", `Read-only mode: ${config.readOnly}`);
   log.info("server", `Snapshot dir: ${config.snapshotDir}`);
 
   // Graceful shutdown

@@ -24,9 +24,9 @@ export const PROTOCOL_VERSION = 1;
 /**
  * Minimum extension release required by this server version.
  * Extensions below this version lack features required by the server (e.g.
- * standby, takeover, instanceId).
+ * standby, takeover, instanceId, the plan-edits switch).
  */
-export const MIN_EXTENSION_VERSION = "1.2.0";
+export const MIN_EXTENSION_VERSION = "1.3.0";
 
 /** Default listen port; override with PL_WS_PORT / the extension options page. */
 export const DEFAULT_WS_PORT = 8788;
@@ -38,21 +38,44 @@ export const HEARTBEAT_INTERVAL_MS = 20_000;
  * Plugin API operations the executor must support. `params` for each is an
  * ordered argument list matching window.projectionlabPluginAPI signatures,
  * except the meta-operations `describeApi` (no args; enumerates own +
- * prototype properties of the API object) and `waitForApi` (optional
+ * prototype properties of the API object), `waitForApi` (optional
  * `[timeoutMs]`; resolves once the API is attached to the page, waiting up to
- * `timeoutMs`, or 15 seconds when omitted). Other operations wait up to 15
- * seconds for the API before running.
+ * `timeoutMs`, or 15 seconds when omitted), and `apiVersion` (no args;
+ * resolves to the API object's `version` property, or null when it has none).
+ * Other operations wait up to 15 seconds for the API before running.
+ *
+ * `getAccounts` and `updateAccountValues` exist only on Plugin API contract 2
+ * (ProjectionLab 5); see src/layout.ts. An executor that predates
+ * `apiVersion` rejects it as "Not a wire protocol method".
  */
 export type WireMethod =
   | "exportData" // params: [{ key }]
+  | "getAccounts" // params: [params?] (contract 2)
   | "updateAccount" // params: [accountId, data, { key, force? }]
+  | "updateAccountValues" // params: [{ accountId, values, key }] (contract 2)
   | "restoreCurrentFinances" // params: [state, { key }]
   | "restorePlans" // params: [plans, { key }]
   | "restoreProgress" // params: [progress, { key }]
   | "restoreSettings" // params: [settings, { key }]
   | "validateApiKey" // params: [{ key }]
   | "describeApi" // params: []
-  | "waitForApi"; // params: [timeoutMs?]
+  | "waitForApi" // params: [timeoutMs?]
+  | "apiVersion"; // params: []
+
+/**
+ * The methods that only read. Every other method is a write, which the
+ * server sends only to an executor that reports allowEdits on, and which the
+ * extension refuses in the browser while its switch is off. Mirrored by
+ * READ_METHODS in extension/src/wire.js.
+ */
+export const READ_METHODS: readonly WireMethod[] = [
+  "exportData",
+  "getAccounts",
+  "validateApiKey",
+  "describeApi",
+  "waitForApi",
+  "apiVersion",
+];
 
 /** First frame the executor sends after the socket opens. */
 export interface HelloFrame {
@@ -77,6 +100,29 @@ export interface HelloFrame {
    * when the user presses Save on the options page.
    */
   takeover?: boolean;
+  /**
+   * Optional behaviors this executor supports. Additive: absent from 1.2.x
+   * executors, and the server ignores names it does not know.
+   * - "expectApiVersion": the executor honors RequestFrame.expectApiVersion.
+   */
+  features?: string[];
+  /**
+   * The extension's "Enable agent plan edits" switch at connect time.
+   * Additive: an executor that omits it (the bootstrap snippet, extensions
+   * released before the switch) has no switch, and the server sends it no
+   * writes. Only a boolean counts.
+   */
+  allowEdits?: boolean;
+}
+
+/**
+ * Sent by the extension after its helloAck and whenever the switch changes,
+ * so the server knows the current value without a reconnect. Servers that
+ * predate it ignore it.
+ */
+export interface SettingsFrame {
+  type: "settings";
+  allowEdits: boolean;
 }
 
 /** Server acknowledges a valid hello. Requests only flow after this. */
@@ -102,6 +148,17 @@ export interface RequestFrame {
   id: string;
   method: WireMethod;
   params: unknown[];
+  /**
+   * The Plugin API version (`projectionlabPluginAPI.version`, undefined read
+   * as null) the server checked before sending this request. Sent only to an
+   * executor whose hello lists the "expectApiVersion" feature, and only on
+   * writes. When the property is present, the executor runs a Plugin API
+   * method only if the page's version is strictly equal to it, and otherwise
+   * answers CONTRACT_CHANGED without calling the API. The check and the call
+   * run in the same page turn, so a reload onto another ProjectionLab version
+   * between the server's check and the write cannot slip the write through.
+   */
+  expectApiVersion?: unknown;
 }
 
 export type WireErrorCode =
@@ -113,6 +170,10 @@ export type WireErrorCode =
   | "API_KEY_INVALID"
   /** Executor-side timeout waiting on the page. */
   | "TIMEOUT"
+  /** The page's Plugin API version differs from RequestFrame.expectApiVersion; nothing was called. */
+  | "CONTRACT_CHANGED"
+  /** A write arrived while the extension's Enable agent plan edits switch is off. */
+  | "EDITS_DISABLED"
   | "UNKNOWN";
 
 export interface ResponseFrame {
@@ -145,7 +206,7 @@ export interface YieldFrame {
   token: string;
 }
 
-export type ClientFrame = HelloFrame | ResponseFrame | PongFrame | YieldFrame;
+export type ClientFrame = HelloFrame | ResponseFrame | PongFrame | YieldFrame | SettingsFrame;
 export type ServerFrame = HelloAckFrame | RequestFrame | PingFrame;
 export type WireFrame = ClientFrame | ServerFrame;
 

@@ -23,7 +23,8 @@ export function registerBootstrapTool(server: McpServer, bridge: ExtensionBridge
         {
           type: "text",
           text:
-            "Paste this into the devtools console (F12) of a logged-in https://app.projectionlab.com tab:\n\n" +
+            "Paste this into the devtools console (F12) of a logged-in ProjectionLab tab " +
+            "(https://app.projectionlab.com, or https://ea.projectionlab.com on v5 Early Access):\n\n" +
             bridge.bootstrapSnippet(),
         },
       ],

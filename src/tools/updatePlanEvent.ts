@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
-import { config } from "../config.js";
+import { requireEditsEnabled } from "../editAccess.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
@@ -24,6 +24,8 @@ import {
   EVENT_SECTIONS,
   type PlanObj,
 } from "../plans.js";
+import { detectLayout, exportSections, type ExportLayout } from "../layout.js";
+import { assertWritesSupported } from "./writeGuard.js";
 
 const EVENT_FIELD_CONTEXT = {
   label: "event field",
@@ -59,12 +61,13 @@ function applyEventPatch(
   event: PlanObj,
   patch: Record<string, unknown>,
   section: string,
+  layout: ExportLayout,
 ): { updated: PlanObj; changes: Record<string, PathValueChange> } {
   for (const key of Object.keys(patch)) {
     assertMutableEventPath(key);
   }
   for (const { path, value } of listAddressableValues(patch)) {
-    const refusal = enumRefusalError(section, path, value);
+    const refusal = enumRefusalError(section, path, value, layout);
     if (refusal) throw refusal;
   }
   const existing: Record<string, unknown> = {};
@@ -97,6 +100,7 @@ function applyEventPatch(
       existing,
       EVENT_FIELD_CONTEXT,
       section,
+      layout,
     );
     updated = result.updated;
     changes = result.changes;
@@ -199,13 +203,7 @@ export function registerUpdatePlanEventTool(
       confirm,
     }) => {
       try {
-        if (config.readOnly) {
-          throw new ProjectionLabError(
-            "READ_ONLY_MODE",
-            "Write operations are disabled (read-only mode; PL_READ_ONLY is not \"false\")",
-            "Ask the user whether to enable writes: set PL_READ_ONLY=false in the MCP host env block or ~/.projectionlab-mcp/.env, then restart the server",
-          );
-        }
+        await requireEditsEnabled(bridge);
 
         if ((patch === undefined) === (pathChanges === undefined)) {
           throw new ProjectionLabError(
@@ -215,6 +213,7 @@ export function registerUpdatePlanEventTool(
           );
         }
 
+        await assertWritesSupported(bridge, ["restorePlans"]);
         const data = await bridge.exportData({ fresh: true });
         const plans = requirePlans(data);
 
@@ -253,11 +252,12 @@ export function registerUpdatePlanEventTool(
             pathChanges,
             EVENT_FIELD_CONTEXT,
             section,
+            detectLayout(data),
           );
           patched = result.updated;
           changes = result.changes;
         } else {
-          const result = applyEventPatch(event, patch ?? {}, section);
+          const result = applyEventPatch(event, patch ?? {}, section, detectLayout(data));
           patched = result.updated;
           changes = result.changes;
         }
@@ -308,7 +308,7 @@ export function registerUpdatePlanEventTool(
 
         const snapshot = await snapshots.create("updatePlanEvent", ["plans"], {
           plans,
-        });
+        }, detectLayout(data));
 
         const updatedPlan = {
           ...plan,
@@ -322,13 +322,13 @@ export function registerUpdatePlanEventTool(
           `Patching event "${eventLabel(event)}" in "${section}" of plan "${plan.name}" (${Object.keys(changes).length} fields)`,
         );
 
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
 
         // Verify the patched fields on a fresh read
         let verified = false;
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (
-          Array.isArray(verifyData.plans) ? verifyData.plans : []
+          exportSections(verifyData).plans
         ).find(
           (p) => p && typeof p === "object" && (p as PlanObj).id === plan.id,
         ) as PlanObj | undefined;

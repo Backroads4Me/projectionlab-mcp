@@ -12,6 +12,11 @@ export type ErrorCode =
   | "READ_ONLY_MODE"
   | "SNAPSHOT_NOT_FOUND"
   | "PLAN_CONFLICT"
+  | "UNSUPPORTED_API_VERSION"
+  | "WRITE_NOT_SUPPORTED"
+  | "EXECUTOR_OUTDATED"
+  | "CONTRACT_CHANGED"
+  | "LAYOUT_MISMATCH"
   | "UNKNOWN";
 
 export interface PlError {

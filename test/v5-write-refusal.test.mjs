@@ -1,8 +1,8 @@
 // On a ProjectionLab 5 account (Plugin API contract 2), every write tool
 // whose methods are not in CONTRACT_2_WRITES refuses with
 // WRITE_NOT_SUPPORTED, dry run included, before it previews, snapshots, or
-// writes anything. Plan writes are allowed; test/v5-plan-writes.test.mjs
-// covers them.
+// writes anything. Plan and Current Finances writes are allowed;
+// test/v5-plan-writes.test.mjs and test/v5-account-writes.test.mjs cover them.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -101,15 +101,13 @@ function register(bridge, snapshots) {
 }
 
 const calls = {
-  projectionlab_update_account: { accountId: "a1", data: { balance: 1 } },
-  projectionlab_restore_current_finances: { currentFinances: {} },
   projectionlab_restore_progress: { progress: {} },
   projectionlab_restore_settings: { settings: {} },
   projectionlab_rollback: { snapshotId: "snap-v5" },
 };
 
-test("CONTRACT_2_WRITES allows plan writes only, so every tool below must refuse", () => {
-  assert.deepEqual([...CONTRACT_2_WRITES], ["restorePlans"]);
+test("CONTRACT_2_WRITES allows plan and Current Finances writes only, so every tool below must refuse", () => {
+  assert.deepEqual([...CONTRACT_2_WRITES], ["restorePlans", "updateAccount", "restoreCurrentFinances"]);
 });
 
 for (const confirm of [false, true]) {

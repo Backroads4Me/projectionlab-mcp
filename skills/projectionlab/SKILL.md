@@ -253,13 +253,25 @@ both layouts; these differences show through:
   follow the layout the last connection check found. Read
   `projectionlab://data-model?layout=v4` or `?layout=v5` (the same for
   `knowledge`) to pick one explicitly.
-- **Plan writes work; the others do not yet.** The plan tools
-  (`projectionlab_update_plan_event`, `projectionlab_update_plan_section`,
-  `projectionlab_update_plan_settings`, `projectionlab_clone_plan`,
-  `projectionlab_delete_plan`, `projectionlab_restore_plans`) and a rollback
-  of a plans-only snapshot behave as on ProjectionLab 4. Every other write
-  tool, dry runs included, is refused with `WRITE_NOT_SUPPORTED` before it
-  previews or snapshots anything. For those, tell the user plainly that this
+- **Plan and Current Finances writes work; settings and progress do not
+  yet.** The plan tools (`projectionlab_update_plan_event`,
+  `projectionlab_update_plan_section`, `projectionlab_update_plan_settings`,
+  `projectionlab_clone_plan`, `projectionlab_delete_plan`,
+  `projectionlab_restore_plans`) and `projectionlab_update_account` behave as
+  on ProjectionLab 4. `projectionlab_update_account` reports the account's
+  `kind` instead of a `collection`.
+- **Current Finances restores keep missing accounts.** On ProjectionLab 5,
+  `projectionlab_restore_current_finances` and a rollback of a Current
+  Finances snapshot replace every non-account field and each account they
+  hold, but never delete an account: one missing from the submission or the
+  snapshot, such as an account added since, stays as it is. The preview
+  lists those as `keptAccounts`; tell the user, and have them archive or
+  delete such an account in the ProjectionLab app if it should go.
+- **Settings and progress writes are refused.**
+  `projectionlab_restore_settings`, `projectionlab_restore_progress`, and a
+  rollback of a snapshot holding settings or progress, dry runs included,
+  are refused with `WRITE_NOT_SUPPORTED` before they preview or snapshot
+  anything. For those, tell the user plainly that this
   server cannot make that change on ProjectionLab 5 yet, and help them make
   it in the ProjectionLab app instead (which item, which field, the new
   value).

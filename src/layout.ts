@@ -28,6 +28,16 @@ export const CONTRACT_2_WRITES: ReadonlySet<WireMethod> = new Set<WireMethod>([
   // ProjectionLab 5's restorePlans(plans, { key }) replaces the whole plans
   // list, as on ProjectionLab 4: a plan missing from the array is deleted.
   "restorePlans",
+  // updateAccount(accountId, data, { key, force }) assigns `data` over the
+  // top-level fields of `currentFinances.accounts[accountId]`, as on
+  // ProjectionLab 4. It refuses a change of `id` or `kind`, an unsupported
+  // `type`/`subtype`, and, without `force`, a field the account lacks.
+  "updateAccount",
+  // restoreCurrentFinances(currentFinances, { key }) takes every non-account
+  // field from the submission, replaces each submitted account whole, and
+  // keeps any stored account the submission leaves out: it never deletes an
+  // account. Rolling back an account change through it is exact.
+  "restoreCurrentFinances",
 ]);
 
 /** Whether `method` may write to a page offering `contract`. */

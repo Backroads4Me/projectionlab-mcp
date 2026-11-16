@@ -6,6 +6,7 @@ import { config } from "../config.js";
 import {
   currentFinanceAccountNotFoundError,
   findCurrentFinanceEntry,
+  findV5Account,
   requireCurrentFinances,
 } from "../currentFinances.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
@@ -18,7 +19,7 @@ import {
 } from "../pathPatch.js";
 import type { PlanObj } from "../plans.js";
 import { isSecretFieldName, redactSecrets } from "../redact.js";
-import { detectLayout } from "../layout.js";
+import { exportSections, type ExportLayout } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 const ACCOUNT_FIELD_CONTEXT = {
@@ -35,6 +36,44 @@ const UNSAFE_NEW_FIELDS = new Set([
   "id",
 ]);
 
+/**
+ * The account a patch targets. A ProjectionLab 4 account sits in one of the
+ * `today` collection arrays; a ProjectionLab 5 account is a record of
+ * `currentFinances.accounts`, keyed by its id and narrowed by `kind`.
+ */
+interface AccountTarget {
+  account: PlanObj;
+  /** The id the Plugin API's updateAccount looks the account up by. */
+  writeId: string;
+  /** The data-model group the account's fields belong to. */
+  scope: string;
+  /** Where the account sits, as reported to the caller. */
+  location: { collection: string } | { kind: string | undefined };
+}
+
+function findAccount(
+  finances: unknown,
+  accountId: string,
+  layout: ExportLayout,
+): AccountTarget | undefined {
+  if (layout === "v5") {
+    const entry = findV5Account(finances, accountId);
+    return entry && {
+      account: entry.account,
+      writeId: entry.key,
+      scope: "accounts",
+      location: { kind: entry.kind },
+    };
+  }
+  const entry = findCurrentFinanceEntry(finances, accountId);
+  return entry && {
+    account: entry.account,
+    writeId: accountId,
+    scope: entry.collection,
+    location: { collection: entry.collection },
+  };
+}
+
 function assertMutablePath(path: string): void {
   if (path === "id" || path.startsWith("id.")) {
     throw new ProjectionLabError(
@@ -49,7 +88,8 @@ function applyAccountChanges(
   account: PlanObj,
   incoming: Record<string, unknown>,
   force: boolean,
-  scope?: string,
+  scope: string,
+  layout: ExportLayout,
 ): {
   updated: PlanObj;
   changes: Record<string, PathValueChange>;
@@ -69,6 +109,7 @@ function applyAccountChanges(
       incoming,
       ACCOUNT_FIELD_CONTEXT,
       scope,
+      layout,
     );
   }
 
@@ -102,6 +143,7 @@ function applyAccountChanges(
       existing,
       ACCOUNT_FIELD_CONTEXT,
       scope,
+      layout,
     );
     updated = result.updated;
     changes = result.changes;
@@ -203,10 +245,11 @@ export function registerUpdateAccountTool(
 
         await assertWritesSupported(bridge, ["updateAccount"]);
         const exportData = await bridge.exportData({ fresh: true });
-        const today = requireCurrentFinances(exportData.today);
-        const entry = findCurrentFinanceEntry(today, accountId);
+        const { layout, currentFinances } = exportSections(exportData);
+        const finances = requireCurrentFinances(currentFinances);
+        const entry = findAccount(finances, accountId, layout);
         if (!entry) {
-          throw currentFinanceAccountNotFoundError(today, accountId);
+          throw currentFinanceAccountNotFoundError(finances, accountId);
         }
 
         const result =
@@ -219,10 +262,11 @@ export function registerUpdateAccountTool(
                   entry.account,
                   pathChanges,
                   ACCOUNT_FIELD_CONTEXT,
-                  entry.collection,
+                  entry.scope,
+                  layout,
                 );
               })()
-            : applyAccountChanges(entry.account, data ?? {}, force, entry.collection);
+            : applyAccountChanges(entry.account, data ?? {}, force, entry.scope, layout);
         const renderedChanges = redactSecrets(result.changes, {
           byName: true,
         });
@@ -237,7 +281,7 @@ export function registerUpdateAccountTool(
                   operation: "updateAccount",
                   accountId,
                   accountName: entry.account.name,
-                  collection: entry.collection,
+                  ...entry.location,
                   changes: renderedChanges,
                   warning:
                     Object.keys(result.changes).length === 0
@@ -269,23 +313,25 @@ export function registerUpdateAccountTool(
         }
 
         const snapshot = await snapshots.create("updateAccount", ["currentFinances"], {
-          currentFinances: today,
-        }, detectLayout(exportData));
+          currentFinances: finances,
+        }, layout);
 
         const patch = topLevelPatch(result.updated, result.changes);
         log.info(
           "updateAccount",
           `Patching ${Object.keys(result.changes).length} field(s) on Current Finances account "${accountId}"`,
         );
-        await bridge.updateAccount(accountId, patch, force || undefined, detectLayout(exportData));
+        await bridge.updateAccount(entry.writeId, patch, force || undefined, layout);
 
         let verified: boolean | undefined;
         try {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           const freshData = await bridge.exportData({ fresh: true });
-          const verifiedEntry = findCurrentFinanceEntry(
-            freshData.today,
+          const fresh = exportSections(freshData);
+          const verifiedEntry = findAccount(
+            fresh.currentFinances,
             accountId,
+            fresh.layout,
           );
           verified =
             !!verifiedEntry &&
@@ -306,7 +352,7 @@ export function registerUpdateAccountTool(
                 success: true,
                 accountId,
                 accountName: entry.account.name,
-                collection: entry.collection,
+                ...entry.location,
                 changes: renderedChanges,
                 verified,
                 snapshotId: snapshot.id,

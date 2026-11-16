@@ -6,6 +6,7 @@ import { resolveSnapshot, type SnapshotManager } from "../snapshot.js";
 import { config } from "../config.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { REDACTED, containsText, hasApiKeyPlaceholder } from "../redact.js";
+import { v5AccountsKept } from "../currentFinances.js";
 import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { restoredSectionMatches } from "./restore.js";
@@ -156,6 +157,18 @@ export function registerSnapshotTools(
           snapshot.sections.flatMap((section) => RESTORE_METHODS[section] ?? []),
         );
 
+        // ProjectionLab 5 restores Current Finances account by account and
+        // keeps an account the snapshot does not hold, such as one added
+        // since; name those so the preview does not promise to remove them.
+        const keptAccounts =
+          liveLayout === "v5" && snapshot.data.currentFinances !== undefined
+            ? v5AccountsKept(
+                snapshot.data.currentFinances,
+                sectionOf(currentData, "currentFinances"),
+              )
+            : [];
+        const kept = keptAccounts.length > 0 ? { keptAccounts } : {};
+
         if (!confirm) {
           return {
             content: [
@@ -168,8 +181,11 @@ export function registerSnapshotTools(
                     timestamp: snapshot.timestamp,
                     operation: snapshot.operation,
                     sections: snapshot.sections,
+                    ...kept,
                     message:
-                      "This will restore the data sections listed above. Set confirm=true to proceed.",
+                      keptAccounts.length > 0
+                        ? "This will restore the data sections listed above. The Current Finances accounts in keptAccounts are not in the snapshot and stay as they are. Set confirm=true to proceed."
+                        : "This will restore the data sections listed above. Set confirm=true to proceed.",
                   },
                 ),
               },
@@ -265,6 +281,7 @@ export function registerSnapshotTools(
                   verified,
                   restoredSections,
                   ...(verified ? {} : { unverifiedSections }),
+                  ...kept,
                   fromSnapshot: snapshot.id,
                   message: verified
                     ? "Rollback complete and verified. A pre-rollback snapshot was also saved."

@@ -191,6 +191,25 @@ export function withoutArchivedAccounts(finances: PlanObj): PlanObj {
   };
 }
 
+/**
+ * The stored ProjectionLab 5 accounts that restoring `submitted` keeps
+ * unchanged because the submission leaves them out. ProjectionLab 5's
+ * restoreCurrentFinances replaces each submitted account and never deletes
+ * one, so these survive the restore as they are. Empty for a v4 `today`.
+ */
+export function v5AccountsKept(
+  submitted: unknown,
+  stored: unknown,
+): { id: string; name: string }[] {
+  const accounts =
+    isPlainObject(submitted) && isPlainObject(submitted.accounts)
+      ? submitted.accounts
+      : {};
+  return listV5Accounts(stored)
+    .filter((entry) => !Object.prototype.hasOwnProperty.call(accounts, entry.key))
+    .map(({ id, name }) => ({ id, name }));
+}
+
 export function currentFinanceAccountNotFoundError(
   today: unknown,
   accountId: string,

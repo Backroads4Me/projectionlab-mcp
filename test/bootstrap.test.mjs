@@ -89,11 +89,11 @@ test("bootstrap snippet acts as a full executor", async () => {
     { key: "test-api-key", force: "true" },
   ]);
 
-  // A ProjectionLab 5 page reports api.version 2, and writes are refused
-  // before they reach the API.
+  // A ProjectionLab 5 page reports api.version 2, and a write it does not
+  // support is refused before it reaches the API.
   pluginApi.version = 2;
   assert.equal(await bridge.apiContract(), 2);
-  await assert.rejects(bridge.updateAccount("acct-1", { balance: 1 }, undefined, "v5"), (err) => err.code === "WRITE_NOT_SUPPORTED");
+  await assert.rejects(bridge.restoreSettings({}, "v5"), (err) => err.code === "WRITE_NOT_SUPPORTED");
   assert.equal(calls.length, 1);
   delete pluginApi.version;
 

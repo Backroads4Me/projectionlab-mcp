@@ -336,8 +336,6 @@ test("writes outside CONTRACT_2_WRITES are refused on contract 2 before anything
   const exec = connectExecutor({ handler: v5Handler(seen) });
   await exec.ready;
   const writes = [
-    () => bridge.updateAccount("a", { balance: 1 }, undefined, "v5"),
-    () => bridge.restoreCurrentFinances({}, "v5"),
     () => bridge.restoreProgress({}, "v5"),
     () => bridge.restoreSettings({}, "v5"),
   ];
@@ -352,15 +350,25 @@ test("writes outside CONTRACT_2_WRITES are refused on contract 2 before anything
   await exec.done;
 });
 
-test("plan writes reach a contract 2 page", async () => {
+test("plan and Current Finances writes reach a contract 2 page", async () => {
   const seen = [];
   const exec = connectExecutor({ handler: v5Handler(seen) });
   await exec.ready;
   await bridge.restorePlans([], "v5");
   await bridge.restorePlansIfUnchanged([], [], "v5");
-  assert.deepEqual(seen.filter((m) => m === "restorePlans"), ["restorePlans", "restorePlans"]);
-  // A plan write prepared from ProjectionLab 4 data is still refused.
+  await bridge.updateAccount("a", { balance: 1 }, undefined, "v5");
+  await bridge.restoreCurrentFinances({}, "v5");
+  const writes = ["restorePlans", "updateAccount", "restoreCurrentFinances"];
+  assert.deepEqual(
+    seen.filter((m) => writes.includes(m)),
+    ["restorePlans", "restorePlans", "updateAccount", "restoreCurrentFinances"],
+  );
+  // A write prepared from ProjectionLab 4 data is still refused.
   await assert.rejects(bridge.restorePlans([], "v4"), (err) => err.code === "CONTRACT_CHANGED");
+  await assert.rejects(
+    bridge.updateAccount("a", { balance: 1 }, undefined, "v4"),
+    (err) => err.code === "CONTRACT_CHANGED",
+  );
   exec.ws.close();
   await exec.done;
 });

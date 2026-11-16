@@ -1,7 +1,8 @@
 // Settings writes on a ProjectionLab 5 account (Plugin API contract 2). The
 // fake bridge applies restoreSettings the way ProjectionLab 5 does: the
 // submission replaces the whole settings document, and the app re-stamps the
-// document's `lastUpdated`.
+// document's `lastUpdated`. Reads hide the Plugin API key in settings as
+// [REDACTED]; restore_settings writes the stored key back in its place.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -94,9 +95,12 @@ function tools(bridge, snapshots) {
   return async (name, input) => JSON.parse((await map.get(name)(input)).content[0].text);
 }
 
-/** The settings document read back from an export, as an agent would submit it. */
+const STORED_KEY = v5Export().documents.settings.plugins.apiKey;
+
+/** The settings document as a read returns it, Plugin API key hidden, with one change. */
 function changedSettings() {
   const settings = stampedExport().documents.settings;
+  settings.plugins.apiKey = "[REDACTED]";
   settings.plan.alignment = { type: "age" };
   return settings;
 }
@@ -110,19 +114,26 @@ test("restore_settings on v5 previews, then replaces the settings and verifies d
   const dry = await call("projectionlab_restore_settings", { settings });
   assert.equal(dry.dryRun, true, JSON.stringify(dry));
   assert.deepEqual(dry.topLevelKeys, Object.keys(settings));
+  assert.deepEqual(dry.keptSecrets, ["plugins.apiKey"]);
+  assert.doesNotMatch(JSON.stringify(dry), new RegExp(STORED_KEY));
   assert.deepEqual(bridge.writes, []);
   assert.deepEqual(snapshots.created, []);
 
   const done = await call("projectionlab_restore_settings", { settings, confirm: true });
   assert.equal(done.success, true, JSON.stringify(done));
   assert.equal(done.verified, true, JSON.stringify(done));
+  assert.deepEqual(done.keptSecrets, ["plugins.apiKey"]);
+  assert.doesNotMatch(JSON.stringify(done), new RegExp(STORED_KEY));
 
   assert.equal(snapshots.created.length, 1);
   assert.equal(snapshots.created[0].layout, "v5");
   assert.deepEqual(snapshots.created[0].sections, ["settings"]);
   assert.deepEqual(snapshots.created[0].data.settings, stampedExport().documents.settings);
 
-  assert.deepEqual(bridge.writes, [{ name: "restoreSettings", submitted: settings, layout: "v5" }]);
+  const written = structuredClone(settings);
+  written.plugins.apiKey = STORED_KEY;
+  assert.deepEqual(bridge.writes, [{ name: "restoreSettings", submitted: written, layout: "v5" }]);
+  assert.equal(bridge.state.documents.settings.plugins.apiKey, STORED_KEY);
   assert.deepEqual(bridge.state.documents.settings.plan.alignment, { type: "age" });
   assert.notEqual(bridge.state.documents.settings.lastUpdated, settings.lastUpdated);
 });
@@ -159,4 +170,47 @@ test("rollback undoes a v5 settings change exactly", async () => {
   const { lastUpdated: _restamped, ...restored } = bridge.state.documents.settings;
   const { lastUpdated: _original, ...original } = stampedExport().documents.settings;
   assert.deepEqual(restored, original);
+});
+
+for (const [label, drop] of [
+  ["the Plugin API key", (settings) => delete settings.plugins.apiKey],
+  ["the whole plugins object", (settings) => delete settings.plugins],
+]) {
+  for (const confirm of [false, true]) {
+    test(`restore_settings refuses a payload that leaves out ${label} (confirm: ${confirm})`, async () => {
+      const bridge = v5Bridge();
+      const snapshots = snapshotStore();
+      const call = tools(bridge, snapshots);
+      const settings = changedSettings();
+      drop(settings);
+      const result = await call("projectionlab_restore_settings", { settings, confirm });
+      assert.equal(result.error, "INVALID_INPUT", JSON.stringify(result));
+      assert.match(result.message, /plugins\.apiKey/);
+      assert.match(result.suggestion, /Nothing was written/);
+      assert.deepEqual(bridge.writes, []);
+      assert.deepEqual(snapshots.created, []);
+    });
+  }
+}
+
+test("restore_settings refuses a hidden secret with no stored value to keep", async () => {
+  const bridge = v5Bridge();
+  const call = tools(bridge, snapshotStore());
+  const settings = changedSettings();
+  settings.plugins.token = "[REDACTED]";
+  const result = await call("projectionlab_restore_settings", { settings, confirm: true });
+  assert.equal(result.error, "INVALID_INPUT", JSON.stringify(result));
+  assert.match(result.message, /plugins\.token/);
+  assert.deepEqual(bridge.writes, []);
+});
+
+test("restore_settings writes a secret the caller supplies as given", async () => {
+  const bridge = v5Bridge();
+  const call = tools(bridge, snapshotStore());
+  const settings = changedSettings();
+  settings.plugins.apiKey = "replacement-plugin-key";
+  const done = await call("projectionlab_restore_settings", { settings, confirm: true });
+  assert.equal(done.verified, true, JSON.stringify(done));
+  assert.equal(done.keptSecrets, undefined);
+  assert.equal(bridge.state.documents.settings.plugins.apiKey, "replacement-plugin-key");
 });

@@ -143,3 +143,74 @@ export function redactSecrets<T>(value: T, opts: RedactOptions = {}): T {
 
   return walk(value) as T;
 }
+
+/** What keepStoredSecrets did with a payload's secret-named fields. */
+export interface StoredSecrets<T> {
+  /** The payload with each hidden secret replaced by its stored value. */
+  value: T;
+  /** Dot paths of the hidden secrets filled from the stored document. */
+  kept: string[];
+  /** Dot paths of hidden secrets the stored document has no value for. */
+  unfilled: string[];
+  /** Dot paths of stored secrets the payload leaves out. */
+  dropped: string[];
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * Lets a payload built from a redacted read write the stored secrets back
+ * unchanged. Each secret-named field holding the REDACTED sentinel takes the
+ * string at the same path in `stored`, the document as ProjectionLab holds
+ * it now, so the secret never passes through the caller. Also lists the
+ * stored secrets the payload leaves out, which a whole-document replace
+ * would erase. Never mutates either input.
+ */
+export function keepStoredSecrets<T>(payload: T, stored: unknown): StoredSecrets<T> {
+  const kept: string[] = [];
+  const unfilled: string[] = [];
+  const dropped: string[] = [];
+  const fill = (v: unknown, from: unknown, at: string): unknown => {
+    if (Array.isArray(v)) {
+      return v.map((item, i) => fill(item, Array.isArray(from) ? from[i] : undefined, at ? `${at}.${i}` : String(i)));
+    }
+    if (!isRecord(v)) return v;
+    const source = isRecord(from) ? from : {};
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v)) {
+      const path = at ? `${at}.${k}` : k;
+      if (isSecretFieldName(k) && val === REDACTED) {
+        const storedValue = source[k];
+        if (typeof storedValue === "string" && storedValue !== REDACTED) {
+          out[k] = storedValue;
+          kept.push(path);
+        } else {
+          out[k] = val;
+          unfilled.push(path);
+        }
+      } else {
+        out[k] = fill(val, source[k], path);
+      }
+    }
+    return out;
+  };
+  const missing = (from: unknown, v: unknown, at: string): void => {
+    if (Array.isArray(from)) {
+      from.forEach((item, i) => missing(item, Array.isArray(v) ? v[i] : undefined, at ? `${at}.${i}` : String(i)));
+      return;
+    }
+    if (!isRecord(from)) return;
+    const target = isRecord(v) ? v : undefined;
+    for (const [k, val] of Object.entries(from)) {
+      const path = at ? `${at}.${k}` : k;
+      if (isSecretFieldName(k) && typeof val === "string" && val !== "") {
+        if (target === undefined || !(k in target)) dropped.push(path);
+      } else {
+        missing(val, target?.[k], path);
+      }
+    }
+  };
+  missing(stored, payload, "");
+  return { value: fill(payload, stored, "") as T, kept, unfilled, dropped };
+}

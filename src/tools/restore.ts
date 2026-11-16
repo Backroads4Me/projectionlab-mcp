@@ -13,7 +13,7 @@ import { detectLayout, exportSections, sectionOf } from "../layout.js";
 import { v5AccountsKept } from "../currentFinances.js";
 import { log } from "../logger.js";
 import { containsSubset } from "../plans.js";
-import { findRedactedSecretPaths } from "../redact.js";
+import { findRedactedSecretPaths, keepStoredSecrets } from "../redact.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 type Obj = Record<string, unknown>;
@@ -480,6 +480,8 @@ export function registerRestoreTools(
       description:
         "REPLACES the Settings state with the provided data. " +
         "This is a FULL REPLACEMENT, not a patch. " +
+        "A secret field that a read returned as [REDACTED], such as the Plugin API key, keeps its stored value; " +
+        "leave it as [REDACTED]. A payload that leaves out a stored secret is refused, since the replacement would erase it. " +
         "When confirm is false (default), returns a dry-run preview. " +
         "When confirm is true, auto-snapshots then applies the replacement. " +
         "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed.",
@@ -500,15 +502,31 @@ export function registerRestoreTools(
         openWorldHint: true,
       },
     },
-    async ({ settings, confirm }) => {
+    async ({ settings: submitted, confirm }) => {
       try {
         checkReadOnly();
-        const redactedPaths = findRedactedSecretPaths(settings);
-        if (redactedPaths.length > 0) {
-          throw redactedSecretsError("settings", redactedPaths);
-        }
-
         await assertWritesSupported(bridge, ["restoreSettings"]);
+
+        // Settings hold the Plugin API key, which every read hides. Each
+        // hidden secret takes its stored value, and a payload that leaves a
+        // stored secret out is refused: the whole-document replace would
+        // erase it, and an erased key disconnects this server.
+        const exportData = await bridge.exportData({ fresh: true });
+        const stored = sectionOf(exportData, "settings");
+        const { value: settings, kept, unfilled, dropped } = keepStoredSecrets(submitted, stored);
+        if (unfilled.length > 0) {
+          throw redactedSecretsError("settings", unfilled);
+        }
+        if (dropped.length > 0) {
+          throw new ProjectionLabError(
+            "INVALID_INPUT",
+            `settings leaves out stored secret values at: ${dropped.join(", ")}`,
+            "projectionlab_restore_settings replaces the whole settings document, so a secret left out is erased, and erasing the Plugin API key disconnects this server. " +
+              "Include each of these fields as the [REDACTED] value the read returned; the stored value is kept. Nothing was written.",
+          );
+        }
+        const keptSecrets = kept.length > 0 ? { keptSecrets: kept } : {};
+
         if (!confirm) {
           return {
             content: [
@@ -519,6 +537,7 @@ export function registerRestoreTools(
                     dryRun: true,
                     operation: "restoreSettings",
                     topLevelKeys: Object.keys(settings),
+                    ...keptSecrets,
                     warning:
                       "This will REPLACE all Settings. Set confirm=true to proceed.",
                   },
@@ -528,9 +547,8 @@ export function registerRestoreTools(
           };
         }
 
-        const exportData = await bridge.exportData({ fresh: true });
         await snapshots.create("restoreSettings", ["settings"], {
-          settings: sectionOf(exportData, "settings"),
+          settings: stored,
         }, detectLayout(exportData));
 
         await bridge.restoreSettings(settings, detectLayout(exportData));
@@ -546,6 +564,7 @@ export function registerRestoreTools(
                   success: true,
                   verified,
                   ...(detail ? { verificationDetail: detail } : {}),
+                  ...keptSecrets,
                   message: verified
                     ? "Settings replaced and verified. Snapshot saved."
                     : "Settings replaced. Snapshot saved. Verification inconclusive.",

@@ -195,3 +195,42 @@ for (const [tool, field, payload] of restoreCases) {
     assert.equal(bridge.writes.length, 1);
   });
 }
+
+test("projectionlab_restore_settings on v4 writes the stored Plugin API key in place of [REDACTED]", async () => {
+  const storedKey = "stored-plugin-key";
+  const bridge = fakeBridge({
+    plans: [],
+    today: {},
+    progress: {},
+    settings: { theme: "dark", plugins: { enabled: true, apiKey: storedKey } },
+  });
+  const server = registered(bridge);
+  const settings = { theme: "light", plugins: { enabled: true, apiKey: "[REDACTED]" } };
+  const result = await server.tools
+    .get("projectionlab_restore_settings")
+    .handler({ settings, confirm: true });
+  assert.equal(result.isError, undefined, result.content[0].text);
+  const output = JSON.parse(result.content[0].text);
+  assert.equal(output.verified, true, result.content[0].text);
+  assert.deepEqual(output.keptSecrets, ["plugins.apiKey"]);
+  assert.doesNotMatch(result.content[0].text, new RegExp(storedKey));
+  assert.deepEqual(bridge.state.settings, { theme: "light", plugins: { enabled: true, apiKey: storedKey } });
+});
+
+test("projectionlab_restore_settings on v4 refuses a payload that leaves out the stored Plugin API key", async () => {
+  const bridge = fakeBridge({
+    plans: [],
+    today: {},
+    progress: {},
+    settings: { theme: "dark", plugins: { enabled: true, apiKey: "stored-plugin-key" } },
+  });
+  const server = registered(bridge);
+  const result = await server.tools
+    .get("projectionlab_restore_settings")
+    .handler({ settings: { theme: "light", plugins: { enabled: true } }, confirm: true });
+  assert.equal(result.isError, true);
+  const output = JSON.parse(result.content[0].text);
+  assert.equal(output.error, "INVALID_INPUT");
+  assert.match(output.message, /plugins\.apiKey/);
+  assert.deepEqual(bridge.writes, []);
+});

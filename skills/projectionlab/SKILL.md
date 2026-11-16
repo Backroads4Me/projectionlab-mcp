@@ -407,6 +407,13 @@ paths. Type the real value or change single fields with
 `projectionlab_update_plan_event` or `projectionlab_update_plan_settings`,
 which patch by path and never round-trip hidden values.
 
+`projectionlab_restore_settings` is the exception. Settings hold the Plugin
+API key this server connects with, and the restore replaces the whole
+document. Leave each hidden field as `[REDACTED]`: the server writes the
+stored value back and lists those paths under `keptSecrets`. A payload that
+leaves out a stored secret, such as the key, is refused, since the
+replacement would erase it and disconnect the server.
+
 ### Change workflow
 
 Copy this checklist and work through it for each change:

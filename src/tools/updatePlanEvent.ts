@@ -9,7 +9,8 @@ import { log } from "../logger.js";
 import {
   applyExistingPathChanges,
   listAddressableValues,
-  pathChangesApplied,
+  findPathChangeMismatches,
+  type PathChangeMismatch,
   type PathValueChange,
 } from "../pathPatch.js";
 import { enumRefusalError } from "../dataModel.js";
@@ -326,6 +327,7 @@ export function registerUpdatePlanEventTool(
 
         // Verify the patched fields on a fresh read
         let verified = false;
+        let verificationIssues: PathChangeMismatch[] = [];
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (
           exportSections(verifyData).plans
@@ -343,11 +345,12 @@ export function registerUpdatePlanEventTool(
                 eventLabel(e) === eventLabel(patched)),
           ) as PlanObj | undefined;
           if (verifiedEvent) {
-            verified = pathChangesApplied(
+            verificationIssues = findPathChangeMismatches(
               verifiedEvent,
               changes,
               EVENT_FIELD_CONTEXT,
             );
+            verified = verificationIssues.length === 0;
           }
         }
 
@@ -363,9 +366,20 @@ export function registerUpdatePlanEventTool(
                 changes: renderedChanges,
                 verified,
                 snapshotId: snapshot.id,
+                ...(verified
+                  ? {}
+                  : {
+                      verificationIssues: redactSecrets(verificationIssues, {
+                        byName: true,
+                      }),
+                    }),
                 message: verified
                   ? "Event patched and verified. Snapshot saved automatically."
-                  : "Patch sent but verification did not confirm all fields - check with projectionlab_get_plan_section.",
+                  : verificationIssues.length
+                    ? `Patch sent but these fields did not verify: ${verificationIssues
+                        .map((issue) => issue.path)
+                        .join(", ")}. Check with projectionlab_get_plan_section.`
+                    : "Patch sent but verification did not confirm all fields - check with projectionlab_get_plan_section.",
               }),
             },
           ],

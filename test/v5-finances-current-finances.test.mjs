@@ -19,6 +19,7 @@ process.env.LOG_LEVEL = "error";
 const { registerGetCurrentFinancesTool } = await import(
   "../dist/tools/getCurrentFinances.js"
 );
+const { refusedEnumChoices } = await import("../dist/dataModel.js");
 
 function fakeServer() {
   const tools = new Map();
@@ -164,7 +165,7 @@ test("an unknown v5 account id is refused and counts every stored account", asyn
   assert.match(error.suggestion, /5 available account record/);
 });
 
-test("listPaths flattens a v5 account into typed dot paths without v4 annotations", async () => {
+test("listPaths annotates a v5 account from the v5 accounts group", async () => {
   const output = await json(v5Export(), {
     accountId: "acct_brokerage",
     listPaths: true,
@@ -172,8 +173,30 @@ test("listPaths flattens a v5 account into typed dot paths without v4 annotation
 
   assert.equal(output.listPaths, true);
   const balance = output.data.find((item) => item.path === "balance");
-  assert.deepEqual(balance, { path: "balance", type: "number", value: 50000 });
+  assert.equal(balance.type, "number");
+  assert.equal(balance.value, 50000);
+  assert.equal(balance.units, "dollars");
+  assert.equal(balance.uiLabel, "Balance");
+  const kind = output.data.find((item) => item.path === "kind");
+  assert.deepEqual(kind.allowedValues, ["account", "debt", "real-asset"]);
   assert.equal(output.data.some((item) => item.path === "costBasis"), true);
+});
+
+test("a v5 account listing describes each value with the entry update_account enforces", async () => {
+  const state = v5Export();
+  state.documents.currentFinances.accounts.acct_brokerage.investmentGrowthType = "plan";
+  const output = await json(state, {
+    accountId: "acct_brokerage",
+    listPaths: true,
+  });
+
+  const growth = output.data.find((item) => item.path === "investmentGrowthType");
+  const sources = ["plan", "fixed", "custom", "none"];
+  assert.deepEqual(growth.allowedValues, sources);
+  assert.deepEqual(
+    refusedEnumChoices("accounts", "investmentGrowthType", "rate", "v5"),
+    sources,
+  );
 });
 
 test("listPaths without an accountId is refused on v5 too", async () => {

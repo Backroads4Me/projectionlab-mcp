@@ -57,8 +57,9 @@ function v4AccountOutput(
 
 /**
  * One ProjectionLab 5 account, addressed by exact id. An archived account is
- * returned and flagged. The v4 data model annotations do not describe v5
- * fields, so listed paths carry none.
+ * returned and flagged. Listed paths are annotated from the v5 `accounts`
+ * group, the scope and layout `update_account` enforces on a v5 write, so a
+ * listing never advertises a value the write refuses.
  */
 function v5AccountOutput(
   today: PlanObj,
@@ -81,7 +82,11 @@ function v5AccountOutput(
     ...(entry.archived ? { archived: true } : {}),
     ...(listPaths ? { listPaths: true } : {}),
     data: listPaths
-      ? listAddressableValues(entry.account)
+      ? annotateAddressableValues(
+          "accounts",
+          listAddressableValues(entry.account),
+          "v5",
+        )
       : {
           ...entry.account,
           ...(realAsset ? { realAsset } : {}),

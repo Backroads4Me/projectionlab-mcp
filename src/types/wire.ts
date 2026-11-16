@@ -24,9 +24,9 @@ export const PROTOCOL_VERSION = 1;
 /**
  * Minimum extension release required by this server version.
  * Extensions below this version lack features required by the server (e.g.
- * standby, takeover, instanceId).
+ * standby, takeover, instanceId, the plan-edits switch).
  */
-export const MIN_EXTENSION_VERSION = "1.2.0";
+export const MIN_EXTENSION_VERSION = "1.3.0";
 
 /** Default listen port; override with PL_WS_PORT / the extension options page. */
 export const DEFAULT_WS_PORT = 8788;

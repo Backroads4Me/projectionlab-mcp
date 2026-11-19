@@ -97,7 +97,7 @@ test("diff runs with plan edits turned off and saves nothing", async () => {
   ]);
   assert.deepEqual(
     out.sections.plans.changedPlans[0].sections.income.modified,
-    [{ name: "Salary", changes: { amount: "100000 → 105000" } }],
+    [{ name: "Salary", id: "i1", changes: { amount: "100000 → 105000" } }],
   );
 
   assert.deepEqual(bridge.writes, [], "diff must not write");

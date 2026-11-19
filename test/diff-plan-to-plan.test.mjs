@@ -403,7 +403,7 @@ test("pathsOnly also hides values in the points-in-time mode", async () => {
   const out = JSON.parse(json);
   assert.equal(out.changed, true);
   assert.deepEqual(out.sections.plans.changedPlans[0].sections.income.modified, [
-    { name: "Salary", paths: ["note"] },
+    { name: "Salary", id: "a-i1", paths: ["note"] },
   ]);
 });
 

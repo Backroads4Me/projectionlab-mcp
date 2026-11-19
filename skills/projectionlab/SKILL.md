@@ -167,7 +167,13 @@ narrowest read that answers the question.
   out is counted in `omittedFieldChanges` and per-entry `omittedChanges` rather
   than dropped, so a difference past the cap still reads as changed. Use it to
   confirm a write landed as intended, to tell the user what changed, or to see
-  what a rollback would undo.
+  what a rollback would undo. An event whose name repeats in its section is
+  reported by its start, as in `Travel (starts Stop RV life)` or
+  `Medicare (starts 2034-10-01)`, and by occurrence (`Travel #2`) only when
+  it has no start or shares one with another event of that name; a modified
+  event also carries its `id` when it has one. The section dry run of
+  `projectionlab_update_plan_section` and the plan-to-plan mode name events
+  the same way.
 - `projectionlab_diff` compares two different plans when you give it `planA` and
   `planB` (plan name or exact ID) instead of a snapshot, which answers "does the
   plan I rebuilt by hand match the original?". Both plans come from the live app,

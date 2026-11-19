@@ -24,6 +24,7 @@ import {
   resolvePlanIndex,
   getEvents,
   keyEvents,
+  milestoneNames,
   planNotFoundError,
   requirePlans,
   verifySectionApplied,
@@ -60,15 +61,19 @@ function isEventish(sectionData: unknown): boolean {
   );
 }
 
-function diffSection(current: unknown, incoming: unknown): DiffResult {
+function diffSection(
+  current: unknown,
+  incoming: unknown,
+  milestones: ReadonlyMap<string, string>,
+): DiffResult {
   const currentEvents = getEvents(current);
   const newEvents = getEvents(incoming);
   const fieldChanges =
     !isEventish(current) && !isEventish(incoming)
       ? diffFields(current, incoming)
       : undefined;
-  const currentByName = keyEvents(currentEvents);
-  const newByName = keyEvents(newEvents);
+  const currentByName = keyEvents(currentEvents, milestones);
+  const newByName = keyEvents(newEvents, milestones);
 
   const added: string[] = [];
   const removed: string[] = [];
@@ -260,7 +265,7 @@ export function registerUpdatePlanSectionTool(
         const currentSection = plan[section];
         assertSectionShape(section, String(plan.name), currentSection, sectionData);
         assertLinkedFieldsUnchanged(section, plan, sectionData, data);
-        const diff = diffSection(currentSection, sectionData);
+        const diff = diffSection(currentSection, sectionData, milestoneNames(plan));
 
         if (!confirm) {
           return {

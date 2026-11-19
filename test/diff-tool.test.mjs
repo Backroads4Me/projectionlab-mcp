@@ -174,6 +174,7 @@ test("diff reports added, removed and modified events against the live data", as
   assert.deepEqual(income.modified, [
     {
       name: "Salary",
+      id: "i1",
       changes: {
         amount: "100000 → 110000",
         "rothConversions.0.amount": "1000 → 2000",

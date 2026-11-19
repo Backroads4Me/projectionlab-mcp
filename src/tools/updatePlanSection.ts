@@ -1,9 +1,14 @@
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import type { SnapshotManager } from "../snapshot.js";
 import { requireEditsEnabled } from "../editAccess.js";
-import { errorResult, redactedSecretsError } from "../errors.js";
+import {
+  ProjectionLabError,
+  errorResult,
+  redactedSecretsError,
+} from "../errors.js";
 import {
   assertPlanVersion,
   planVersion,
@@ -25,6 +30,13 @@ import {
   type PlanObj,
 } from "../plans.js";
 import { detectLayout, exportSections } from "../layout.js";
+import {
+  baselinePlanId,
+  eventLink,
+  linkedFieldsError,
+  linkedPathsChanged,
+  linkedRecord,
+} from "../linkedFields.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 interface DiffResult {
@@ -95,6 +107,64 @@ function diffSection(current: unknown, incoming: unknown): DiffResult {
 
 /** The preview of a section change, with secret-named fields and the Plugin
  * API key scrubbed like every other plan read. */
+/**
+ * Refuse a section write that changes a field ProjectionLab 5 copies onto a
+ * linked event from the item it links to (see linkedFields.ts). An incoming
+ * event pairs with the current event of the same id, or, without an id, the
+ * way the preview pairs events; added events are left alone.
+ */
+function assertLinkedFieldsUnchanged(
+  section: string,
+  plan: PlanObj,
+  incoming: unknown,
+  data: unknown,
+): void {
+  const layout = detectLayout(data);
+  const { settings, currentFinances } = exportSections(data);
+  const isBaseline = plan.id === baselinePlanId(settings);
+  const currentEvents = getEvents(plan[section]);
+  const currentById = new Map<unknown, PlanObj>();
+  for (const e of currentEvents) {
+    if (e && typeof e === "object" && (e as PlanObj).id !== undefined) {
+      currentById.set((e as PlanObj).id, e as PlanObj);
+    }
+  }
+  const currentByName = keyEvents(currentEvents);
+  const refusals: ProjectionLabError[] = [];
+  for (const [key, { name, event }] of keyEvents(getEvents(incoming))) {
+    const next = event as PlanObj;
+    const existing =
+      next && typeof next === "object" && next.id !== undefined
+        ? currentById.get(next.id)
+        : (currentByName.get(key)?.event as PlanObj | undefined);
+    if (existing === undefined) continue;
+    const link = eventLink(section, next, layout);
+    if (!link) continue;
+    const changed = link.fields.filter(
+      (field) => !isDeepStrictEqual(existing[field], next[field]),
+    );
+    const paths = linkedPathsChanged(next, link, changed, isBaseline);
+    if (paths.length > 0) {
+      refusals.push(
+        linkedFieldsError(
+          eventLabel(existing),
+          link,
+          paths,
+          linkedRecord(link, plan, currentFinances),
+        ),
+      );
+    }
+  }
+  if (refusals.length === 1) throw refusals[0];
+  if (refusals.length > 1) {
+    throw new ProjectionLabError(
+      "INVALID_INPUT",
+      refusals.map((refusal) => refusal.message).join(". "),
+      refusals.map((refusal) => refusal.suggestion).join(". "),
+    );
+  }
+}
+
 function renderDiff(diff: DiffResult) {
   return redactSecrets({
     itemCount: `${diff.currentCount} → ${diff.newCount}`,
@@ -123,6 +193,8 @@ export function registerUpdatePlanSectionTool(
         "When confirm is true, auto-snapshots all plans, rebuilds with the updated section, " +
         "and calls restorePlans. " +
         "Prefer projectionlab_update_plan_event when changing a single event - it is smaller and safer. " +
+        "On ProjectionLab 5, a change to a field a linked account, asset or priority event takes " +
+        "from the item it links to is refused; change it with projectionlab_update_account. " +
         "IMPORTANT: Always fetch fresh section data via projectionlab_get_plan_section before " +
         "constructing sectionData - never mutate from stale data. Pass the dry-run's planVersion " +
         "as expectedPlanVersion when confirming so a plan saved in the meantime is not overwritten.",
@@ -187,6 +259,7 @@ export function registerUpdatePlanSectionTool(
         const plan = plans[planIndex] as PlanObj;
         const currentSection = plan[section];
         assertSectionShape(section, String(plan.name), currentSection, sectionData);
+        assertLinkedFieldsUnchanged(section, plan, sectionData, data);
         const diff = diffSection(currentSection, sectionData);
 
         if (!confirm) {

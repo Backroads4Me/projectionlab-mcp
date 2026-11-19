@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
-import { detectLayout } from "../layout.js";
+import { detectLayout, exportSections } from "../layout.js";
+import { baselinePlanId, eventLink, linkedPathsChanged } from "../linkedFields.js";
 import { annotateAddressableValues } from "../dataModel.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
@@ -87,7 +88,7 @@ export function registerGetPlanSectionTool(
           .boolean()
           .default(false)
           .describe(
-            "Flatten the selected object into addressable leaf paths with current values and JSON types. Arrays remain intact.",
+            "Flatten the selected object into addressable leaf paths with current values and JSON types. Arrays remain intact. On one ProjectionLab 5 event linked to Current Finances, paths marked syncedFrom take their value from the linked item, and plan writes to them are refused.",
           ),
       },
       annotations: {
@@ -144,11 +145,29 @@ export function registerGetPlanSectionTool(
         }
 
         if (listPaths) {
-          sectionData = annotateAddressableValues(
+          const listed = annotateAddressableValues(
             section,
             listAddressableValues(sectionData),
             detectLayout(data),
           );
+          // On one linked event, mark the paths ProjectionLab copies from the
+          // item the event links to; plan writes to them are refused.
+          const link =
+            eventIdentifier !== undefined && path === undefined
+              ? eventLink(section, sectionData, detectLayout(data))
+              : undefined;
+          if (link) {
+            const isBaseline =
+              plan.id === baselinePlanId(exportSections(data).settings);
+            const event = sectionData as PlanObj;
+            sectionData = listed.map((entry) =>
+              linkedPathsChanged(event, link, [entry.path], isBaseline).length > 0
+                ? { ...entry, syncedFrom: link.target }
+                : entry,
+            );
+          } else {
+            sectionData = listed;
+          }
         }
 
         const output = {

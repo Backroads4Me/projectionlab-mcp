@@ -66,6 +66,8 @@ checks on Node 20 for every pull request and push to `main`.
 - `src/logger.ts`: structured stderr logger, scrubbing `PL_API_KEY` from all output.
 - `src/largeOutput.ts`: writes oversized tool outputs to `~/.projectionlab-mcp/exports/` with 30-day retention.
 - `src/dataModel.ts`: ProjectionLab data model annotations and validation.
+- `src/linkedFields.ts`: the plan event fields ProjectionLab 5 copies from a
+  linked Current Finances item, which plan writes refuse to change.
 - `src/snapshot.ts`: pre-write snapshots + retention.
 - `src/secureFs.ts`: owner-only directory and file writes.
 - `src/tools/*`: one file per tool or closely related group (`restore.ts`,

@@ -3,9 +3,11 @@ import {
 } from "./currentFinances.js";
 import {
   PLAN_SECTIONS,
+  eventDisplayNames,
   eventLabel,
   getEvents,
   keyEvents,
+  milestoneNames,
   type PlanObj,
   type PlanSection,
 } from "./plans.js";
@@ -334,13 +336,15 @@ export interface FieldSectionDiff {
 
 function keyEventsById(
   events: unknown[],
+  milestones: ReadonlyMap<string, string>,
 ): Map<string, { id?: string; name: string; event: unknown }> {
   const keyed = new Map<string, { id?: string; name: string; event: unknown }>();
+  const objects = events.filter((e) => !!e && typeof e === "object");
+  const names = eventDisplayNames(objects, milestones);
   let fallbackIndex = 0;
-  for (const e of events) {
-    if (!e || typeof e !== "object") continue;
+  for (const [i, e] of objects.entries()) {
     const obj = e as PlanObj;
-    const name = eventLabel(e);
+    const name = names[i];
     const id =
       obj.id !== undefined && obj.id !== null && obj.id !== ""
         ? String(obj.id)
@@ -361,24 +365,36 @@ function keyEventsById(
  * keying the section dry run uses, so events sharing a name each keep their
  * own entry. Anything else (`variables`, `montecarlo`,
  * `withdrawalStrategy`) compares leaf by leaf.
+ *
+ * An event whose name repeats is reported by its start, named through each
+ * side's own milestones; a modified event takes the later side's name and
+ * carries its `id` when it has one.
  */
 export function diffEventSection(
   before: unknown,
   after: unknown,
   budget: DiffBudget,
-  options?: { layout?: ExportLayout },
+  options?: {
+    layout?: ExportLayout;
+    milestones?: {
+      before: ReadonlyMap<string, string>;
+      after: ReadonlyMap<string, string>;
+    };
+  },
 ): EventSectionDiff {
   const beforeEvents = getEvents(before);
   const afterEvents = getEvents(after);
 
   const isV5 = options?.layout === "v5";
+  const beforeMilestones = options?.milestones?.before ?? new Map<string, string>();
+  const afterMilestones = options?.milestones?.after ?? new Map<string, string>();
 
   const beforeKeyed = isV5
-    ? keyEventsById(beforeEvents)
-    : keyEvents(beforeEvents);
+    ? keyEventsById(beforeEvents, beforeMilestones)
+    : keyEvents(beforeEvents, beforeMilestones);
   const afterKeyed = isV5
-    ? keyEventsById(afterEvents)
-    : keyEvents(afterEvents);
+    ? keyEventsById(afterEvents, afterMilestones)
+    : keyEvents(afterEvents, afterMilestones);
 
   const added: string[] = [];
   const removed: string[] = [];
@@ -398,7 +414,12 @@ export function diffEventSection(
     const leaf = diffLeafValues(previous.event, event, budget);
     if (leaf.detected > 0) {
       modifiedCount++;
-      addEntry(modified, changeEntry({ name }, leaf), budget);
+      const id = (event as PlanObj | null | undefined)?.id;
+      const identity =
+        id !== undefined && id !== null && id !== ""
+          ? { name, id: String(id) }
+          : { name };
+      addEntry(modified, changeEntry(identity, leaf), budget);
     } else {
       unchangedCount++;
     }
@@ -540,7 +561,14 @@ export function diffPlan(
       before[name],
       after[name],
       budget,
-      (b, a, bud) => diffEventSection(b, a, bud, options),
+      (b, a, bud) =>
+        diffEventSection(b, a, bud, {
+          ...options,
+          milestones: {
+            before: milestoneNames(before),
+            after: milestoneNames(after),
+          },
+        }),
     );
     sections[name] = result;
     if (result.changed) changedSections.push(name);
@@ -681,8 +709,10 @@ export function diffEventPair(
 ): PairEventDiff {
   const aEvents = getEvents(a);
   const bEvents = getEvents(b);
-  const aKeyed = keyEvents(aEvents);
-  const bKeyed = keyEvents(bEvents);
+  // References are tokened by planForPair, so a milestone start reads as its
+  // name without a milestone list.
+  const aKeyed = keyEvents(aEvents, new Map());
+  const bKeyed = keyEvents(bEvents, new Map());
 
   const onlyInA: string[] = [];
   const onlyInB: string[] = [];

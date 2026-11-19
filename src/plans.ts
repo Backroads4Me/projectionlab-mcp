@@ -265,30 +265,124 @@ export function eventLabel(event: unknown): string {
   return "unnamed";
 }
 
+/** Milestone names by id, from a plan's `milestones` section. */
+export function milestoneNames(plan: unknown): Map<string, string> {
+  const names = new Map<string, string>();
+  if (!plan || typeof plan !== "object") return names;
+  for (const m of getEvents((plan as PlanObj).milestones)) {
+    if (!m || typeof m !== "object") continue;
+    const { id, name } = m as PlanObj;
+    if (typeof id === "string" && id !== "" && typeof name === "string" && name !== "") {
+      names.set(id, name);
+    }
+  }
+  return names;
+}
+
+/** The prefix plan-to-plan comparison gives a reference to a milestone. */
+const MILESTONE_TOKEN_PREFIX = "@milestones:";
+
+/**
+ * When an event starts, in the words a user names it by: a milestone's name,
+ * a date, year or keyword as stored, or an age. A milestone id resolves
+ * through `milestones`, and a plan-to-plan reference token
+ * (`@milestones:<name>`) through its name. Undefined when the event has no
+ * start.
+ */
+export function startLabel(
+  start: unknown,
+  milestones: ReadonlyMap<string, string>,
+): string | undefined {
+  if (!start || typeof start !== "object" || Array.isArray(start)) return undefined;
+  const { type, value, modifier } = start as PlanObj;
+  const text =
+    value === undefined || value === null || value === "" ? undefined : String(value);
+  switch (type) {
+    case "date":
+    case "year":
+    case "keyword":
+      return text;
+    case "age":
+      return text === undefined ? undefined : `age ${text}`;
+    case "milestone": {
+      if (text === undefined) return undefined;
+      const name =
+        milestones.get(text) ??
+        (text.startsWith(MILESTONE_TOKEN_PREFIX)
+          ? text.slice(MILESTONE_TOKEN_PREFIX.length)
+          : text);
+      return typeof modifier === "number" && modifier !== 0
+        ? `${name} ${modifier > 0 ? "+" : ""}${modifier}`
+        : name;
+    }
+    case "lifeExpectancy":
+      return "life expectancy";
+    case "lastLifeExpectancy":
+      return "last life expectancy";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Display names for a list of events, in order. A label used once stays as it
+ * is. With `milestones`, a repeated label carries its start, as in
+ * "Travel (starts Stop RV life)", and falls back to "Travel #2" (its
+ * occurrence among the events of that label) when it has no start or shares
+ * its start with another of them. Without `milestones`, every repeated label
+ * takes the occurrence.
+ */
+export function eventDisplayNames(
+  events: readonly unknown[],
+  milestones?: ReadonlyMap<string, string>,
+): string[] {
+  const labels = events.map(eventLabel);
+  const starts = events.map((e) =>
+    milestones && e && typeof e === "object"
+      ? startLabel((e as PlanObj).start, milestones)
+      : undefined,
+  );
+  const labelCounts = new Map<string, number>();
+  const startCounts = new Map<string, number>();
+  labels.forEach((label, i) => {
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+    if (starts[i] !== undefined) {
+      const key = JSON.stringify([label, starts[i]]);
+      startCounts.set(key, (startCounts.get(key) ?? 0) + 1);
+    }
+  });
+  const seen = new Map<string, number>();
+  return labels.map((label, i) => {
+    const n = (seen.get(label) ?? 0) + 1;
+    seen.set(label, n);
+    if ((labelCounts.get(label) ?? 0) <= 1) return label;
+    const start = starts[i];
+    if (start !== undefined && startCounts.get(JSON.stringify([label, start])) === 1) {
+      return `${label} (starts ${start})`;
+    }
+    return `${label} #${n}`;
+  });
+}
+
 /**
  * Key events for diffing by label plus occurrence number, so events sharing a
  * name each keep their own entry. Ids are not used because a replacement
- * section may omit them. The display name shows the occurrence only when the
- * label repeats.
+ * section may omit them. The display names come from `eventDisplayNames`;
+ * passing `milestones` names repeated labels by their start.
  */
 export function keyEvents(
   events: unknown[],
+  milestones?: ReadonlyMap<string, string>,
 ): Map<string, { name: string; event: unknown }> {
-  const labelCounts = new Map<string, number>();
-  for (const e of events) {
-    const label = eventLabel(e);
-    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
-  }
+  const names = eventDisplayNames(events, milestones);
   const seen = new Map<string, number>();
   const keyed = new Map<string, { name: string; event: unknown }>();
-  for (const e of events) {
+  events.forEach((e, i) => {
     const label = eventLabel(e);
     const n = (seen.get(label) ?? 0) + 1;
     seen.set(label, n);
-    const key = `${label}#${n}`;
-    const name = (labelCounts.get(label) ?? 0) > 1 ? `${label} #${n}` : label;
-    keyed.set(key, { name, event: e });
-  }
+    keyed.set(`${label}#${n}`, { name: names[i], event: e });
+  });
   return keyed;
 }
 

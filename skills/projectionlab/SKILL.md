@@ -249,14 +249,26 @@ both layouts; these differences show through:
   `eventIdentifier` matches no event id or name. A priority's `accountId` is
   different: it holds the id of the plan's account event, not the Current
   Finances account id. Keep the two kinds of id apart.
+- **Linked fields belong to Current Finances.** On ProjectionLab 5, a linked
+  event takes some fields from the item it links to, and ProjectionLab
+  overwrites a value written to them in the plan. An account event takes its
+  name, type, balance, owner, icon, liquidity, cost basis and withdrawal terms
+  (`EWAge`, `hasEWPenalty`, `EWPenaltyRate`, `withdrawContribsFree`), among
+  others. An asset event takes its name, type, owner, purchase price, value
+  and loans, among others. A priority takes `owner` and `icon` from the
+  account it routes to. `projectionlab_get_plan_section` with `listPaths`
+  marks these paths `syncedFrom` on one linked event, and
+  `projectionlab_update_plan_event` and `projectionlab_update_plan_section`
+  refuse to change them. Change them with `projectionlab_update_account`
+  instead, after telling the user it changes every plan linked to that
+  item. projectionlab://data-model lists every linked field.
 - **Current Finances is shared by every plan.** An account has one Current
   Finances document, not one per plan, so `projectionlab_update_account` and
   a Current Finances restore change what every plan starts from. Say so in
-  the preview before confirming. Plans keep their own copies of some linked
-  fields, such as an account event's `name` and `balance`. On ProjectionLab
-  5, those copies refresh when a plan is opened, so an export can show an old
-  value in a plan nobody has opened since. Read today's figure from Current
-  Finances, not from a plan event. On ProjectionLab 5, a balance or value
+  the preview before confirming. Plans keep their own copies of the linked
+  fields. On ProjectionLab 5, those copies refresh when a plan is opened or
+  saved, so an export can show an old value in a plan nobody has opened
+  since. Read today's figure from Current Finances, not from a plan event. On ProjectionLab 5, a balance or value
   edit also overwrites that account's `accountHistory` entry for the current
   day.
 - **Resources.** `projectionlab://data-model` and `projectionlab://knowledge`

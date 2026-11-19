@@ -10,6 +10,10 @@ import {
   UI_LABELS_V5,
 } from "../dataModel.js";
 import type { ExportLayout } from "../layout.js";
+import {
+  ACCOUNT_EVENT_LINKED_FIELDS,
+  ASSET_EVENT_LINKED_FIELDS,
+} from "../linkedFields.js";
 import { registerLayoutResource } from "./layoutResource.js";
 
 function renderField(pattern: string, field: DataModelField): string {
@@ -142,8 +146,17 @@ export function renderDataModelV5Markdown(): string {
       "switched-off copies; editing them changes nothing in the app.",
     "- A field that only applies in a mode, such as `incomeRate` while `generateIncome` is " +
       "off, has no effect until the user selects that mode.",
-    "- A plan asset with an `assetId` shows its Details (Name, Owner, Purchase Price, Current " +
-      "Value, Type) from Current Finances, so those values change in every plan.",
+    "- A plan event linked to Current Finances takes some fields from the item it links " +
+      "to, and ProjectionLab overwrites a value written to them in the plan. Writes to them " +
+      "are refused; change them with projectionlab_update_account, which changes every plan " +
+      "linked to that item. An account event with `accountId` takes " +
+      `${ACCOUNT_EVENT_LINKED_FIELDS.map((f) => "`" + f + "`").join(", ")}. ` +
+      "An asset event with `assetId` takes " +
+      `${ASSET_EVENT_LINKED_FIELDS.map((f) => "`" + f + "`").join(", ")}. ` +
+      "A priority with `accountId` takes `owner` and `icon` from the account it routes to " +
+      "(a transfer priority takes only `owner`). listPaths on one event marks these paths " +
+      "with `syncedFrom`. A field the event lists in `_meta.overriddenFields` keeps its plan " +
+      "value, except on the baseline plan, which keeps no overrides.",
     "- Progress history is recorded by ProjectionLab 5; writing it is refused.",
     "- Switching a Social Security income to Estimate Benefit in the app also changes its " +
       "end and `taxExempt`; read the event again after the user switches modes.",

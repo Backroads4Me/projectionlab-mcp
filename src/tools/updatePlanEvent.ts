@@ -37,6 +37,13 @@ import {
 } from "../plans.js";
 import { detectLayout, exportSections, type ExportLayout } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import {
+  baselinePlanId,
+  eventLink,
+  linkedFieldsError,
+  linkedPathsChanged,
+  linkedRecord,
+} from "../linkedFields.js";
 
 const EVENT_FIELD_CONTEXT = {
   label: "event field",
@@ -161,6 +168,9 @@ export function registerUpdatePlanEventTool(
         "The legacy patch input shallowly merges top-level fields and replaces any nested object " +
         "supplied there; existing fields keep their JSON type and new fields must be plain, " +
         "non-secret names. Supply exactly one of patch or pathChanges. All sibling events are preserved. " +
+        "On ProjectionLab 5, fields an account, asset or priority event takes from the item it " +
+        "links to (such as an account event's name, balance and EWAge) are refused; change " +
+        "them with projectionlab_update_account. " +
         "This is the PREFERRED write tool for single-event changes: much smaller and " +
         "safer than regenerating a whole section. " +
         "When confirm is false (default), returns a dry-run field-level diff. " +
@@ -284,6 +294,27 @@ export function registerUpdatePlanEventTool(
           patched = result.updated;
           changes = result.changes;
         }
+
+        // ProjectionLab 5 copies some fields onto a linked event from the
+        // item it links to, so a plan value written there would not stay.
+        const link = eventLink(section, event, detectLayout(data));
+        if (link) {
+          const linkedPaths = linkedPathsChanged(
+            event,
+            link,
+            Object.keys(changes),
+            plan.id === baselinePlanId(exportSections(data).settings),
+          );
+          if (linkedPaths.length > 0) {
+            throw linkedFieldsError(
+              eventLabel(event),
+              link,
+              linkedPaths,
+              linkedRecord(link, plan, exportSections(data).currentFinances),
+            );
+          }
+        }
+
         const renderedChanges = redactSecrets(changes, { byName: true });
 
         if (!confirm) {

@@ -104,6 +104,7 @@ The server starts without `PL_API_KEY` so it can tell the agent what is missing;
 | `projectionlab_get_plan` | Retrieve a single plan | No |
 | `projectionlab_get_plan_section` | Retrieve a plan section; supports event/path filters and typed field-path listing | No |
 | `projectionlab_get_plan_settings` | List discrete plan settings as path-addressable values | No |
+| `projectionlab_get_settings_report` | Render one plan's settings, or two plans' side by side with a Differs column, as a readable markdown report | No |
 | `projectionlab_get_current_finances` | Get Current Finances or list typed paths for one account | No |
 | `projectionlab_update_account` | Patch one Current Finances account by top-level fields or nested dot paths | Yes |
 | `projectionlab_update_plan_event` | Patch one event by top-level fields or nested dot paths | Yes |

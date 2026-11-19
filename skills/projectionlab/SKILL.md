@@ -122,6 +122,7 @@ narrowest read that answers the question.
 | One whole plan | `projectionlab_get_plan` |
 | One section of a plan, one event, or one path in it | `projectionlab_get_plan_section` |
 | Assumptions, Chance of Success, withdrawal strategy | `projectionlab_get_plan_settings` |
+| A readable report of a plan's settings, or two plans' settings side by side | `projectionlab_get_settings_report` |
 | Current Finances, or one account's editable paths | `projectionlab_get_current_finances` |
 | Everything (rarely needed) | `projectionlab_export_data` |
 | Snapshots already saved (id, time, operation, sections) | `projectionlab_list_snapshots` |
@@ -140,6 +141,14 @@ narrowest read that answers the question.
   `listPaths: true` to list editable dot paths with their JSON types.
 - `projectionlab_get_plan_settings` returns `variables`, `montecarlo` and
   `withdrawalStrategy` as dot paths with JSON types; pass `section` for one.
+- `projectionlab_get_settings_report` renders the same three sections as a
+  markdown report for the user: each setting by its on-screen label, grouped
+  by where the control is, with values as the app shows them. Add
+  `comparePlanIdentifier` for a second plan's column and a Differs marker, and
+  `differencesOnly: true` to list only what differs. Show the report as
+  returned. Use it when the user asks to see, review or compare settings; use
+  `projectionlab_get_plan_settings` for the paths a write needs, and
+  `projectionlab_diff` with `planA` and `planB` for events and accounts.
 - `projectionlab_get_current_finances` with an exact `accountId` and
   `listPaths: true` lists that account's editable paths. Real-estate assets
   (`type: "real-estate"` in `assets`) carry a `realEstate` block:

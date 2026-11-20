@@ -142,8 +142,13 @@ narrowest read that answers the question.
 - `projectionlab_get_plan_settings` returns `variables`, `montecarlo` and
   `withdrawalStrategy` as dot paths with JSON types; pass `section` for one.
 - `projectionlab_get_settings_report` renders the same three sections as a
-  markdown report for the user: each setting by its on-screen label, grouped
-  by where the control is, with values as the app shows them. Add
+  markdown report for the user, grouped by topic with everyday settings first
+  (growth and inflation, withdrawals, tax strategy, taxes, bonds), then more
+  and advanced ones. Settings use their on-screen label where one is known and
+  an italic descriptive name otherwise, with values as the app shows them.
+  Settings the plan's current choices leave unused (a withdrawal rule that is
+  not selected, custom rate curves in fixed mode) are listed near the end
+  with the choice that would use them. Add
   `comparePlanIdentifier` for a second plan's column and a Differs marker, and
   `differencesOnly: true` to list only what differs. Show the report as
   returned. Use it when the user asks to see, review or compare settings; use

@@ -12,9 +12,12 @@ process.env.PL_SNAPSHOT_DIR = join(
 );
 process.env.LOG_LEVEL = "error";
 
-const { formatValue, renderSettingsReport } = await import(
+const { formatValue, parseEnabledBy, renderSettingsReport } = await import(
   "../dist/settingsReport.js"
 );
+const { REPORT_TOPICS } = await import("../dist/settingsReportLayout.js");
+const { matchDataModelField } = await import("../dist/dataModel.js");
+const { listPlanSettings } = await import("../dist/planSettings.js");
 const { registerSettingsReportTool } = await import(
   "../dist/tools/settingsReport.js"
 );
@@ -33,32 +36,39 @@ function fakeServer() {
 function exportWithSettings() {
   const data = v5Export();
   const [main, early] = data.documents.plans;
+  const shared = (plan) => ({
+    investmentReturn: 7,
+    assumptionsMode: "fixed",
+    startYear: 1928,
+    investmentReturnCustom: { type: "%", data: [{ x: 1, y: 5 }, { x: 20, y: 4 }] },
+    notes: "a | b",
+    filingStatus: "joint",
+    bondSettings: {
+      location: { type: "account-order", accountOrder: [`${plan.id}_ev_brokerage`] },
+    },
+  });
   main.variables = {
+    ...shared(main),
     inflation: 3,
-    investmentReturn: 7,
-    assumptionsMode: "fixed",
     withholding: { taxDeferred: 10 },
-    investmentReturnCustom: [
-      { year: 2026, rate: 5 },
-      { year: 2035, rate: 4 },
-    ],
-    notes: "a | b",
     integration: { authToken: "sensitive" },
+    rothConversionStrategy: {
+      enabled: true,
+      start: { type: "keyword", value: "beforeCurrentYear" },
+      end: { type: "milestone", value: `${main.id}_ms_retire`, modifier: 2 },
+    },
   };
-  main.montecarlo = { inflationMean: 3, inflationStdDev: 1.5 };
-  main.withdrawalStrategy = { enabled: false };
-  early.variables = {
-    inflation: 2.5,
-    investmentReturn: 7,
-    assumptionsMode: "fixed",
-    investmentReturnCustom: [
-      { year: 2026, rate: 5 },
-      { year: 2035, rate: 4 },
-    ],
-    notes: "a | b",
-  };
-  early.montecarlo = { inflationMean: 3, inflationStdDev: 1.5 };
-  early.withdrawalStrategy = { enabled: true };
+  early.variables = { ...shared(early), inflation: 2.5, assumptionsMode: "historical" };
+  main.montecarlo = { inflation: "custom", inflationMean: 3, inflationStdDev: 1.5 };
+  early.montecarlo = { inflation: "custom", inflationMean: 3, inflationStdDev: 1.5 };
+  const strategy = (enabled) => ({
+    enabled,
+    strategy: "initial-%",
+    "initial-%": { amount: 4, min: 10000, minEnabled: true, minType: "today$", max: 0, maxEnabled: false, maxType: "%" },
+    "fixed-%": { amount: 5 },
+  });
+  main.withdrawalStrategy = strategy(false);
+  early.withdrawalStrategy = strategy(true);
   return data;
 }
 
@@ -70,6 +80,22 @@ async function runTool(args, data = exportWithSettings()) {
     },
   });
   return server.handlers.get("projectionlab_get_settings_report")(args);
+}
+
+async function report(args) {
+  const result = await runTool(args);
+  assert.equal(result.isError, undefined);
+  return result.content[0].text;
+}
+
+/** The text of a heading's block, up to the next heading of the same or higher level. */
+function block(text, heading) {
+  const start = text.indexOf(`${heading}\n`);
+  assert.ok(start >= 0, `missing ${heading}`);
+  const level = heading.match(/^#+/)[0].length;
+  const rest = text.slice(start + heading.length);
+  const next = rest.search(new RegExp(`\\n#{1,${level}} `));
+  return next < 0 ? rest : rest.slice(0, next);
 }
 
 test("values are formatted by their units", () => {
@@ -92,80 +118,169 @@ test("values are formatted by their units", () => {
   );
 });
 
-test("a one-plan report names settings by label under their app location", async () => {
-  const result = await runTool({ planIdentifier: "Main Plan" });
-  assert.equal(result.isError, undefined);
-  const report = result.content[0].text;
-
-  assert.match(report, /^# Plan settings: Main Plan\n/);
-  assert.match(report, /## Assumptions, taxes and estate \(`variables`\)/);
-  assert.match(report, /### Plan Settings > Rates \(Fixed mode\)/);
-  assert.match(report, /\| Inflation Rate \| 3% \|/);
-  assert.match(report, /\| Stock Growth Rate \| 7% \|/);
-  assert.match(report, /\| Tax-Deferred Withdrawals \| 10% \|/);
-  // Inflation comes before Stock Growth Rate, as in the app.
-  assert.ok(report.indexOf("Inflation Rate") < report.indexOf("Stock Growth Rate"));
-  // The montecarlo labels are read under their own location.
-  assert.match(report, /### Chance of Success > Data Sources > Inflation\n\n\| Setting \| Value \|\n\| --- \| --- \|\n\| Mean \| 3% \|\n\| Std\. Dev\. \| 1\.5% \|/);
-  assert.match(report, /\| Textbook Strategy \| Off \|/);
+test("enabledBy is read in its three forms and nothing else", () => {
+  assert.deepEqual(parseEnabledBy("taxStrategy.irmaaCeiling"), [{ path: "taxStrategy.irmaaCeiling" }]);
+  assert.deepEqual(parseEnabledBy('assumptionsMode "historical"'), [
+    { path: "assumptionsMode", equals: "historical" },
+  ]);
+  assert.deepEqual(parseEnabledBy("estate.stepUpBasis false"), [
+    { path: "estate.stepUpBasis", equals: false },
+  ]);
+  assert.deepEqual(parseEnabledBy("when the plan has a spouse"), []);
+  assert.deepEqual(parseEnabledBy(undefined), []);
 });
 
-test("unlabeled settings close their section by stored path", async () => {
-  const report = (await runTool({ planIdentifier: "Main Plan", section: "variables" }))
-    .content[0].text;
-  const other = report.indexOf("### Other stored settings");
-  assert.ok(other > report.indexOf("### Plan Settings > Rates"));
+test("main settings come first, grouped by topic, then more and advanced ones", async () => {
+  const text = await report({ planIdentifier: "Main Plan" });
+  assert.match(text, /^# Plan settings: Main Plan\n/);
+  const order = [
+    "## Main settings",
+    "### Growth and inflation",
+    "### Tax strategy and Roth conversions",
+    "### Taxes",
+    "## More settings",
+    "### Chance of Success",
+    "## Not in effect with the current choices",
+    "## Other stored settings",
+  ].map((heading) => text.indexOf(`${heading}\n`));
+  assert.ok(order.every((at) => at >= 0), String(order));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+
+  const growth = block(text, "### Growth and inflation");
+  assert.match(growth, /\| \*Rates mode\* \| Fixed \|/);
+  assert.match(growth, /\| Inflation Rate \| 3% \|/);
+  assert.match(growth, /\| Stock Growth Rate \| 7% \|/);
+  assert.ok(growth.indexOf("Inflation Rate") < growth.indexOf("Stock Growth Rate"));
+  assert.match(block(text, "### Taxes"), /\| Tax-Deferred Withdrawals \| 10% \|/);
+  assert.match(block(text, "### Taxes"), /\| \*Filing status\* \| Married filing jointly \|/);
   assert.match(
-    report,
-    /\| `assumptionsMode`: Return and inflation modeling mode[^|]*\| fixed \|/,
+    block(text, "### Chance of Success"),
+    /\| Inflation: Mean \| 3% \|\n\| Inflation: Std\. Dev\. \| 1\.5% \|/,
   );
-  // A path the data model does not describe stays bare.
-  assert.match(report, /\| `notes` \| a \\\| b \|/);
-  assert.doesNotMatch(report, /## Chance of Success/);
 });
 
-test("a rate schedule is one row, not one per control point", async () => {
-  const report = (await runTool({ planIdentifier: "Main Plan" })).content[0].text;
-  assert.match(report, /\| `investmentReturnCustom` \| 2026: 5, 2035: 4 \|/);
-  assert.doesNotMatch(report, /investmentReturnCustom\.0/);
+test("combined rows read references, account names, and withdrawal bounds", async () => {
+  const text = await report({ planIdentifier: "Retire Early" });
+  assert.match(text, /\| \*Bond account order\* \| Brokerage \|/);
+  const strategy = block(text, "### Withdrawal strategy: Initial Percentage");
+  assert.match(strategy, /\| \*Minimum withdrawal\* \| \$10,000 in today's dollars \|/);
+  assert.match(strategy, /\| \*Maximum withdrawal\* \| Off \|/);
+  assert.doesNotMatch(text, /minEnabled|maxType/);
+
+  const main = await report({ planIdentifier: "Main Plan" });
+  const roth = block(main, "### Tax strategy and Roth conversions");
+  assert.match(roth, /\| \*Roth conversions start\* \| Before current year \|/);
+  assert.match(roth, /\| \*Roth conversions end\* \| Retirement \+2 \|/);
 });
 
-test("cells escape pipes and secret-named fields stay redacted", async () => {
-  const report = (await runTool({ planIdentifier: "Main Plan" })).content[0].text;
-  assert.match(report, /\| `notes` \| a \\\| b \|/);
-  assert.doesNotMatch(report, /sensitive/);
-  assert.match(report, /\| `integration\.authToken` \| \[REDACTED\] \|/);
+test("settings the current choices leave unused move to Not in effect", async () => {
+  const text = await report({ planIdentifier: "Main Plan" });
+  const unused = block(text, "## Not in effect with the current choices");
+  // The data model's enabledBy: startYear needs historical rates.
+  assert.match(unused, /\| Start Year \| 1928 \| \*Rates mode\* is Historical \|/);
+  // The topic's own condition: custom curves need custom rates.
+  assert.match(unused, /\| \*Stock growth curve\* \| 1: 5%, 20: 4% \| \*Rates mode\* is Custom \|/);
+  // The textbook switch is off, so the whole strategy waits on it.
+  assert.match(unused, /\| \*Strategy\* \| Initial Percentage \| Textbook Strategy is On \|/);
+  // A topic's own condition is said once, under its heading.
+  assert.match(
+    unused,
+    /### Withdrawal strategy: Fixed Percentage\n\nUsed when Textbook Strategy is On and \*Strategy\* is Fixed Percentage\.\n\n\| Setting \| Value \|\n/,
+  );
+  // The selected rule is listed before the others.
+  assert.ok(
+    unused.indexOf("### Withdrawal strategy: Initial Percentage") <
+      unused.indexOf("### Withdrawal strategy: Fixed Percentage"),
+  );
+  // A fixed rate stays in place, and the switch itself stays at the top.
+  const main = block(text, "## Main settings");
+  assert.match(main, /\| Textbook Strategy \| Off \|/);
+  assert.doesNotMatch(unused, /Inflation Rate/);
+});
+
+test("in a two-plan report a setting in effect in either plan stays in place", async () => {
+  const text = await report({ planIdentifier: "Main Plan", comparePlanIdentifier: "Retire Early" });
+  assert.match(text, /^# Plan settings: Main Plan vs Retire Early\n/);
+  const main = block(text, "## Main settings");
+  // Retire Early uses historical rates and the textbook strategy.
+  assert.match(main, /\| Start Year \| 1928 \| 1928 \|  \|/);
+  assert.match(main, /### Withdrawal strategy: Initial Percentage/);
+  // Fixed Percentage is the active rule in neither plan.
+  assert.match(block(text, "## Not in effect with the current choices"), /### Withdrawal strategy: Fixed Percentage/);
+  assert.doesNotMatch(main, /Fixed Percentage/);
 });
 
 test("a two-plan report marks differences and settings only one plan holds", async () => {
-  const report = (
-    await runTool({ planIdentifier: "Main Plan", comparePlanIdentifier: "Retire Early" })
-  ).content[0].text;
-
-  assert.match(report, /^# Plan settings: Main Plan vs Retire Early\n/);
-  assert.match(report, /\| Setting \| Main Plan \| Retire Early \| Differs \|/);
-  assert.match(report, /\| Inflation Rate \| 3% \| 2\.5% \| \*\*Yes\*\* \|/);
-  assert.match(report, /\| Stock Growth Rate \| 7% \| 7% \|  \|/);
-  assert.match(report, /\| Tax-Deferred Withdrawals \| 10% \| not set \| \*\*Yes\*\* \|/);
-  assert.match(report, /\| Textbook Strategy \| Off \| On \| \*\*Yes\*\* \|/);
-  // Equal schedules compare by value, not identity.
-  assert.match(report, /\| `investmentReturnCustom` \| 2026: 5, 2035: 4 \| 2026: 5, 2035: 4 \|  \|/);
-  // inflation, withholding, authToken and enabled differ, out of 10 paths.
-  assert.match(report, /4 of 10 settings differ between the two plans\./);
+  const text = await report({ planIdentifier: "Main Plan", comparePlanIdentifier: "Retire Early" });
+  assert.match(text, /\| Setting \| Main Plan \| Retire Early \| Differs \|/);
+  assert.match(text, /\| Inflation Rate \| 3% \| 2\.5% \| \*\*Yes\*\* \|/);
+  assert.match(text, /\| Stock Growth Rate \| 7% \| 7% \|  \|/);
+  assert.match(text, /\| Tax-Deferred Withdrawals \| 10% \| not set \| \*\*Yes\*\* \|/);
+  assert.match(text, /\| Textbook Strategy \| Off \| On \| \*\*Yes\*\* \|/);
+  // Equal curves compare by value, and account ids by the name they show.
+  assert.match(text, /\| \*Stock growth curve\* \| 1: 5%, 20: 4% \| 1: 5%, 20: 4% \|  \|/);
+  assert.match(text, /\| \*Bond account order\* \| Brokerage \| Brokerage \|  \|/);
+  assert.match(text, /(\d+) of (\d+) settings differ between the two plans\./);
 });
 
 test("differencesOnly leaves out matching rows", async () => {
-  const report = (
-    await runTool({
-      planIdentifier: "Main Plan",
-      comparePlanIdentifier: "Retire Early",
-      differencesOnly: true,
-    })
-  ).content[0].text;
-  assert.match(report, /Only the differing settings are listed\./);
-  assert.match(report, /Inflation Rate/);
-  assert.doesNotMatch(report, /Stock Growth Rate/);
-  assert.match(report, /## Chance of Success \(`montecarlo`\)\n\nNo differing settings\./);
+  const text = await report({
+    planIdentifier: "Main Plan",
+    comparePlanIdentifier: "Retire Early",
+    differencesOnly: true,
+  });
+  assert.match(text, /Only the differing settings are listed\./);
+  assert.match(text, /Inflation Rate/);
+  assert.doesNotMatch(text, /Stock Growth Rate/);
+  assert.doesNotMatch(text, /### Chance of Success/);
+});
+
+test("a section filter keeps only that section's topics", async () => {
+  const text = await report({ planIdentifier: "Main Plan", section: "montecarlo" });
+  assert.match(text, /### Chance of Success/);
+  assert.doesNotMatch(text, /Growth and inflation|Textbook Strategy/);
+});
+
+test("unnamed paths close the report, pipes are escaped, secrets stay redacted", async () => {
+  const text = await report({ planIdentifier: "Main Plan" });
+  const other = block(text, "## Other stored settings");
+  assert.match(other, /\| `notes` \| a \\\| b \|/);
+  assert.match(other, /\| `integration\.authToken` \| \[REDACTED\] \|/);
+  assert.doesNotMatch(text, /sensitive/);
+});
+
+test("every stored path is shown exactly once", async () => {
+  const data = exportWithSettings();
+  const plan = data.documents.plans[0];
+  const text = await report({ planIdentifier: "Main Plan" });
+  const rows = text
+    .split("\n")
+    .filter((line) => line.startsWith("| ") && !/^\| (Setting|---) \|/.test(line));
+  const expected = ["variables", "montecarlo", "withdrawalStrategy"].flatMap(
+    (section) => listPlanSettings(plan[section]).map((setting) => setting.path),
+  );
+  // Combined rows fold several stored paths into one; the rest are one row each.
+  assert.ok(rows.length <= expected.length);
+  const total = Number(text.match(/^(\d+) settings\.$/m)[1]);
+  assert.equal(rows.length, total);
+  for (const path of ["notes", "integration.authToken"]) {
+    assert.equal(rows.filter((row) => row.includes(`\`${path}\``)).length, 1, path);
+  }
+  assert.doesNotMatch(text, /`initial-%|`rothConversionStrategy|`bondSettings/);
+});
+
+test("every main-tier row has an on-screen label or a data-model description", () => {
+  for (const topic of REPORT_TOPICS.filter((entry) => entry.tier === "main")) {
+    for (const row of topic.rows) {
+      const field = matchDataModelField(topic.section, row.path, "v5");
+      // A combined row (a curve, a bound, a start or end) is named by the layout.
+      const combined = row.kind !== undefined && row.kind !== "value" && row.name;
+      assert.ok(
+        field?.uiLabel || field?.description || combined,
+        `${topic.section}.${row.path}`,
+      );
+    }
+  }
 });
 
 test("comparing a plan with itself is refused", async () => {
@@ -184,11 +299,11 @@ test("an unknown plan is refused with the available names", async () => {
 });
 
 test("the renderer works on a ProjectionLab 4 plan", () => {
-  const report = renderSettingsReport(
+  const text = renderSettingsReport(
     [{ id: "p1", name: "Legacy", variables: { inflation: 3 }, montecarlo: {}, withdrawalStrategy: {} }],
     "v4",
   );
-  assert.match(report, /\| Inflation Rate \| 3% \|/);
-  assert.match(report, /## Chance of Success \(`montecarlo`\)\n\nNo stored settings\./);
-  assert.doesNotMatch(report, /\u2014/);
+  assert.match(text, /\| Inflation Rate \| 3% \|/);
+  assert.doesNotMatch(text, /### Chance of Success/);
+  assert.doesNotMatch(text, /—/);
 });

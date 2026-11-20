@@ -18,9 +18,13 @@ export function registerSettingsReportTool(server: McpServer, bridge: Bridge) {
       description:
         "Returns a human-readable markdown report of every stored plan setting (assumptions, " +
         "taxes and estate in variables; Chance of Success in montecarlo; the withdrawal " +
-        "strategy), named by its ProjectionLab 5 on-screen label and grouped by where the " +
-        "control is in the app, with values shown as the app shows them (percentages, " +
-        "dollars, On/Off). Settings without a recorded label are listed by stored path. " +
+        "strategy), grouped by topic: main settings first (growth and inflation, spending " +
+        "and withdrawals, the withdrawal strategy, tax strategy, taxes, bonds), then more " +
+        "and advanced ones. Rows use the ProjectionLab 5 on-screen label where one is " +
+        "recorded and a descriptive name in italics otherwise, with values shown as the app " +
+        "shows them (percentages, dollars, On/Off, milestone and account names). Settings " +
+        "the plan's current choices leave unused are listed near the end with the choice " +
+        "that would use them, and stored paths with no name close the report. " +
         "Give comparePlanIdentifier to put a second plan in its own column with a Differs " +
         "marker and a count of differing settings. Use this when the user asks to see, " +
         "review or compare plan settings; use projectionlab_get_plan_settings for the " +

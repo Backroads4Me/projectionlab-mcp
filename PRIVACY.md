@@ -25,7 +25,7 @@ independent and is not affiliated with or endorsed by ProjectionLab.
 
 The extension relays requests between the `projectionlab-mcp` server running on
 your computer and the ProjectionLab tab (`https://app.projectionlab.com`, or
-`https://ea.projectionlab.com` for ProjectionLab v5 Early Access once you
+`https://ea.projectionlab.com` for ProjectionLab Early Access once you
 allow it) in which you are already signed in. For each request from the local server, it
 calls ProjectionLab's Plugin API inside that tab and returns the result to the
 local server.
@@ -80,7 +80,7 @@ under your own session.
 - **Access to `https://app.projectionlab.com/*`**: to find your ProjectionLab
   tab and call its Plugin API.
 - **Optional access to `https://ea.projectionlab.com/*`**: the same, for an
-  account on ProjectionLab v5 Early Access. The browser grants it only when
+  account on ProjectionLab Early Access. The browser grants it only when
   you press **Allow ea.projectionlab.com** on the options page, and you can
   remove it there at any time.
 - **`scripting`**: to run the Plugin API call inside that tab.

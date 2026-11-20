@@ -59,7 +59,7 @@ the extension up to date.
 
 Then click the extension's toolbar icon to open its options page and enter
 port `8788` and the token from `~/.projectionlab-mcp/ws-token`. If your
-ProjectionLab account is on v5 Early Access (the app opens at
+ProjectionLab account is on Early Access (the app opens at
 `ea.projectionlab.com`), also press **Allow ea.projectionlab.com** on that
 page and approve the browser's prompt.
 

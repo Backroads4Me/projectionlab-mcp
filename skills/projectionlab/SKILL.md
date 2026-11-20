@@ -27,8 +27,8 @@ answered. When the first four flags are `true`, proceed. Otherwise fix the
 first failing item with the user, one step at a time, then check again.
 
 `apiContract` is the Plugin API contract the page offers: `1` on
-ProjectionLab 4 and `2` on ProjectionLab 5 (Early Access, at
-https://ea.projectionlab.com). On `2`, follow "ProjectionLab 5" below.
+ProjectionLab 4 and `2` on ProjectionLab 5. On `2`, follow "ProjectionLab 5"
+below.
 
 `notices` are plain sentences about the server's release, never connection
 failures. When the list is not empty, tell the user each one once, in plain
@@ -52,7 +52,7 @@ options page (browsers isolate extension storage by ID, so settings do not trans
 | `browser: false`, port held by a program that is not projectionlab-mcp | Some other program is listening on the WebSocket port | Ask the user to stop that program, or set `PL_WS_PORT` to a free port for this server and enter the same port on the extension's options page |
 | `browser: false`, handing the port over did not complete | Another instance holds the port and the browser did not reconnect here in time | Run `projectionlab_check_connection` again; if it keeps failing, ask the user to close the other agent's session |
 | `browser: false` otherwise | No extension or snippet is connected | See "Connecting the browser" |
-| `pageLoaded: false` | No ProjectionLab tab is open, or the account is on v5 Early Access and the extension has not been allowed to use it | Ask the user to open https://app.projectionlab.com and log in. If ProjectionLab sends them to https://ea.projectionlab.com, ask them to press **Allow ea.projectionlab.com** on the extension's options page and approve the browser's prompt |
+| `pageLoaded: false` | No ProjectionLab tab is open, or the account is on Early Access and the extension has not been allowed to use it | Ask the user to open https://app.projectionlab.com and log in. If ProjectionLab sends them to https://ea.projectionlab.com, ask them to press **Allow ea.projectionlab.com** on the extension's options page and approve the browser's prompt |
 | `apiAvailable: false` | Plugins are off, or the user is logged out | ProjectionLab -> Account Settings -> Plugins -> enable plugins |
 | `apiKeyValid: false` | The key does not match the account | Ask the user to copy the key again from Account Settings -> Plugins |
 
@@ -93,7 +93,7 @@ Recommended, persistent: the **MCP Bridge for ProjectionLab** browser extension.
    The status changes to **Connected** and the toolbar icon shows a green
    check.
 4. Open https://app.projectionlab.com and log in. If ProjectionLab sends the
-   user to https://ea.projectionlab.com (v5 Early Access), they press
+   user to https://ea.projectionlab.com (Early Access), they press
    **Allow ea.projectionlab.com** on the options page and approve the
    browser's prompt.
 

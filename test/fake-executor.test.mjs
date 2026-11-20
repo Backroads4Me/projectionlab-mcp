@@ -540,3 +540,32 @@ test("close() shuts down cleanly and further calls fail fast", async () => {
     return true;
   });
 });
+
+test("a restarted server never reuses an earlier server's request ids", async () => {
+  // bridge closed in the previous test; a new one on the same port stands
+  // in for a server restart while the executor still holds old requests.
+  const seen = [];
+  const record = (frame) => { seen.push(frame.id); return healthyHandler(frame); };
+  const first = new ExtensionBridge();
+  await new Promise((r) => setTimeout(r, 100)); // let it start listening
+  try {
+    const exec = connectExecutor({ handler: record });
+    await exec.ready;
+    await first.describePluginApi();
+  } finally {
+    await first.close();
+  }
+  const firstIds = [...seen];
+  seen.length = 0;
+  const second = new ExtensionBridge();
+  await new Promise((r) => setTimeout(r, 100)); // let it start listening
+  try {
+    const exec = connectExecutor({ handler: record });
+    await exec.ready;
+    await second.describePluginApi();
+  } finally {
+    await second.close();
+  }
+  assert.ok(firstIds.length > 0 && seen.length > 0);
+  for (const id of seen) assert.equal(firstIds.includes(id), false, `request id ${id} repeated`);
+});

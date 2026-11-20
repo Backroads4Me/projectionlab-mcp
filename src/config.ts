@@ -18,11 +18,13 @@ function optional(name: string, fallback: string): string {
   return process.env[name] || fallback;
 }
 
+/** A non-negative integer: all digits. parseInt alone would accept
+ * "90000abc" and use whatever number it reads out of it. */
 function optionalInt(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
-  const value = parseInt(raw, 10);
-  if (Number.isNaN(value) || value < 0) {
+  const value = /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
+  if (!Number.isSafeInteger(value)) {
     throw new Error(`Invalid value for ${name}: "${raw}" (expected a non-negative integer)`);
   }
   return value;

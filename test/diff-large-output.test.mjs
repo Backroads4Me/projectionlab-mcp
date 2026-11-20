@@ -110,3 +110,58 @@ test("a diff over the inline limit is spilled to a file with its summary", async
   );
   assert.equal(spilled.omittedFieldChanges, undefined);
 });
+
+test("a spilled plan-to-plan diff scrubs the Plugin API key from its inline summary", async () => {
+  const base = {
+    id: "pa",
+    name: "Original",
+    notes: "key test-api-key, first copy",
+    income: { events: [] },
+    expenses: { events: [] },
+    milestones: [],
+  };
+  const other = structuredClone(base);
+  other.id = "pb";
+  other.name = "Rebuilt";
+  other.notes = "key test-api-key, second copy";
+  // 150 long field changes on one event and 198 added events with long
+  // names carry the payload over the inline limit.
+  const fieldsA = {};
+  const fieldsB = {};
+  for (let i = 0; i < 150; i++) {
+    fieldsA[`f${i}`] = "y".repeat(300);
+    fieldsB[`f${i}`] = "z".repeat(300);
+  }
+  base.income.events = [{ id: "a-i1", name: "Salary", ...fieldsA }];
+  other.income.events = [
+    { id: "b-i1", name: "Salary", ...fieldsB },
+    ...Array.from({ length: 198 }, (_, n) => ({
+      id: `added-${n}`,
+      name: `Event ${String(n).padStart(3, "0")}${"n".repeat(285)}`,
+    })),
+  ];
+  const bridge = {
+    async editAccess() {
+      return "enabled";
+    },
+    async exportData() {
+      return { plans: [structuredClone(base), structuredClone(other)], today: {} };
+    },
+  };
+  const server = fakeServer();
+  registerDiffTool(server, bridge, new SnapshotManager());
+
+  const result = await server.tools.get("projectionlab_diff").handler({
+    planA: "Original",
+    planB: "Rebuilt",
+  });
+  const inline = text(result);
+  assert.equal(inline.truncated, true);
+  assert.equal(inline.sections, undefined);
+  assert.ok(inline.planSettings, "the summary keeps the plan settings diff");
+  // The Plugin API key inside an ordinary setting is scrubbed by value in
+  // the summary returned inline, as it is in the spilled file.
+  assert.match(JSON.stringify(inline.planSettings), /first copy/);
+  assert.doesNotMatch(result.content[0].text, /test-api-key/);
+  assert.doesNotMatch(readFileSync(inline.filePath, "utf-8"), /test-api-key/);
+});

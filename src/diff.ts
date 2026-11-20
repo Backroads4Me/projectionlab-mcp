@@ -1,7 +1,4 @@
 import {
-  CURRENT_FINANCE_COLLECTIONS,
-} from "./currentFinances.js";
-import {
   PLAN_SECTIONS,
   eventDisplayNames,
   eventLabel,
@@ -12,7 +9,6 @@ import {
   type PlanSection,
 } from "./plans.js";
 import { REDACTED, isSecretFieldName } from "./redact.js";
-import type { ExportLayout } from "./layout.js";
 
 /**
  * Field-level diff of two readings of ProjectionLab data, shared by
@@ -360,10 +356,8 @@ function keyEventsById(
 }
 
 /**
- * Diff one plan section. On v5 events match by id within each section's events.
- * On v4 event-shaped sections compare events by name plus occurrence, the same
- * keying the section dry run uses, so events sharing a name each keep their
- * own entry. Anything else (`variables`, `montecarlo`,
+ * Diff one plan section. Events match by id within each section's events.
+ * Anything else (`variables`, `montecarlo`,
  * `withdrawalStrategy`) compares leaf by leaf.
  *
  * An event whose name repeats is reported by its start, named through each
@@ -375,7 +369,6 @@ export function diffEventSection(
   after: unknown,
   budget: DiffBudget,
   options?: {
-    layout?: ExportLayout;
     milestones?: {
       before: ReadonlyMap<string, string>;
       after: ReadonlyMap<string, string>;
@@ -385,16 +378,11 @@ export function diffEventSection(
   const beforeEvents = getEvents(before);
   const afterEvents = getEvents(after);
 
-  const isV5 = options?.layout === "v5";
   const beforeMilestones = options?.milestones?.before ?? new Map<string, string>();
   const afterMilestones = options?.milestones?.after ?? new Map<string, string>();
 
-  const beforeKeyed = isV5
-    ? keyEventsById(beforeEvents, beforeMilestones)
-    : keyEvents(beforeEvents, beforeMilestones);
-  const afterKeyed = isV5
-    ? keyEventsById(afterEvents, afterMilestones)
-    : keyEvents(afterEvents, afterMilestones);
+  const beforeKeyed = keyEventsById(beforeEvents, beforeMilestones);
+  const afterKeyed = keyEventsById(afterEvents, afterMilestones);
 
   const added: string[] = [];
   const removed: string[] = [];
@@ -496,19 +484,9 @@ function diffSectionShape<E extends EventCompareDiff>(
   return diffFieldSection(before, after, budget);
 }
 
-function planNameOf(plan: unknown): string {
-  return String((plan as PlanObj)?.name ?? (plan as PlanObj)?.id ?? "unnamed");
-}
-
-/** Match plans across two reads: on v5 strictly by id, on v4 by id when present, else by name. */
-export function planKey(plan: unknown, layout?: ExportLayout): string {
-  const obj = (plan ?? {}) as PlanObj;
-  const id = obj.id;
-  if (layout === "v5") {
-    return `id:${String(id ?? "")}`;
-  }
-  if (id !== undefined && id !== null && id !== "") return `id:${String(id)}`;
-  return `name:${planNameOf(plan)}`;
+/** Match plans across two reads strictly by id. */
+export function planKey(plan: unknown): string {
+  return `id:${String(((plan ?? {}) as PlanObj).id ?? "")}`;
 }
 
 export function planIdentity(plan: unknown): { id: string; name: string } {
@@ -547,7 +525,6 @@ export function diffPlan(
   after: PlanObj,
   budget: DiffBudget,
   section?: PlanSection,
-  options?: { layout?: ExportLayout },
 ): PlanDiff {
   const sections: Record<string, EventSectionDiff | FieldSectionDiff> = {};
   const changedSections: string[] = [];
@@ -563,7 +540,6 @@ export function diffPlan(
       budget,
       (b, a, bud) =>
         diffEventSection(b, a, bud, {
-          ...options,
           milestones: {
             before: milestoneNames(before),
             after: milestoneNames(after),
@@ -787,7 +763,6 @@ export function diffPlanPair(
   planB: PlanObj,
   budget: DiffBudget,
   section?: PlanSection,
-  _options?: { layout?: ExportLayout },
 ): PlanPairDiff {
   const a = planForPair(planA);
   const b = planForPair(planB);
@@ -852,24 +827,21 @@ export function diffPlanList(
   options: {
     section?: PlanSection;
     onlyKey?: string;
-    layout?: ExportLayout;
   } = {},
 ): PlanListDiff {
   const beforePlans = asArray(before);
   const afterPlans = asArray(after);
 
-  const layout = options.layout;
-
   const beforeByKey = new Map<string, PlanObj>();
   for (const plan of beforePlans) {
     if (isContainer(plan)) {
-      beforeByKey.set(planKey(plan, layout), plan as PlanObj);
+      beforeByKey.set(planKey(plan), plan as PlanObj);
     }
   }
   const afterByKey = new Map<string, PlanObj>();
   for (const plan of afterPlans) {
     if (isContainer(plan)) {
-      afterByKey.set(planKey(plan, layout), plan as PlanObj);
+      afterByKey.set(planKey(plan), plan as PlanObj);
     }
   }
 
@@ -890,9 +862,7 @@ export function diffPlanList(
       addEntry(added, planIdentity(plan), budget);
       continue;
     }
-    const diff = diffPlan(previous, plan, budget, options.section, {
-      layout,
-    });
+    const diff = diffPlan(previous, plan, budget, options.section);
     if (diff.changed) {
       changedCount++;
       addEntry(changedPlans, diff, budget);
@@ -941,99 +911,10 @@ export interface CollectionDiff {
   unchangedCount: number;
 }
 
-/**
- * Key Current Finances rows for matching: by id when present, since ProjectionLab
- * ids are stable, else by name plus occurrence the way events are keyed.
- */
-function keyRows(rows: unknown[]): Map<string, { id: string; name: string; row: unknown }> {
-  // Rows without an id keep their own entry under the event keying, which
-  // numbers repeated names so two of them can't collapse into one.
-  const idlessKeys = [
-    ...keyEvents(
-      rows.filter((row) => {
-        const id = (row ?? {}) as PlanObj;
-        return id.id === undefined || id.id === null || id.id === "";
-      }),
-    ).keys(),
-  ];
-
-  const keyed = new Map<string, { id: string; name: string; row: unknown }>();
-  let idlessAt = 0;
-  for (const row of rows) {
-    const obj = (row ?? {}) as PlanObj;
-    const id = obj.id;
-    if (id !== undefined && id !== null && id !== "") {
-      keyed.set(`id:${String(id)}`, {
-        id: String(id),
-        name: planNameOf(row),
-        row,
-      });
-      continue;
-    }
-    const key = idlessKeys[idlessAt++];
-    keyed.set(key, { id: "", name: planNameOf(row), row });
-  }
-  return keyed;
-}
-
-function diffCollection(
-  before: unknown,
-  after: unknown,
-  budget: DiffBudget,
-): CollectionDiff {
-  const beforeRows = asArray(before);
-  const afterRows = asArray(after);
-  const beforeKeyed = keyRows(beforeRows);
-  const afterKeyed = keyRows(afterRows);
-
-  const added: { id: string; name: string }[] = [];
-  const removed: { id: string; name: string }[] = [];
-  const modified: RowDiff[] = [];
-  let addedCount = 0;
-  let removedCount = 0;
-  let modifiedCount = 0;
-  let unchangedCount = 0;
-
-  for (const [key, { id, name, row }] of afterKeyed) {
-    const previous = beforeKeyed.get(key);
-    if (!previous) {
-      addedCount++;
-      addEntry(added, { id, name }, budget);
-      continue;
-    }
-    const leaf = diffLeafValues(previous.row, row, budget);
-    if (leaf.detected > 0) {
-      modifiedCount++;
-      addEntry(modified, changeEntry({ id, name }, leaf), budget);
-    } else {
-      unchangedCount++;
-    }
-  }
-  for (const [key, { id, name }] of beforeKeyed) {
-    if (!afterKeyed.has(key)) {
-      removedCount++;
-      addEntry(removed, { id, name }, budget);
-    }
-  }
-
-  return {
-    kind: "rows",
-    count: `${beforeRows.length} → ${afterRows.length}`,
-    changed: addedCount > 0 || removedCount > 0 || modifiedCount > 0,
-    addedCount,
-    ...(added.length > 0 ? { added } : {}),
-    removedCount,
-    ...(removed.length > 0 ? { removed } : {}),
-    modifiedCount,
-    ...(modified.length > 0 ? { modified } : {}),
-    unchangedCount,
-  };
-}
-
 export interface CurrentFinancesDiff {
   changed: boolean;
   collections: Record<string, CollectionDiff>;
-  /** Changes to `today` fields outside the account collections. */
+  /** Changes to Current Finances fields outside `accounts`. */
   changes?: Record<string, string>;
   /** The differing paths, reported instead of `changes` when values are withheld. */
   paths?: string[];
@@ -1102,80 +983,40 @@ function diffV5Accounts(
 }
 
 /**
- * Diff Current Finances collection by collection, matching rows by id. Fields
- * outside the account collections are compared leaf by leaf.
+ * Diff Current Finances accounts, matching records by id. Fields outside
+ * `accounts` are compared leaf by leaf.
  */
 export function diffCurrentFinances(
   before: unknown,
   after: unknown,
   budget: DiffBudget,
-  layout?: ExportLayout,
 ): CurrentFinancesDiff {
   const beforeRoot = (isContainer(before) ? before : {}) as PlanObj;
   const afterRoot = (isContainer(after) ? after : {}) as PlanObj;
 
-  if (layout === "v5") {
-    const beforeAccounts = (isContainer(beforeRoot.accounts) &&
-    !Array.isArray(beforeRoot.accounts)
-      ? beforeRoot.accounts
-      : {}) as Record<string, unknown>;
-    const afterAccounts = (isContainer(afterRoot.accounts) &&
-    !Array.isArray(afterRoot.accounts)
-      ? afterRoot.accounts
-      : {}) as Record<string, unknown>;
+  const beforeAccounts = (isContainer(beforeRoot.accounts) &&
+  !Array.isArray(beforeRoot.accounts)
+    ? beforeRoot.accounts
+    : {}) as Record<string, unknown>;
+  const afterAccounts = (isContainer(afterRoot.accounts) &&
+  !Array.isArray(afterRoot.accounts)
+    ? afterRoot.accounts
+    : {}) as Record<string, unknown>;
 
-    const hasAccounts =
-      (beforeRoot.accounts !== undefined && beforeRoot.accounts !== null) ||
-      (afterRoot.accounts !== undefined && afterRoot.accounts !== null);
-
-    const collections: Record<string, CollectionDiff> = {};
-    let changed = false;
-
-    if (hasAccounts) {
-      const result = diffV5Accounts(beforeAccounts, afterAccounts, budget);
-      collections.accounts = result;
-      if (result.changed) changed = true;
-    }
-
-    const skip = new Set<string>(["accounts"]);
-    const beforeRest: PlanObj = {};
-    const afterRest: PlanObj = {};
-    for (const key of new Set([
-      ...Object.keys(beforeRoot),
-      ...Object.keys(afterRoot),
-    ])) {
-      if (skip.has(key)) continue;
-      beforeRest[key] = beforeRoot[key];
-      afterRest[key] = afterRoot[key];
-    }
-    const rest = diffLeafValues(beforeRest, afterRest, budget);
-
-    return {
-      changed: changed || rest.detected > 0,
-      collections,
-      ...changeEntry({}, rest),
-    };
-  }
+  const hasAccounts =
+    (beforeRoot.accounts !== undefined && beforeRoot.accounts !== null) ||
+    (afterRoot.accounts !== undefined && afterRoot.accounts !== null);
 
   const collections: Record<string, CollectionDiff> = {};
   let changed = false;
-  for (const collection of CURRENT_FINANCE_COLLECTIONS) {
-    if (
-      !Array.isArray(beforeRoot[collection]) &&
-      !Array.isArray(afterRoot[collection])
-    ) {
-      continue;
-    }
-    const result = diffCollection(
-      beforeRoot[collection],
-      afterRoot[collection],
-      budget,
-    );
-    collections[collection] = result;
+
+  if (hasAccounts) {
+    const result = diffV5Accounts(beforeAccounts, afterAccounts, budget);
+    collections.accounts = result;
     if (result.changed) changed = true;
   }
 
-  const skip = new Set<string>(CURRENT_FINANCE_COLLECTIONS);
+  const skip = new Set<string>(["accounts"]);
   const beforeRest: PlanObj = {};
   const afterRest: PlanObj = {};
   for (const key of new Set([
@@ -1198,7 +1039,6 @@ export function diffCurrentFinances(
 export interface SectionDiffOptions {
   planSection?: PlanSection;
   planOnlyKey?: string;
-  layout?: ExportLayout;
 }
 
 /** Every shape one compared section can come back as; all report `changed`. */
@@ -1225,10 +1065,9 @@ export function diffSectionData(
       return diffPlanList(before, after, budget, {
         section: options.planSection,
         onlyKey: options.planOnlyKey,
-        layout: options.layout,
       });
     case "currentFinances":
-      return diffCurrentFinances(before, after, budget, options.layout);
+      return diffCurrentFinances(before, after, budget);
     default:
       return diffFieldSection(before, after, budget);
   }

@@ -1,7 +1,5 @@
-import type { ExportLayout } from "../layout.js";
 
 export interface ExportedData {
-  today?: unknown;
   plans?: unknown[];
   progress?: unknown;
   settings?: unknown;
@@ -47,8 +45,9 @@ export interface Snapshot {
   timestamp: string;
   operation: string;
   sections: string[];
-  /** Export layout the data was taken from (src/layout.ts). Snapshots
-   * without one were taken from ProjectionLab 4. */
-  layout?: ExportLayout;
+  /** Export layout the data was taken from: "v5" for ProjectionLab 5.
+   * Snapshots without one were taken from ProjectionLab 4; rollback and diff
+   * refuse them (assertSnapshotLayout in src/layout.ts). */
+  layout?: string;
   data: Record<string, unknown>;
 }

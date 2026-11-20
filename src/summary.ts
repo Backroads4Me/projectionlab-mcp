@@ -25,10 +25,7 @@ export interface HouseholdPerson {
   lifeExpectancy?: number;
 }
 
-/**
- * What a ProjectionLab 5 export adds to the summary. A ProjectionLab 4 summary
- * carries none of these fields.
- */
+/** What a ProjectionLab 5 export adds to the summary. */
 export interface V5SummaryDetails {
   layout: "v5";
   /** Unarchived accounts grouped by `kind`; debt totals are magnitudes. */
@@ -42,8 +39,7 @@ export interface V5SummaryDetails {
   household?: { partnerStatus?: string; people: HouseholdPerson[] };
 }
 
-export type CurrentFinancesSummary = FinancialSummary &
-  Partial<V5SummaryDetails>;
+export type CurrentFinancesSummary = FinancialSummary & V5SummaryDetails;
 
 const PLAN_PARAMS = [
   "retirementAge",
@@ -62,62 +58,6 @@ function addTo(totals: Totals, key: string, amount: number): void {
   const group = (totals[key] ??= { count: 0, total: 0 });
   group.count++;
   group.total += amount;
-}
-
-/** Net worth and the account breakdown of a ProjectionLab 4 `today` section. */
-function summarizeV4(finances: unknown): {
-  totalNetWorth: number;
-  accountsByType: Totals;
-} {
-  const accountsByType: Totals = {};
-  let totalNetWorth = 0;
-
-  if (finances && typeof finances === "object") {
-    const sections = [
-      "investmentAccounts",
-      "savingsAccounts",
-      "debts",
-      "assets",
-    ];
-
-    for (const section of sections) {
-      const items = (finances as Record<string, unknown>)[section];
-      if (!Array.isArray(items)) continue;
-
-      const group = { count: 0, total: 0 };
-      for (const item of items) {
-        if (item && typeof item === "object") {
-          const obj = item as Record<string, unknown>;
-          group.count++;
-          if (section === "assets") {
-            // In today.assets, amount is market value and balance is the loan balance.
-            const marketValue = Number(obj.amount ?? obj.value ?? 0);
-            group.total += marketValue;
-            totalNetWorth += marketValue;
-            // An outstanding loan balance on an asset is subtracted from net worth
-            // as a liability. Paid-in-full assets carry balance: 0.
-            const loanBalance = Number(obj.balance ?? 0);
-            if (loanBalance > 0) {
-              totalNetWorth -= loanBalance;
-            }
-          } else {
-            const balance = Number(obj.balance ?? obj.value ?? 0);
-            group.total += balance;
-            if (section === "debts") {
-              totalNetWorth -= Math.abs(balance);
-            } else {
-              totalNetWorth += balance;
-            }
-          }
-        }
-      }
-      if (group.count > 0) {
-        accountsByType[section] = group;
-      }
-    }
-  }
-
-  return { totalNetWorth, accountsByType };
 }
 
 function numberField(source: PlanObj, key: string): number | undefined {
@@ -163,7 +103,7 @@ function summarizeHousehold(
  * document. A "account" adds its balance, a "real-asset" its value and a
  * "debt" subtracts its balance. Archived accounts are listed apart and
  * counted nowhere. Account groups are labeled by the stored `kind` and `type`
- * strings; v5 types are not renamed to v4 categories.
+ * strings.
  */
 function summarizeV5(
   finances: unknown,
@@ -220,9 +160,7 @@ function summarizeV5(
 /**
  * Current Finances totals and the plan inventory, shared by the
  * projectionlab_get_summary tool and the projectionlab://summary resource.
- * Totals come from today's balances, never from projected outcomes. Reads
- * either export layout; a ProjectionLab 4 summary is unchanged by the v5
- * support.
+ * Totals come from today's balances, never from projected outcomes.
  */
 export function buildSummary(data: ExportedData): CurrentFinancesSummary {
   const sections = exportSections(data);
@@ -242,32 +180,18 @@ export function buildSummary(data: ExportedData): CurrentFinancesSummary {
     return summary;
   });
 
-  if (sections.layout === "v5") {
-    const household = summarizeHousehold(sections.currentFinances);
-    const { totalNetWorth, accountsByType, ...details } = summarizeV5(
-      sections.currentFinances,
-    );
-    return {
-      scope: "currentFinances",
-      projectedOutcomesAvailable: false,
-      layout: "v5",
-      totalNetWorth,
-      accountsByType,
-      ...details,
-      ...(household ? { household } : {}),
-      planCount: plans.length,
-      plans,
-    };
-  }
-
-  const { totalNetWorth, accountsByType } = summarizeV4(
+  const household = summarizeHousehold(sections.currentFinances);
+  const { totalNetWorth, accountsByType, ...details } = summarizeV5(
     sections.currentFinances,
   );
   return {
     scope: "currentFinances",
     projectedOutcomesAvailable: false,
+    layout: "v5",
     totalNetWorth,
     accountsByType,
+    ...details,
+    ...(household ? { household } : {}),
     planCount: plans.length,
     plans,
   };

@@ -65,10 +65,20 @@ function reconnectingExecutor({ reconnectMs = 300, hang = false, plans, response
         if (frame.method === "exportData") await gate;
         if (responseMs) await sleep(responseMs);
         let result = true;
-        // A ProjectionLab 4 page: its Plugin API has no version.
-        if (frame.method === "apiVersion") result = null;
+        // A ProjectionLab 5 page reports Plugin API contract 2.
+        if (frame.method === "apiVersion") result = 2;
         if (frame.method === "exportData") {
-          result = plans ? { plans: structuredClone(plans) } : { marker: "data" };
+          result = plans
+            ? {
+                schema: 1,
+                exportedAt: 1,
+                documents: {
+                  currentFinances: { schema: 5, accounts: {} },
+                  plans: structuredClone(plans),
+                  settings: { schema: 5 },
+                },
+              }
+            : { marker: "data" };
         }
         if (frame.method === "restorePlans" && plans) {
           plans = structuredClone(frame.params[0]).map((p) => ({ ...p, lastUpdated: ++stamp }));
@@ -411,11 +421,10 @@ test("two instances writing plans at once: one write lands and the other gets PL
   await sleep(200);
 
   const write = async (bridge, field) => {
-    const read = (await bridge.exportData({ fresh: true })).plans;
+    const read = (await bridge.exportData({ fresh: true })).documents.plans;
     await bridge.restorePlansIfUnchanged(
       read,
       read.map((p) => ({ ...p, [field]: 1 })),
-      "v4",
     );
   };
   const [a, b] = await Promise.allSettled([

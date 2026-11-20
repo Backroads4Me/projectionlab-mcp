@@ -30,7 +30,7 @@ import {
   verifySectionApplied,
   type PlanObj,
 } from "../plans.js";
-import { detectLayout, exportSections } from "../layout.js";
+import { exportSections } from "../layout.js";
 import {
   baselinePlanId,
   eventLink,
@@ -124,7 +124,6 @@ function assertLinkedFieldsUnchanged(
   incoming: unknown,
   data: unknown,
 ): void {
-  const layout = detectLayout(data);
   const { settings, currentFinances } = exportSections(data);
   const isBaseline = plan.id === baselinePlanId(settings);
   const currentEvents = getEvents(plan[section]);
@@ -143,7 +142,7 @@ function assertLinkedFieldsUnchanged(
         ? currentById.get(next.id)
         : (currentByName.get(key)?.event as PlanObj | undefined);
     if (existing === undefined) continue;
-    const link = eventLink(section, next, layout);
+    const link = eventLink(section, next);
     if (!link) continue;
     const changed = link.fields.filter(
       (field) => !isDeepStrictEqual(existing[field], next[field]),
@@ -292,7 +291,7 @@ export function registerUpdatePlanSectionTool(
         // Snapshot all plans before mutation
         const snapshot = await snapshots.create("updatePlanSection", ["plans"], {
           plans,
-        }, detectLayout(data));
+        });
 
         // Rebuild plans array with the one section replaced
         const updatedPlan = { ...plan, [section]: sectionData };
@@ -304,7 +303,7 @@ export function registerUpdatePlanSectionTool(
           `Updating "${section}" of plan "${plan.name}" (${diff.currentCount} → ${diff.newCount} items)`,
         );
 
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
 
         // Verify by re-reading; match by plan id since order may change.
         // Compares submitted content (not just counts) so a rejected,

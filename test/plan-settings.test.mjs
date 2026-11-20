@@ -4,7 +4,7 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -226,7 +226,7 @@ test("get settings tool returns supported sections as addressable values", async
       return editAccess.value;
     },
     async exportData() {
-      return {
+      return asV5Export({
         plans: [
           {
             id: "plan-codex",
@@ -236,7 +236,7 @@ test("get settings tool returns supported sections as addressable values", async
             withdrawalStrategy: { enabled: true },
           },
         ],
-      };
+      });
     },
   };
   registerGetPlanSettingsTool(server, bridge);
@@ -278,12 +278,12 @@ test("update settings tool dry-runs, snapshots before mutation, and verifies", a
   };
   const actions = [];
   const bridge = {
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return editAccess.value;
     },
     async exportData() {
-      return state;
+      return asV5Export(state);
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {

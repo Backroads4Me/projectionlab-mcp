@@ -9,14 +9,11 @@ import { editsDisabledError } from "./editAccess.js";
 import { ProjectionLabError } from "./errors.js";
 import {
   contractFromVersion,
-  detectLayout,
   exportSections,
-  layoutForContract,
-  layoutLabel,
+  projectionLab4Error,
   writeNotSupportedError,
   writeSupported,
   type ApiContract,
-  type ExportLayout,
 } from "./layout.js";
 import { log } from "./logger.js";
 import { planChanges, planConflictError } from "./planVersion.js";
@@ -135,14 +132,6 @@ function contractChangedError(message: string): ProjectionLabError {
   );
 }
 
-/** The refusal for a write prepared from one export layout while the page
- * now offers the other, as when two tabs run different ProjectionLab builds. */
-function layoutChangedError(prepared: ExportLayout, live: ExportLayout): ProjectionLabError {
-  return contractChangedError(
-    `This write was prepared from ${layoutLabel(prepared)} data, but the ProjectionLab page now offers ${layoutLabel(live)}`,
-  );
-}
-
 /** Best-effort chmod; a file the process does not own keeps its mode. */
 function restrictMode(path: string, mode: number): void {
   try {
@@ -159,8 +148,6 @@ export class ExtensionBridge implements Bridge {
   private connInstanceId = "";
   /** Whether the connected executor honors RequestFrame.expectApiVersion. */
   private connGuardsApiVersion = false;
-  /** The contract from the last successful contract read (knownApiContract). */
-  private lastContract: ApiContract | undefined;
   private connEditAccess: EditAccess = "unsupported";
   private readonly pending = new Map<string, Pending>();
   /** Random per instance, so request ids never repeat across server
@@ -934,18 +921,15 @@ export class ExtensionBridge implements Bridge {
     return this.serialize(() => this.fetchContract());
   }
 
-  knownApiContract(): ApiContract | undefined {
-    return this.lastContract;
-  }
-
   /**
    * The Plugin API contract the connected page offers, read fresh on every
    * call so a page reloaded onto another ProjectionLab version is never
    * written to under the old contract. Call only from the operation chain.
    *
    * An executor that predates the apiVersion meta-operation rejects it; the
-   * API's member list then decides. A page whose API has a `version` member
-   * the executor cannot report is refused rather than assumed to be contract 1.
+   * API's member list then decides. A page whose API has no `version` member
+   * is ProjectionLab 4 and is refused, and so is one whose `version` is not
+   * contract 2.
    */
   private async fetchContract(): Promise<ApiContract> {
     return (await this.readContract()).contract;
@@ -971,26 +955,19 @@ export class ExtensionBridge implements Bridge {
           "Update the MCP Bridge for ProjectionLab extension, or paste a fresh snippet from projectionlab_get_bootstrap. Nothing was written.",
         );
       }
-      this.lastContract = 1;
-      return { contract: 1, apiVersion: null, socket };
+      throw projectionLab4Error();
     }
-    this.lastContract = contractFromVersion(version);
-    return { contract: this.lastContract, apiVersion: version, socket };
+    return { contract: contractFromVersion(version), apiVersion: version, socket };
   }
 
   /**
-   * Refuses a write the page's contract does not support yet, and returns
-   * the guard to pass to the write's request. Call only from the operation
-   * chain, in the same entry as the write it guards.
+   * Refuses a write the page does not support, and returns the guard to
+   * pass to the write's request. Call only from the operation chain, in the
+   * same entry as the write it guards.
    */
-  private async assertWriteSupported(
-    method: WireMethod,
-    layout: ExportLayout,
-  ): Promise<WriteGuard> {
-    const { contract, apiVersion, socket } = await this.readContract();
-    if (!writeSupported(contract, method)) throw writeNotSupportedError(method);
-    const live = layoutForContract(contract);
-    if (live !== layout) throw layoutChangedError(layout, live);
+  private async assertWriteSupported(method: WireMethod): Promise<WriteGuard> {
+    const { apiVersion, socket } = await this.readContract();
+    if (!writeSupported(method)) throw writeNotSupportedError(method);
     return { apiVersion, socket };
   }
 
@@ -1040,7 +1017,6 @@ export class ExtensionBridge implements Bridge {
     accountId: string,
     data: Record<string, unknown>,
     force: boolean | undefined,
-    layout: ExportLayout,
   ): Promise<void> {
     await this.serialize(async () => {
       log.info(
@@ -1049,48 +1025,38 @@ export class ExtensionBridge implements Bridge {
       );
       const opts: { key: string; force?: string } = { key: this.requireApiKey() };
       if (force) opts.force = "true";
-      const guard = await this.assertWriteSupported("updateAccount", layout);
+      const guard = await this.assertWriteSupported("updateAccount");
       await this.request("updateAccount", [accountId, data, opts], REQUEST_TIMEOUT_MS, guard);
     });
     this.invalidateCache();
   }
 
-  private async restoreCall(
-    method: WireMethod,
-    payload: unknown,
-    layout: ExportLayout,
-  ): Promise<void> {
+  private async restoreCall(method: WireMethod, payload: unknown): Promise<void> {
     await this.serialize(async () => {
       const key = this.requireApiKey();
-      const guard = await this.assertWriteSupported(method, layout);
+      const guard = await this.assertWriteSupported(method);
       log.info("extension", `Calling ${method}`);
       await this.request(method, [payload, { key }], REQUEST_TIMEOUT_MS, guard);
     });
     this.invalidateCache();
   }
 
-  async restoreCurrentFinances(state: unknown, layout: ExportLayout): Promise<void> {
-    await this.restoreCall("restoreCurrentFinances", state, layout);
+  async restoreCurrentFinances(state: unknown): Promise<void> {
+    await this.restoreCall("restoreCurrentFinances", state);
   }
 
-  async restorePlans(plans: unknown[], layout: ExportLayout): Promise<void> {
-    await this.restoreCall("restorePlans", plans, layout);
+  async restorePlans(plans: unknown[]): Promise<void> {
+    await this.restoreCall("restorePlans", plans);
   }
 
   /** Re-reads the plans and writes `plans` as one entry on the operation
    * chain, so neither a hand-over to another instance nor another operation
    * of this one can run between the conflict check and the write. */
-  async restorePlansIfUnchanged(
-    read: unknown[],
-    plans: unknown[],
-    layout: ExportLayout,
-  ): Promise<void> {
+  async restorePlansIfUnchanged(read: unknown[], plans: unknown[]): Promise<void> {
     await this.serialize(async () => {
       const key = this.requireApiKey();
-      const guard = await this.assertWriteSupported("restorePlans", layout);
+      const guard = await this.assertWriteSupported("restorePlans");
       const data = await this.request("exportData", [{ key }]);
-      const live = detectLayout(data);
-      if (live !== layout) throw layoutChangedError(layout, live);
       const changes = planChanges(read, exportSections(data).plans);
       if (changes.length > 0) throw planConflictError(changes);
       log.info("extension", "Calling restorePlans");
@@ -1099,12 +1065,8 @@ export class ExtensionBridge implements Bridge {
     this.invalidateCache();
   }
 
-  async restoreProgress(progress: unknown, layout: ExportLayout): Promise<void> {
-    await this.restoreCall("restoreProgress", progress, layout);
-  }
-
-  async restoreSettings(settings: unknown, layout: ExportLayout): Promise<void> {
-    await this.restoreCall("restoreSettings", settings, layout);
+  async restoreSettings(settings: unknown): Promise<void> {
+    await this.restoreCall("restoreSettings", settings);
   }
 
   async close(): Promise<void> {

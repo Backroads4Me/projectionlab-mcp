@@ -10,7 +10,6 @@ const PLUGIN_METHODS: readonly Exclude<WireMethod, "describeApi" | "waitForApi" 
   "updateAccountValues",
   "restoreCurrentFinances",
   "restorePlans",
-  "restoreProgress",
   "restoreSettings",
   "validateApiKey",
 ];

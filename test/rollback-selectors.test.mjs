@@ -9,7 +9,7 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 const SNAPSHOT_DIR = join(
@@ -58,21 +58,21 @@ function fakeBridge(initial) {
   const bridge = {
     state,
     writes: [],
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return editAccess.value;
     },
     async exportData() {
-      return structuredClone(state);
+      return asV5Export(structuredClone(state));
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {
       bridge.writes.push("plans");
       state.plans = structuredClone(plans).map((p) => ({ ...p, lastUpdated: ++stamp }));
     },
-    async restoreProgress(progress) {
-      bridge.writes.push("progress");
-      state.progress = structuredClone(progress);
+    async restoreSettings(settings) {
+      bridge.writes.push("settings");
+      state.settings = structuredClone(settings);
     },
   };
   return bridge;
@@ -87,7 +87,7 @@ function freshSnapshots() {
 
 function rollbackHandler(snapshots, bridge) {
   const server = fakeServer();
-  registerSnapshotTools(server, bridge ?? fakeBridge({ today: {}, plans: [] }), snapshots);
+  registerSnapshotTools(server, bridge ?? fakeBridge({ plans: [] }), snapshots);
   return (args) => server.tools.get("projectionlab_rollback").handler(args);
 }
 
@@ -107,15 +107,16 @@ function writeSnapshot({ id, timestamp, operation }) {
       id,
       timestamp,
       operation,
-      sections: ["progress"],
-      data: { progress: { source: operation } },
+      sections: ["settings"],
+      layout: "v5",
+      data: { settings: { source: operation } },
     }),
   );
 }
 
 function listTool(snapshots) {
   const server = fakeServer();
-  registerSnapshotTools(server, fakeBridge({ today: {}, plans: [] }), snapshots);
+  registerSnapshotTools(server, fakeBridge({ plans: [] }), snapshots);
   return async () =>
     parse(await server.tools.get("projectionlab_list_snapshots").handler({}));
 }
@@ -124,7 +125,7 @@ async function createSnapshots(snapshots, operations) {
   const created = [];
   for (const operation of operations) {
     created.push(
-      await snapshots.create(operation, ["progress"], { progress: { operation } }),
+      await snapshots.create(operation, ["settings"], { settings: { operation } }),
     );
     // Timestamps are millisecond precision; keep the ordering unambiguous.
     await new Promise((r) => setTimeout(r, 5));
@@ -134,7 +135,7 @@ async function createSnapshots(snapshots, operations) {
 
 test("rollback requires exactly one snapshot selector", async () => {
   const snapshots = freshSnapshots();
-  const bridge = fakeBridge({ today: {}, plans: [] });
+  const bridge = fakeBridge({ plans: [] });
   const rollback = rollbackHandler(snapshots, bridge);
   await createSnapshots(snapshots, ["update_plan_section"]);
 
@@ -192,13 +193,13 @@ test("rollback nBack follows the newest-first order of list_snapshots", async ()
     assert.equal(preview.snapshotId, expected.id);
     assert.equal(preview.timestamp, expected.timestamp);
     assert.equal(preview.operation, expected.operation);
-    assert.deepEqual(preview.sections, ["progress"]);
+    assert.deepEqual(preview.sections, ["settings"]);
   }
 });
 
 test("rollback nBack counts the pre-rollback snapshot, so 1 undoes a rollback", async () => {
   const snapshots = freshSnapshots();
-  const bridge = fakeBridge({ today: {}, plans: samplePlans() });
+  const bridge = fakeBridge({ plans: samplePlans() });
 
   // A confirmed write snapshots the plans, then changes them.
   const restoreServer = fakeServer();
@@ -419,7 +420,7 @@ test("rollback refuses in read-only mode before checking selectors", async () =>
     },
   };
   const server = fakeServer();
-  registerSnapshotTools(server, fakeBridge({ today: {}, plans: [] }), guarded);
+  registerSnapshotTools(server, fakeBridge({ plans: [] }), guarded);
   const rollback = server.tools.get("projectionlab_rollback").handler;
 
   editAccess.value = "disabled";

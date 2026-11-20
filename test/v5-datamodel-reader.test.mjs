@@ -1,13 +1,11 @@
-// Unit and regression tests for Package D (data model and knowledge)
-// supporting ProjectionLab 5 layout and contract 2 alongside ProjectionLab 4.
+// The ProjectionLab 5 data model (src/dataModel.ts) and the
+// projectionlab://data-model and projectionlab://knowledge resources.
 
 import assert from "node:assert/strict";
 import test from "node:test";
 import { v5Export } from "./fixtures/v5-export.mjs";
 
 const {
-  DATA_MODEL_GROUPS,
-  DATA_MODEL_PROJECTIONLAB_VERSION,
   DATA_MODEL_V5_GROUPS,
   DATA_MODEL_V5_PROJECTIONLAB_VERSION,
   getDataModelGroups,
@@ -19,22 +17,14 @@ const {
 
 const {
   renderDataModelMarkdown,
-  renderDataModelV4Markdown,
-  renderDataModelV5Markdown,
   registerDataModelResource,
 } = await import("../dist/resources/dataModel.js");
 
-const {
-  KNOWLEDGE,
-  KNOWLEDGE_V4,
-  KNOWLEDGE_V5,
-  renderKnowledgeMarkdown,
-  registerKnowledgeResource,
-} = await import("../dist/resources/knowledge.js");
-
-const { exportSections, sectionOf, detectLayout } = await import(
-  "../dist/layout.js"
+const { KNOWLEDGE, registerKnowledgeResource } = await import(
+  "../dist/resources/knowledge.js"
 );
+
+const { exportSections, sectionOf } = await import("../dist/layout.js");
 
 function fakeServer() {
   const resources = new Map();
@@ -46,45 +36,8 @@ function fakeServer() {
   };
 }
 
-function fakeBridge(contract = 1, state = undefined) {
-  return {
-    knownApiContract() {
-      return contract;
-    },
-    async editAccess() {
-      return "enabled";
-    },
-    async apiContract() {
-      throw new Error("resources must not query the page");
-    },
-    async exportData() {
-      return structuredClone(state);
-    },
-  };
-}
-
-function v4Export() {
-  return {
-    meta: { version: "4.6.0" },
-    today: {
-      savingsAccounts: [{ id: "s1", name: "Savings", balance: 5000 }],
-      investmentAccounts: [{ id: "i1", name: "Brokerage", balance: 50000 }],
-      assets: [],
-      debts: [],
-    },
-    plans: [{ id: "p1", name: "Main", active: true }],
-    settings: { currency: "USD" },
-    progress: {},
-  };
-}
-
-test("getDataModelGroups returns appropriate groups per layout", () => {
-  const v4Groups = getDataModelGroups("v4");
-  const defaultGroups = getDataModelGroups();
-  const v5Groups = getDataModelGroups("v5");
-
-  assert.equal(v4Groups, DATA_MODEL_GROUPS);
-  assert.equal(defaultGroups, DATA_MODEL_GROUPS);
+test("getDataModelGroups returns the ProjectionLab 5 groups", () => {
+  const v5Groups = getDataModelGroups();
   assert.equal(v5Groups, DATA_MODEL_V5_GROUPS);
 
   // v5 includes envelope, currentFinances, accounts, assets, income, expenses, settings, accountHistory
@@ -157,24 +110,24 @@ test("getDataModelGroups returns appropriate groups per layout", () => {
   }
 });
 
-test("matchDataModelField matches v5 fields and preserves v4 defaults", () => {
+test("matchDataModelField matches v5 fields", () => {
   // v5 field matches
-  const kindField = matchDataModelField("accounts", "kind", "v5");
+  const kindField = matchDataModelField("accounts", "kind");
   assert.ok(kindField);
   assert.equal(kindField.evidence, "export-shape");
   assert.deepEqual(kindField.allowedValues, ["account", "debt", "real-asset"]);
 
-  const archivedField = matchDataModelField("accounts", "archivedOn", "v5");
+  const archivedField = matchDataModelField("accounts", "archivedOn");
   assert.ok(archivedField);
   assert.equal(archivedField.evidence, "export-shape");
   assert.match(archivedField.note ?? "", /archived accounts/);
 
-  const securedField = matchDataModelField("accounts", "securedByAssetId", "v5");
+  const securedField = matchDataModelField("accounts", "securedByAssetId");
   assert.ok(securedField);
   assert.equal(securedField.evidence, "export-shape");
   assert.match(securedField.note ?? "", /secured by an asset/);
 
-  const incomeTypeField = matchDataModelField("income", "start.type", "v5");
+  const incomeTypeField = matchDataModelField("income", "start.type");
   assert.ok(incomeTypeField);
   assert.equal(incomeTypeField.evidence, "export-shape");
   assert.deepEqual(incomeTypeField.allowedValues, [
@@ -187,7 +140,7 @@ test("matchDataModelField matches v5 fields and preserves v4 defaults", () => {
     "keyword",
   ]);
 
-  const expenseTypeField = matchDataModelField("expenses", "spendingType", "v5");
+  const expenseTypeField = matchDataModelField("expenses", "spendingType");
   assert.ok(expenseTypeField);
   assert.equal(expenseTypeField.evidence, "observed");
   assert.deepEqual(expenseTypeField.allowedValues, [
@@ -200,35 +153,26 @@ test("matchDataModelField matches v5 fields and preserves v4 defaults", () => {
   const historyBalanceField = matchDataModelField(
     "accountHistory",
     "acct_brokerage.2025.balance.acct_brokerage",
-    "v5",
   );
   assert.ok(historyBalanceField);
   assert.equal(historyBalanceField.evidence, "export-shape");
   assert.equal(historyBalanceField.units, "dollars");
 
-  const settingsPlanActive = matchDataModelField("settings", "plan.activeId", "v5");
+  const settingsPlanActive = matchDataModelField("settings", "plan.activeId");
   assert.ok(settingsPlanActive);
   assert.equal(settingsPlanActive.evidence, "export-shape");
 
-  // v4 regression check: default layout (no arg) behaves as v4
-  const v4FieldDefault = matchDataModelField("savingsAccounts", "balance");
-  assert.ok(v4FieldDefault);
-  assert.equal(v4FieldDefault.evidence, "ui-label");
-  assert.equal(v4FieldDefault.units, "dollars");
-
-  const v4FieldExplicit = matchDataModelField("savingsAccounts", "balance", "v4");
-  assert.ok(v4FieldExplicit);
-  assert.equal(v4FieldExplicit.evidence, "ui-label");
-  assert.equal(v4FieldExplicit.units, "dollars");
+  // ProjectionLab 4 Current Finances collections are not in the data model.
+  assert.equal(matchDataModelField("savingsAccounts", "balance"), undefined);
 });
 
-test("annotateAddressableValues annotates correctly per layout", () => {
+test("annotateAddressableValues annotates v5 values", () => {
   const v5Values = [
     { path: "kind", value: "account" },
     { path: "balance", value: 1000 },
     { path: "unrecognized", value: "foo" },
   ];
-  const annotatedV5 = annotateAddressableValues("accounts", v5Values, "v5");
+  const annotatedV5 = annotateAddressableValues("accounts", v5Values);
   assert.equal(annotatedV5[0].description !== undefined, true);
   assert.deepEqual(annotatedV5[0].allowedValues, ["account", "debt", "real-asset"]);
   assert.equal(annotatedV5[1].units, "dollars");
@@ -237,44 +181,38 @@ test("annotateAddressableValues annotates correctly per layout", () => {
   assert.equal(annotatedV5[1].allowedValuesEnforced, undefined);
   assert.equal(annotatedV5[2].description, undefined);
 
-  // v4 regression check
-  const v4Values = [{ path: "inflation", value: 3 }];
-  const annotatedV4 = annotateAddressableValues("variables", v4Values);
-  assert.equal(annotatedV4[0].units, "percentage points");
+  const [inflation] = annotateAddressableValues("variables", [{ path: "inflation", value: 3 }]);
+  assert.equal(inflation.units, "percentage points");
 });
 
 test("annotateAddressableValues flags an observed v5 list as enforced", () => {
   const [growth] = annotateAddressableValues(
     "accounts",
     [{ path: "investmentGrowthType", value: "plan" }],
-    "v5",
   );
   assert.deepEqual(growth.allowedValues, ["plan", "fixed", "custom", "none"]);
   assert.equal(growth.allowedValuesEnforced, true);
 });
 
-test("refusedEnumChoices and enumRefusalError work per layout", () => {
+test("refusedEnumChoices and enumRefusalError refuse only observed option lists", () => {
   // v5 fields carry export-shape evidence; writes are refused only on observed option lists
-  const v5Choices = refusedEnumChoices("accounts", "kind", "unsupported", "v5");
+  const v5Choices = refusedEnumChoices("accounts", "kind", "unsupported");
   assert.equal(v5Choices, undefined);
 
-  // v4 regression check: variables.assumptionsMode is an observed enum with allowed values
-  const v4Choices = refusedEnumChoices("variables", "assumptionsMode", "invalid");
-  assert.deepEqual(v4Choices, ["fixed", "historical", "custom"]);
+  // variables.assumptionsMode is export-shape on ProjectionLab 5, so its list is a hint.
+  assert.equal(refusedEnumChoices("variables", "assumptionsMode", "invalid"), undefined);
 
-  const v4Accepted = refusedEnumChoices("variables", "assumptionsMode", "historical");
-  assert.equal(v4Accepted, undefined);
-
-  const v4Error = enumRefusalError("variables", "assumptionsMode", "invalid");
-  assert.ok(v4Error);
-  assert.equal(v4Error.code, "INVALID_INPUT");
+  const refusal = enumRefusalError("variables", "alignment.type", "fiscal");
+  assert.ok(refusal);
+  assert.equal(refusal.code, "INVALID_INPUT");
+  assert.equal(enumRefusalError("variables", "alignment.type", "rolling"), undefined);
 
   // v5 year alignment is an observed enum, on a plan and in settings
   const alignments = ["calendar", "rolling", "au-tax", "uk-tax", "custom"];
-  assert.deepEqual(refusedEnumChoices("variables", "alignment.type", "fiscal", "v5"), alignments);
-  assert.deepEqual(refusedEnumChoices("settings", "plan.alignment.type", "fiscal", "v5"), alignments);
+  assert.deepEqual(refusedEnumChoices("variables", "alignment.type", "fiscal"), alignments);
+  assert.deepEqual(refusedEnumChoices("settings", "plan.alignment.type", "fiscal"), alignments);
   for (const value of alignments) {
-    assert.equal(refusedEnumChoices("variables", "alignment.type", value, "v5"), undefined);
+    assert.equal(refusedEnumChoices("variables", "alignment.type", value), undefined);
   }
 });
 
@@ -285,25 +223,25 @@ test("v5 account growth and dividend sources accept every option the app offers"
   for (const field of ["investmentGrowthType", "dividendType"]) {
     for (const value of sources) {
       assert.equal(
-        refusedEnumChoices("accounts", field, value, "v5"),
+        refusedEnumChoices("accounts", field, value),
         undefined,
         `${field} refuses "${value}"`,
       );
     }
-    assert.deepEqual(refusedEnumChoices("accounts", field, "rate", "v5"), sources);
+    assert.deepEqual(refusedEnumChoices("accounts", field, "rate"), sources);
   }
 });
 
-test("projectionlab://data-model resource renders v5 layout correctly", async () => {
+test("projectionlab://data-model renders the ProjectionLab 5 data model", async () => {
   const server = fakeServer();
-  const bridge = fakeBridge(2);
-  registerDataModelResource(server, bridge);
+  registerDataModelResource(server);
 
   const handler = server.resources.get("projectionlab://data-model").handler;
   const res = await handler(new URL("projectionlab://data-model"));
   const markdown = res.contents[0].text;
+  assert.equal(markdown, renderDataModelMarkdown());
+  assert.equal(markdown.includes("ProjectionLab 4"), false);
 
-  // Checks on v5 markdown
   assert.match(markdown, /ProjectionLab 5\.0\.0/);
   assert.match(markdown, /documents\.currentFinances\.accounts/);
   assert.match(markdown, /`kind` \[export-shape\]/);
@@ -346,46 +284,14 @@ test("projectionlab://data-model resource renders v5 layout correctly", async ()
   assert.equal(/\$\d/.test(markdown), false);
 });
 
-test("projectionlab://data-model resource handles explicit ?layout=v5 and ?layout=v4", async () => {
+test("projectionlab://knowledge renders the ProjectionLab 5 reference", async () => {
   const server = fakeServer();
-  // Register without bridge to verify query parameter fallback
-  registerDataModelResource(server);
-
-  const handler = server.resources.get("projectionlab://data-model").handler;
-
-  const resV5 = await handler(new URL("projectionlab://data-model?layout=v5"));
-  assert.match(resV5.contents[0].text, /ProjectionLab 5\.0\.0/);
-
-  const resV4 = await handler(new URL("projectionlab://data-model?layout=v4"));
-  assert.match(resV4.contents[0].text, /ProjectionLab 4\.6\.0/);
-
-  // Default without query param and without bridge defaults to v4
-  const resDefault = await handler(new URL("projectionlab://data-model"));
-  assert.match(resDefault.contents[0].text, /ProjectionLab 4\.6\.0/);
-});
-
-test("projectionlab://data-model v4 regression check with v4 bridge", async () => {
-  const server = fakeServer();
-  const bridge = fakeBridge(1);
-  registerDataModelResource(server, bridge);
-
-  const handler = server.resources.get("projectionlab://data-model").handler;
-  const res = await handler(new URL("projectionlab://data-model"));
-  const markdown = res.contents[0].text;
-
-  assert.equal(markdown, renderDataModelV4Markdown());
-  assert.match(markdown, /ProjectionLab 4\.6\.0/);
-  assert.match(markdown, /## Current Finances: savings accounts/);
-});
-
-test("projectionlab://knowledge resource renders v5 reference correctly", async () => {
-  const server = fakeServer();
-  const bridge = fakeBridge(2);
-  registerKnowledgeResource(server, bridge);
+  registerKnowledgeResource(server);
 
   const handler = server.resources.get("projectionlab://knowledge").handler;
   const res = await handler(new URL("projectionlab://knowledge"));
   const markdown = res.contents[0].text;
+  assert.equal(markdown, KNOWLEDGE);
 
   assert.match(markdown, /# ProjectionLab 5 & FIRE Reference/);
   assert.match(markdown, /Plugin API contract 2/);
@@ -418,62 +324,8 @@ test("projectionlab://knowledge resource renders v5 reference correctly", async 
   assert.equal(/\bchanged to\b/i.test(markdown), false);
 });
 
-test("projectionlab://knowledge resource handles explicit ?layout=v5 and ?layout=v4", async () => {
-  const server = fakeServer();
-  registerKnowledgeResource(server);
-
-  const handler = server.resources.get("projectionlab://knowledge").handler;
-
-  const resV5 = await handler(new URL("projectionlab://knowledge?layout=v5"));
-  assert.equal(resV5.contents[0].text, KNOWLEDGE_V5);
-
-  const resV4 = await handler(new URL("projectionlab://knowledge?layout=v4"));
-  assert.equal(resV4.contents[0].text, KNOWLEDGE_V4);
-
-  const resDefault = await handler(new URL("projectionlab://knowledge"));
-  assert.equal(resDefault.contents[0].text, KNOWLEDGE_V4);
-  assert.equal(resDefault.contents[0].text, KNOWLEDGE);
-});
-
-test("projectionlab://knowledge v4 regression check with v4 bridge", async () => {
-  const server = fakeServer();
-  const bridge = fakeBridge(1);
-  registerKnowledgeResource(server, bridge);
-
-  const handler = server.resources.get("projectionlab://knowledge").handler;
-  const res = await handler(new URL("projectionlab://knowledge"));
-
-  assert.equal(res.contents[0].text, KNOWLEDGE_V4);
-});
-
-test("resource handlers render v4 before any contract is known and never query the page", async () => {
-  const server = fakeServer();
-  const unknownBridge = {
-    knownApiContract() {
-      return undefined;
-    },
-    async editAccess() {
-      return "enabled";
-    },
-    async apiContract() {
-      throw new Error("resources must not query the page");
-    },
-  };
-  registerDataModelResource(server, unknownBridge);
-  registerKnowledgeResource(server, unknownBridge);
-
-  const dmHandler = server.resources.get("projectionlab://data-model").handler;
-  const dmRes = await dmHandler(new URL("projectionlab://data-model"));
-  assert.match(dmRes.contents[0].text, /ProjectionLab 4\.6\.0/);
-
-  const knHandler = server.resources.get("projectionlab://knowledge").handler;
-  const knRes = await knHandler(new URL("projectionlab://knowledge"));
-  assert.equal(knRes.contents[0].text, KNOWLEDGE_V4);
-});
-
 test("exportSections and sectionOf operate on synthetic v5 export", () => {
   const raw = v5Export();
-  assert.equal(detectLayout(raw), "v5");
 
   const sections = exportSections(raw);
   assert.ok(sections.currentFinances);

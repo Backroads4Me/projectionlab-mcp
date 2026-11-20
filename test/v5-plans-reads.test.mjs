@@ -1,6 +1,6 @@
-// Plan reads on both export layouts: projectionlab_get_plan,
-// projectionlab_get_plan_section and projectionlab_get_plan_settings against
-// the synthetic v5 export, plus v4 regression checks that pin the v4 output.
+// Plan reads: projectionlab_get_plan, projectionlab_get_plan_section and
+// projectionlab_get_plan_settings against the synthetic v5 export, and their
+// refusal of a ProjectionLab 4 export.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -50,6 +50,7 @@ function parsePlanReply(result) {
 
 const parse = (result) => JSON.parse(result.content[0].text);
 
+/** A ProjectionLab 4 export, which every plan read refuses. */
 function v4Export() {
   const at = (value) => ({ type: "date", value });
   return {
@@ -154,25 +155,6 @@ test("get_plan redacts secret-named fields inside a v5 plan", async () => {
   assert.equal(text.includes("abc123"), false);
   assert.equal(text.includes("test-api-key"), false);
   assert.equal(parsePlanReply(reply).plan.variables.authToken, "[REDACTED]");
-});
-
-test("get_plan keeps the v4 header exactly, with no layout or active field", async () => {
-  const server = setup(registerGetPlanTool, v4Export());
-  const reply = await server.tools.get("projectionlab_get_plan").handler({ planIdentifier: "Retire" });
-  const { header, plan } = parsePlanReply(reply);
-  assert.deepEqual(Object.keys(header), [
-    "name",
-    "id",
-    "milestoneCount",
-    "incomeEventCount",
-    "expenseEventCount",
-    "accountEventCount",
-    "assetEventCount",
-    "sections",
-  ]);
-  assert.equal(header.name, "Retire at 55");
-  assert.equal(header.incomeEventCount, 1);
-  assert.equal(plan.active, true);
 });
 
 // --- projectionlab_get_plan_section ---
@@ -390,26 +372,6 @@ test("get_plan_section redacts secret-named fields in a v5 plan", async () => {
   assert.equal(parse(reply).data.inflation, 3);
 });
 
-test("get_plan_section does not match a v4 event by a linked id, and keeps its v4 output", async () => {
-  const raw = v4Export();
-  raw.plans[0].accounts.events[0].accountId = "linked-elsewhere";
-  const miss = await section(raw, {
-    planIdentifier: "p1",
-    section: "accounts",
-    eventIdentifier: "linked-elsewhere",
-    listPaths: false,
-  });
-  assert.equal(miss.isError, true);
-  assert.match(parse(miss).message, /No event matching "linked-elsewhere"/);
-
-  const hit = parse(
-    await section(raw, { planIdentifier: "Retire", section: "income", eventIdentifier: "i1", listPaths: false }),
-  );
-  assert.deepEqual(Object.keys(hit), ["planName", "planId", "section", "eventIdentifier", "data"]);
-  assert.equal(hit.planName, "Retire at 55");
-  assert.equal(hit.data.amount, 100000);
-});
-
 // --- projectionlab_get_plan_settings ---
 
 async function settings(raw, args) {
@@ -506,24 +468,21 @@ test("get_plan_settings redacts secret-named settings of a v5 plan", async () =>
   assert.equal(parse(reply).sections[0].settings[0].redacted, true);
 });
 
-test("get_plan_settings keeps the v4 output exactly, with no layout or planSelection", async () => {
-  const out = parse(await settings(v4Export(), { planIdentifier: "p1" }));
-  assert.deepEqual(Object.keys(out), ["planName", "planId", "mutableWith", "sections"]);
-  assert.equal(out.planName, "Retire at 55");
-  assert.equal(out.mutableWith, UPDATE_TOOL);
-  assert.deepEqual(
-    out.sections.map((s) => [s.section, s.settingCount]),
-    [
-      ["variables", 2],
-      ["montecarlo", 1],
-      ["withdrawalStrategy", 1],
-    ],
-  );
-});
-
 test("get_plan_settings and get_plan_section share the v5 plan lookup errors", async () => {
   const raw = v5Export();
   const settingsReply = await settings(raw, { planIdentifier: "nope" });
   const sectionReply = await section(raw, { planIdentifier: "nope", section: "income", listPaths: false });
   assert.deepEqual(parse(settingsReply), parse(sectionReply));
+});
+
+test("every plan read refuses a ProjectionLab 4 export", async () => {
+  const raw = v4Export();
+  for (const reply of [
+    await setup(registerGetPlanTool, raw).tools.get("projectionlab_get_plan").handler({ planIdentifier: "p1" }),
+    await section(raw, { planIdentifier: "p1", section: "income", listPaths: false }),
+    await settings(raw, { planIdentifier: "p1" }),
+  ]) {
+    assert.equal(reply.isError, true);
+    assert.equal(parse(reply).error, "UNSUPPORTED_API_VERSION");
+  }
 });

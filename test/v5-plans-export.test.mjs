@@ -1,6 +1,7 @@
-// Whole-export reads on both layouts: projectionlab_export_data and the
+// Whole-export reads: projectionlab_export_data and the
 // projectionlab://plan-data resource keep every secret redacted, and the plan
-// helpers in src/plans.ts and src/planSettings.ts read either layout.
+// helpers in src/plans.ts and src/planSettings.ts read the ProjectionLab 5
+// export and refuse a ProjectionLab 4 one.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -40,6 +41,7 @@ const bridgeOf = (raw) => ({
   },
 });
 
+/** A ProjectionLab 4 export, which the plan helpers refuse. */
 function v4Export() {
   return {
     meta: { version: "4.6.0" },
@@ -116,27 +118,12 @@ test("export_data still returns a v5 export that lacks a plans list", async () =
   assert.deepEqual(out.planNames, []);
 });
 
-test("export_data keeps its v4 output: redaction, data, and plan names", async () => {
-  const raw = v4Export();
-  const text = await exportText(raw);
-  assert.equal(text.includes("synthetic-plugin-key"), false);
-  assert.equal(text.includes("test-api-key"), false);
-  const out = JSON.parse(text);
-  assert.equal(out.settings.plugins.apiKey, "[REDACTED]");
-  assert.deepEqual(out.plans, raw.plans);
-  assert.equal(out.today.note, "key is [REDACTED]");
-
-  raw.today.padding = "x".repeat(FILE_THRESHOLD);
-  const spilled = JSON.parse(await exportText(raw));
-  assert.deepEqual(spilled.planNames, ["Retire at 55", "Work forever", "unnamed"]);
-});
-
-test("export_data describes both export layouts", () => {
+test("export_data describes the ProjectionLab 5 export", () => {
   const server = fakeServer();
   registerExportTool(server, bridgeOf(v5Export()));
   const { definition } = server.tools.get("projectionlab_export_data");
-  assert.match(definition.description, /ProjectionLab 4/);
-  assert.match(definition.description, /ProjectionLab 5/);
+  assert.doesNotMatch(definition.description, /ProjectionLab 4/);
+  assert.match(definition.description, /ProjectionLab 5's documents envelope/);
   assert.match(
     definition.description,
     /saved to a file and a pointer is returned\. Prefer projectionlab_get_plan /,
@@ -159,27 +146,19 @@ test("plan-data resource returns a v5 export with every secret redacted", async 
   assert.deepEqual(out.documents.currentFinances.accounts, raw.documents.currentFinances.accounts);
 });
 
-test("plan-data resource keeps its v4 output redacted", async () => {
-  const text = await resourceText(v4Export());
-  assert.equal(text.includes("synthetic-plugin-key"), false);
-  assert.equal(text.includes("test-api-key"), false);
-  const out = JSON.parse(text);
-  assert.equal(out.settings.plugins.apiKey, "[REDACTED]");
-  assert.match(text, /Retire at 55/);
-});
-
 // --- plan helpers ---
 
-test("requirePlans reads the plans of either layout and refuses an empty list", () => {
+test("requirePlans reads the v5 plans and refuses an empty list", () => {
   const v5 = v5Export();
   assert.equal(plans.requirePlans(v5), v5.documents.plans);
-  const v4 = v4Export();
-  assert.equal(plans.requirePlans(v4), v4.plans);
 
   v5.documents.plans = [];
   assert.throws(() => plans.requirePlans(v5), /No plans found in ProjectionLab/);
-  assert.throws(() => plans.requirePlans({ today: {} }), /No plans found in ProjectionLab/);
-  assert.throws(() => plans.requirePlans({ plans: "nope" }), /No plans found in ProjectionLab/);
+});
+
+test("requirePlans refuses a ProjectionLab 4 export", () => {
+  assert.throws(() => plans.requirePlans(v4Export()), { code: "UNSUPPORTED_API_VERSION" });
+  assert.throws(() => plans.requirePlans({ plans: "nope" }), { code: "UNSUPPORTED_API_VERSION" });
 });
 
 test("requirePlans refuses a v5 export with no plans list", () => {
@@ -188,9 +167,9 @@ test("requirePlans refuses a v5 export with no plans list", () => {
   assert.throws(() => plans.requirePlans(v5), /no plans list in documents\.plans/);
 });
 
-test("exportPlanNames names plans of either layout and tolerates a missing list", () => {
+test("exportPlanNames names the v5 plans and has none for a missing list or another layout", () => {
   assert.deepEqual(plans.exportPlanNames(v5Export()), ["Main Plan", "Retire Early"]);
-  assert.deepEqual(plans.exportPlanNames(v4Export()), ["Retire at 55", "Work forever", "unnamed"]);
+  assert.deepEqual(plans.exportPlanNames(v4Export()), []);
   assert.deepEqual(plans.exportPlanNames({}), []);
   const v5 = v5Export();
   delete v5.documents.plans;
@@ -214,21 +193,21 @@ test("resolveLinkedEventIndex matches accountId or assetId exactly", () => {
   );
 });
 
-test("resolveEventIndex still matches a v4 event by id and name only", () => {
+test("resolveEventIndex matches an event by id and name only", () => {
   const events = [{ id: "inv1", name: "Brokerage", accountId: "elsewhere" }];
   assert.equal(plans.resolveEventIndex(events, "inv1"), 0);
   assert.equal(plans.resolveEventIndex(events, "broker"), 0);
   assert.equal(plans.resolveEventIndex(events, "elsewhere"), -1);
 });
 
-test("planSelection reads documents.settings.plan on v5 and is null on v4", () => {
+test("planSelection reads documents.settings.plan and refuses a ProjectionLab 4 export", () => {
   assert.deepEqual(planSelection(v5Export()), {
     activeId: "not reported",
     baselineId: "not reported",
     alignment: { type: "calendar" },
     tabs: { pinned: false },
   });
-  assert.equal(planSelection(v4Export()), null);
+  assert.throws(() => planSelection(v4Export()), { code: "UNSUPPORTED_API_VERSION" });
   assert.equal(plans.NOT_REPORTED, "not reported");
 
   const odd = v5Export();

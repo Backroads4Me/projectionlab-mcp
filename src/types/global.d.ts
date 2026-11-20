@@ -14,10 +14,6 @@ declare global {
         opts: { key: string },
       ): Promise<unknown>;
       restorePlans(plans: unknown[], opts: { key: string }): Promise<unknown>;
-      restoreProgress(
-        progress: unknown,
-        opts: { key: string },
-      ): Promise<unknown>;
       restoreSettings(
         settings: unknown,
         opts: { key: string },

@@ -3,7 +3,6 @@ import test from "node:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -41,21 +40,28 @@ function resultJson(result) {
   return JSON.parse(result.content[0].text);
 }
 
+/** A ProjectionLab 5 export holding one brokerage account. */
 function initialState() {
   return {
-    today: {
-      investmentAccounts: [
-        {
-          id: "account-1",
-          name: "Test Brokerage",
-          balance: 100000,
-          allocation: { stocks: 0.6, bonds: 0.4 },
-          integration: { authToken: "sensitive" },
+    schema: 1,
+    exportedAt: 1,
+    documents: {
+      currentFinances: {
+        schema: 5,
+        accounts: {
+          "account-1": {
+            id: "account-1",
+            name: "Test Brokerage",
+            kind: "account",
+            type: "taxable",
+            balance: 100000,
+            allocation: { stocks: 0.6, bonds: 0.4 },
+            integration: { authToken: "sensitive" },
+          },
         },
-      ],
-      savingsAccounts: [],
-      debts: [],
-      assets: [],
+      },
+      plans: [],
+      settings: { schema: 5 },
     },
   };
 }
@@ -63,7 +69,7 @@ function initialState() {
 test("get Current Finances targets one account and lists redacted typed paths", async () => {
   const server = fakeServer();
   const bridge = {
-    async apiContract() { return contractOf(initialState()); },
+    async apiContract() { return 2; },
     async editAccess() {
       return editAccess.value;
     },
@@ -78,7 +84,7 @@ test("get Current Finances targets one account and lists redacted typed paths", 
     await handler({ accountId: "account-1", listPaths: true }),
   );
   assert.equal(output.accountId, "account-1");
-  assert.equal(output.collection, "investmentAccounts");
+  assert.equal(output.collection, "accounts");
   assert.deepEqual(
     output.data.find((item) => item.path === "allocation.stocks"),
     {
@@ -103,7 +109,7 @@ test("Current Finances path patch validates dry-run, preserves siblings, snapsho
   let state = initialState();
   const actions = [];
   const bridge = {
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return editAccess.value;
     },
@@ -112,10 +118,7 @@ test("Current Finances path patch validates dry-run, preserves siblings, snapsho
     },
     async updateAccount(accountId, data, force) {
       actions.push({ kind: "update", accountId, data, force });
-      const account = state.today.investmentAccounts.find(
-        (item) => item.id === accountId,
-      );
-      Object.assign(account, data);
+      Object.assign(state.documents.currentFinances.accounts[accountId], data);
     },
   };
   const snapshots = {
@@ -124,7 +127,7 @@ test("Current Finances path patch validates dry-run, preserves siblings, snapsho
       assert.equal(operation, "updateAccount");
       assert.deepEqual(sections, ["currentFinances"]);
       assert.equal(
-        data.currentFinances.investmentAccounts[0].allocation.stocks,
+        data.currentFinances.accounts["account-1"].allocation.stocks,
         0.6,
       );
       return { id: "snap-account" };
@@ -164,7 +167,7 @@ test("Current Finances path patch validates dry-run, preserves siblings, snapsho
     data: { allocation: { stocks: 0.7, bonds: 0.4 } },
     force: undefined,
   });
-  assert.deepEqual(state.today.investmentAccounts[0].allocation, {
+  assert.deepEqual(state.documents.currentFinances.accounts["account-1"].allocation, {
     stocks: 0.7,
     bonds: 0.4,
   });
@@ -186,7 +189,7 @@ test("Current Finances updates reject unsafe input before snapshot or mutation",
   const server = fakeServer();
   let exportCalls = 0;
   const bridge = {
-    async apiContract() { return contractOf(initialState()); },
+    async apiContract() { return 2; },
     async editAccess() {
       return editAccess.value;
     },
@@ -238,7 +241,7 @@ test("Current Finances updates refuse while plan edits are off, before reading",
   const bridge = {
     async apiContract() {
       bridgeCalled = true;
-      return contractOf(initialState());
+      return 2;
     },
     async editAccess() {
       return editAccess.value;
@@ -271,13 +274,14 @@ test("Current Finances updates refuse while plan edits are off, before reading",
 
 // --- post-write comparison of the two reads ---
 
+/** A v5 Current Finances document with one record of each kind. */
 const finances = (balance, extra = {}) => ({
-  investmentAccounts: [
-    { id: "i1", name: "Brokerage", balance, costBasis: 90000, ...extra },
-  ],
-  savingsAccounts: [{ id: "s1", name: "Emergency", balance: 25000 }],
-  debts: [{ id: "d1", name: "Car loan", balance: -1200 }],
-  assets: [{ id: "a1", name: "House", amount: 400000 }],
+  accounts: {
+    i1: { id: "i1", name: "Brokerage", kind: "account", type: "taxable", balance, costBasis: 90000, ...extra },
+    s1: { id: "s1", name: "Emergency", kind: "account", type: "savings", balance: 25000 },
+    d1: { id: "d1", name: "Car loan", kind: "debt", type: "loan", balance: 1200 },
+    a1: { id: "a1", name: "House", kind: "real-asset", type: "house", value: 400000 },
+  },
 });
 
 test("currentFinancesProblems verifies an untouched read", () => {
@@ -290,68 +294,64 @@ test("currentFinancesProblems reports a money field that moved", () => {
     finances(100000, { costBasis: 42 }),
   );
   assert.deepEqual(problems, [
-    "Current Finances investmentAccounts i1 costBasis changed from 90000 to 42",
+    "Current Finances accounts i1 costBasis changed from 90000 to 42",
   ]);
 
-  const balance = currentFinancesProblems(finances(100000), {
-    ...finances(100000),
-    savingsAccounts: [{ id: "s1", name: "Emergency", balance: 1 }],
-  });
-  assert.deepEqual(balance, [
-    "Current Finances savingsAccounts s1 balance changed from 25000 to 1",
+  const after = finances(100000);
+  after.accounts.s1.balance = 1;
+  assert.deepEqual(currentFinancesProblems(finances(100000), after), [
+    "Current Finances accounts s1 balance changed from 25000 to 1",
   ]);
 });
 
 test("currentFinancesProblems reports accounts the re-read dropped or added", () => {
   const after = finances(100000);
-  after.debts = [];
+  delete after.accounts.d1;
   assert.deepEqual(currentFinancesProblems(finances(100000), after), [
-    "Current Finances debts d1 is missing",
+    "Current Finances accounts d1 is missing",
   ]);
 
   const added = finances(100000);
-  added.savingsAccounts.push({ id: "s2", name: "Sinking fund", balance: 500 });
+  added.accounts.s2 = { id: "s2", name: "Sinking fund", kind: "account", balance: 500 };
   assert.deepEqual(currentFinancesProblems(finances(100000), added), [
-    "Current Finances savingsAccounts s2 was added",
+    "Current Finances accounts s2 was added",
   ]);
 });
 
-test("currentFinancesProblems tolerates reordering, extra fields and id-less accounts", () => {
+test("currentFinancesProblems tolerates reordered records and extra fields", () => {
   const before = {
-    savingsAccounts: [
-      { id: "s1", balance: 1 },
-      { name: "Cash jar no id", balance: 20 },
-    ],
-    debts: [{ id: "d1", balance: -5 }],
+    accounts: {
+      s1: { id: "s1", kind: "account", balance: 1 },
+      d1: { id: "d1", kind: "debt", balance: 5 },
+    },
   };
   const after = {
-    debts: [{ id: "d1", balance: -5, note: "app-added" }],
-    savingsAccounts: [
-      { name: "Cash jar no id", balance: 999 },
-      { id: "s1", balance: 1 },
-    ],
+    accounts: {
+      d1: { id: "d1", kind: "debt", balance: 5, note: "app-added" },
+      s1: { id: "s1", kind: "account", balance: 1 },
+    },
   };
   assert.deepEqual(currentFinancesProblems(before, after), []);
 });
 
 test("currentFinancesProblems compares only fields the first read carried", () => {
-  const before = { assets: [{ id: "a1", name: "House" }] };
-  assert.deepEqual(currentFinancesProblems(before, { assets: [{ id: "a1", name: "House", amount: 400000 }] }), []);
-  assert.deepEqual(currentFinancesProblems(before, { assets: [{ id: "a1", name: "House", amount: null }] }), []);
+  const before = { accounts: { a1: { id: "a1", name: "House" } } };
+  assert.deepEqual(currentFinancesProblems(before, { accounts: { a1: { id: "a1", name: "House", value: 400000 } } }), []);
+  assert.deepEqual(currentFinancesProblems(before, { accounts: { a1: { id: "a1", name: "House", value: null } } }), []);
 
   // A null on either side is the same as the field being absent.
   assert.deepEqual(
     currentFinancesProblems(
-      { assets: [{ id: "a1", amount: null }] },
-      { assets: [{ id: "a1" }] },
+      { accounts: { a1: { id: "a1", value: null } } },
+      { accounts: { a1: { id: "a1" } } },
     ),
     [],
   );
   const lost = currentFinancesProblems(
-    { assets: [{ id: "a1", amount: 400000 }] },
-    { assets: [{ id: "a1", amount: null }] },
+    { accounts: { a1: { id: "a1", value: 400000 } } },
+    { accounts: { a1: { id: "a1", value: null } } },
   );
-  assert.deepEqual(lost, ["Current Finances assets a1 lost its amount"]);
+  assert.deepEqual(lost, ["Current Finances accounts a1 lost its value"]);
 });
 
 test("currentFinancesProblems has nothing to compare without a baseline", () => {
@@ -360,11 +360,7 @@ test("currentFinancesProblems has nothing to compare without a baseline", () => 
   assert.deepEqual(currentFinancesProblems(null, after), []);
   assert.deepEqual(currentFinancesProblems([], after), []);
   assert.deepEqual(currentFinancesProblems({}, after), []);
-  // A baseline of accounts without ids is not a baseline.
-  assert.deepEqual(
-    currentFinancesProblems({ savingsAccounts: [{ name: "Cash", balance: 5 }] }, undefined),
-    [],
-  );
+  assert.deepEqual(currentFinancesProblems({ accounts: {} }, undefined), []);
 });
 
 test("currentFinancesProblems reports a baseline the re-read lost entirely", () => {

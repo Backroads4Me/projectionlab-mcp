@@ -1,20 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Bridge } from "../bridge.js";
 import {
-  DATA_MODEL_GROUPS,
-  DATA_MODEL_PROJECTIONLAB_VERSION,
   DATA_MODEL_V5_GROUPS,
   DATA_MODEL_V5_PROJECTIONLAB_VERSION,
   type DataModelField,
   enforcesAllowedValues,
   UI_LABELS_V5,
 } from "../dataModel.js";
-import type { ExportLayout } from "../layout.js";
 import {
   ACCOUNT_EVENT_LINKED_FIELDS,
   ASSET_EVENT_LINKED_FIELDS,
 } from "../linkedFields.js";
-import { registerLayoutResource } from "./layoutResource.js";
 
 function renderField(pattern: string, field: DataModelField): string {
   const parts = [`- \`${pattern}\` [${field.evidence}]: ${field.description}`];
@@ -44,42 +39,7 @@ function renderUiLabels(): string[] {
   return lines;
 }
 
-export function renderDataModelV4Markdown(): string {
-  const lines: string[] = [
-    `# ProjectionLab Data Model (ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION})`,
-    "",
-    `Field reference for the values this server reads with \`listPaths\` and writes with the ` +
-      `update tools. Paths are dot paths exactly as \`listPaths\` lists them and as ` +
-      "`pathChanges` addresses them, relative to the listed object; `*` stands for any single " +
-      "path segment, such as an array index or a withdrawal strategy name. Each group names " +
-      "the scope the paths are listed and written under.",
-    "",
-    `Everything here describes ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION}. A future ` +
-      "version (v5 and beyond) may rename fields, change units, or add and remove options. " +
-      "Check the live values before writing.",
-    "",
-    "Evidence tags: [observed] means a value was set through the UI and the stored value was " +
-      "read back (or matched field-for-field against a known plan). [ui-label] means the " +
-      "control was seen in the UI but the entry is not yet confirmed by a stored-value test. " +
-      "Writes are refused only on [observed] option lists.",
-    "",
-    "The most dangerous trap is the rate scale: most rates are stored in percentage points " +
-      "(`variables.inflation: 3` means 3%), but the tax strategy bracket rates are stored as " +
-      "decimal fractions (`variables.taxStrategy.bracketRate: 0.22` means 22%). Read the " +
-      "current value first and write the new one on the same scale.",
-    "",
-  ];
-  for (const group of DATA_MODEL_GROUPS) {
-    lines.push(`## ${group.title}`, "");
-    for (const [pattern, field] of Object.entries(group.fields)) {
-      lines.push(renderField(pattern, field));
-    }
-    lines.push("");
-  }
-  return lines.join("\n");
-}
-
-export function renderDataModelV5Markdown(): string {
+export function renderDataModelMarkdown(): string {
   const lines: string[] = [
     `# ProjectionLab Data Model (ProjectionLab ${DATA_MODEL_V5_PROJECTIONLAB_VERSION})`,
     "",
@@ -119,9 +79,7 @@ export function renderDataModelV5Markdown(): string {
   lines.push(
     "## Fields in the app",
     "",
-    "Plan settings (variables, montecarlo, withdrawalStrategy) and plan events keep the paths " +
-      "ProjectionLab 4 uses; their meanings, units and allowed values are in " +
-      "projectionlab://data-model?layout=v4. Each field below was found in the app by writing a " +
+    "Each field below was found in the app by writing a " +
       "distinct value to it or by matching a stored value to its control. Use the label and " +
       "location when telling the user where to look. A location in parentheses names the mode " +
       "or choice that must be selected for the control to appear.",
@@ -165,20 +123,20 @@ export function renderDataModelV5Markdown(): string {
   return lines.join("\n");
 }
 
-export function renderDataModelMarkdown(layout: ExportLayout = "v4"): string {
-  return layout === "v5" ? renderDataModelV5Markdown() : renderDataModelV4Markdown();
-}
-
-export function registerDataModelResource(server: McpServer, bridge?: Bridge) {
-  registerLayoutResource(server, bridge, {
-    name: "data-model",
-    uri: "projectionlab://data-model",
-    title: "ProjectionLab Data Model",
-    description:
-      `Field meanings, units, and allowed values for path-addressable reads and writes, ` +
-      `version-stamped to ProjectionLab ${DATA_MODEL_PROJECTIONLAB_VERSION} (v4) and ` +
-      `${DATA_MODEL_V5_PROJECTIONLAB_VERSION} (v5). Follows the connected ProjectionLab version once a connection check has run, and ProjectionLab 4 before that; append ?layout=v4 or ?layout=v5 to choose. ` +
-      "Entries tagged ui-label or export-shape are not yet confirmed by a stored-value test.",
-    render: renderDataModelMarkdown,
-  });
+export function registerDataModelResource(server: McpServer) {
+  server.registerResource(
+    "data-model",
+    "projectionlab://data-model",
+    {
+      title: "ProjectionLab Data Model",
+      description:
+        "Field meanings, units, and allowed values for path-addressable reads and writes, " +
+        `version-stamped to ProjectionLab ${DATA_MODEL_V5_PROJECTIONLAB_VERSION}. ` +
+        "Entries tagged export-shape are not yet confirmed by a stored-value test.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => ({
+      contents: [{ uri: uri.href, text: renderDataModelMarkdown(), mimeType: "text/markdown" }],
+    }),
+  );
 }

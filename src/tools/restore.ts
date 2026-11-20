@@ -9,7 +9,7 @@ import {
   errorResult,
   redactedSecretsError,
 } from "../errors.js";
-import { detectLayout, exportSections, sectionOf } from "../layout.js";
+import { exportSections, sectionOf } from "../layout.js";
 import { v5AccountsKept } from "../currentFinances.js";
 import { log } from "../logger.js";
 import { containsSubset } from "../plans.js";
@@ -183,8 +183,7 @@ export function registerRestoreTools(
       title: "Restore Current Finances",
       description:
         "REPLACES the Current Finances state with the provided data. " +
-        "On ProjectionLab 4 this is a FULL REPLACEMENT, not a patch - the entire current finances object is overwritten. " +
-        "On ProjectionLab 5 every non-account field and each submitted account is replaced whole, but an " +
+        "Every non-account field and each submitted account is replaced whole, but an " +
         "account missing from the submission is kept, not deleted; the preview lists those as keptAccounts. " +
         "When confirm is false (default), returns a dry-run preview WITHOUT modifying anything. " +
         "When confirm is true, auto-snapshots current state then applies the replacement. " +
@@ -216,10 +215,8 @@ export function registerRestoreTools(
 
         await assertWritesSupported(bridge, ["restoreCurrentFinances"]);
         const exportData = await bridge.exportData({ fresh: true });
-        const layout = detectLayout(exportData);
         const stored = sectionOf(exportData, "currentFinances");
-        const kept =
-          layout === "v5" ? { keptAccounts: v5AccountsKept(currentFinances, stored) } : {};
+        const keptAccounts = v5AccountsKept(currentFinances, stored);
         if (!confirm) {
           const topKeys = Object.keys(currentFinances);
           return {
@@ -231,11 +228,9 @@ export function registerRestoreTools(
                     dryRun: true,
                     operation: "restoreCurrentFinances",
                     topLevelKeys: topKeys,
-                    ...kept,
+                    keptAccounts,
                     warning:
-                      layout === "v5"
-                        ? "This will replace every Current Finances field and each submitted account. Accounts in keptAccounts are not in the submission and stay as they are. Set confirm=true to proceed."
-                        : "This will REPLACE all Current Finances data. Set confirm=true to proceed.",
+                      "This will replace every Current Finances field and each submitted account. Accounts in keptAccounts are not in the submission and stay as they are. Set confirm=true to proceed.",
                   },
                 ),
               },
@@ -245,9 +240,9 @@ export function registerRestoreTools(
 
         await snapshots.create("restoreCurrentFinances", ["currentFinances"], {
           currentFinances: stored,
-        }, layout);
+        });
 
-        await bridge.restoreCurrentFinances(currentFinances, layout);
+        await bridge.restoreCurrentFinances(currentFinances);
 
         const { verified, detail } = await verify(
           bridge,
@@ -264,7 +259,7 @@ export function registerRestoreTools(
                   success: true,
                   verified,
                   ...(detail ? { verificationDetail: detail } : {}),
-                  ...kept,
+                  keptAccounts,
                   message: verified
                     ? "Current Finances replaced and verified. Snapshot saved."
                     : "Current Finances replaced. Snapshot saved. Verification inconclusive - check with projectionlab_get_current_finances.",
@@ -354,9 +349,9 @@ export function registerRestoreTools(
 
         await snapshots.create("restorePlans", ["plans"], {
           plans: sectionOf(exportData, "plans"),
-        }, detectLayout(exportData));
+        });
 
-        await bridge.restorePlansIfUnchanged(currentPlans, plans, detectLayout(exportData));
+        await bridge.restorePlansIfUnchanged(currentPlans, plans);
 
         const { verified, detail } = await verify(bridge, "plans", plans);
 
@@ -373,94 +368,6 @@ export function registerRestoreTools(
                   message: verified
                     ? "All plans replaced and verified. Snapshot saved."
                     : "All plans replaced. Snapshot saved. Verification inconclusive - check with projectionlab_describe_schema.",
-                },
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return errorResult(err);
-      }
-    },
-  );
-
-  // --- Restore Progress ---
-  server.registerTool(
-    "projectionlab_restore_progress",
-    {
-      title: "Restore Progress",
-      description:
-        "REPLACES the Progress state with the provided data. " +
-        "This is a FULL REPLACEMENT, not a patch. " +
-        "When confirm is false (default), returns a dry-run preview. " +
-        "When confirm is true, auto-snapshots then applies the replacement. " +
-        "Use projectionlab_rollback with that snapshot to undo it; a manual export first is not needed. " +
-        "Not available on ProjectionLab 5, which records Progress history by itself.",
-      inputSchema: {
-        progress: z
-          .unknown()
-          .describe("Complete progress object to replace with"),
-        confirm: z
-          .boolean()
-          .default(false)
-          .describe(
-            "Set to true to execute. Default false returns a dry-run preview.",
-          ),
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        openWorldHint: true,
-      },
-    },
-    async ({ progress, confirm }) => {
-      try {
-        await requireEditsEnabled(bridge);
-        const redactedPaths = findRedactedSecretPaths(progress);
-        if (redactedPaths.length > 0) {
-          throw redactedSecretsError("progress", redactedPaths);
-        }
-
-        await assertWritesSupported(bridge, ["restoreProgress"]);
-        if (!confirm) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: toJson(
-                  {
-                    dryRun: true,
-                    operation: "restoreProgress",
-                    warning:
-                      "This will REPLACE all Progress data. Set confirm=true to proceed.",
-                  },
-                ),
-              },
-            ],
-          };
-        }
-
-        const exportData = await bridge.exportData({ fresh: true });
-        await snapshots.create("restoreProgress", ["progress"], {
-          progress: sectionOf(exportData, "progress"),
-        }, detectLayout(exportData));
-
-        await bridge.restoreProgress(progress, detectLayout(exportData));
-
-        const { verified, detail } = await verify(bridge, "progress", progress);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: toJson(
-                {
-                  success: true,
-                  verified,
-                  ...(detail ? { verificationDetail: detail } : {}),
-                  message: verified
-                    ? "Progress replaced and verified. Snapshot saved."
-                    : "Progress replaced. Snapshot saved. Verification inconclusive.",
                 },
               ),
             },
@@ -549,9 +456,9 @@ export function registerRestoreTools(
 
         await snapshots.create("restoreSettings", ["settings"], {
           settings: stored,
-        }, detectLayout(exportData));
+        });
 
-        await bridge.restoreSettings(settings, detectLayout(exportData));
+        await bridge.restoreSettings(settings);
 
         const { verified, detail } = await verify(bridge, "settings", settings);
 

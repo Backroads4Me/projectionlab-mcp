@@ -15,7 +15,7 @@ import {
   requirePlans,
   type PlanObj,
 } from "../plans.js";
-import { detectLayout, exportSections } from "../layout.js";
+import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 export function registerClonePlanTool(
@@ -108,12 +108,12 @@ export function registerClonePlanTool(
 
         const snapshot = await snapshots.create("clonePlan", ["plans"], {
           plans,
-        }, detectLayout(data));
+        });
         log.info(
           "clonePlan",
           `Copying plan "${String(source.name)}" to "${String(clone.name)}"`,
         );
-        await bridge.restorePlansIfUnchanged(plans, [...plans, clone], detectLayout(data));
+        await bridge.restorePlansIfUnchanged(plans, [...plans, clone]);
 
         const verifyData = await bridge.exportData({ fresh: true });
         const after = exportSections(verifyData).plans;

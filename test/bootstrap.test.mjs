@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket, { WebSocketServer } from "ws";
 import { freePort } from "./helpers/free-port.mjs";
+import { v5Export } from "./fixtures/v5-export.mjs";
 
 const PORT = await freePort();
 
@@ -26,9 +27,10 @@ const { buildBootstrapSnippet } = await import("../dist/bootstrap.js");
 
 const calls = [];
 const pluginApi = {
+  version: 2,
   exportData: async ({ key }) => {
     if (key !== "test-api-key") throw new Error("invalid key");
-    return { plans: [], today: { accounts: [] }, exportedAt: 1 };
+    return v5Export();
   },
   updateAccount: async (id, data, opts) => {
     calls.push(["updateAccount", id, data, opts]);
@@ -56,58 +58,60 @@ test("bootstrap snippet acts as a full executor", async () => {
   vm.createContext(sandbox);
   vm.runInContext(bridge.bootstrapSnippet(), sandbox);
 
-  // Wait for the snippet to authenticate
-  for (let i = 0; i < 50; i++) {
+  try {
+    // Wait for the snippet to authenticate
+    for (let i = 0; i < 50; i++) {
+      const status = await bridge.checkConnection();
+      if (status.browser) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
     const status = await bridge.checkConnection();
-    if (status.browser) break;
-    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(status.browser, true);
+    assert.equal(status.apiAvailable, true);
+    // The fake API reports version 2: a ProjectionLab 5 page.
+    assert.equal(status.apiContract, 2);
+    // validateApiKey is absent from the fake API object; the snippet reports
+    // "method unavailable" and the bridge records a key error. Not asserting
+    // apiKeyValid here.
+
+    const described = await bridge.describePluginApi();
+    assert.equal(described.exportData, "function(1 args)");
+    assert.equal(described.updateAccount, "function(3 args)");
+
+    const data = await bridge.exportData({ fresh: true });
+    assert.deepEqual(data.documents.plans, v5Export().documents.plans);
+
+    // The snippet has no plan-edits switch, so it only reads: the bridge
+    // refuses the write before sending it, and the page never sees it.
+    assert.equal(status.writesEnabled, false);
+    assert.equal(await bridge.editAccess(), "unsupported");
+    await assert.rejects(bridge.updateAccount("acct-1", { balance: 42 }, true), {
+      code: "READ_ONLY_MODE",
+      message: /no plan-edits switch/,
+    });
+    assert.deepEqual(calls, []);
+
+    // A page whose API has no version is ProjectionLab 4, which is refused.
+    delete pluginApi.version;
+    await assert.rejects(bridge.apiContract(), {
+      code: "UNSUPPORTED_API_VERSION",
+      message: /ProjectionLab 4/,
+    });
+    pluginApi.version = 2;
+
+    // Second install in the same tab is a no-op
+    vm.runInContext(bridge.bootstrapSnippet(), sandbox);
+    assert.equal(sandbox.window.__plmcpBootstrap, true);
+  } finally {
+    // Stub out WebSocket so the snippet's reconnect loop can't create live
+    // sockets after shutdown and hold the process open.
+    sandbox.WebSocket = class {
+      send() {}
+      close() {}
+    };
+    await bridge.close();
   }
-
-  const status = await bridge.checkConnection();
-  assert.equal(status.browser, true);
-  assert.equal(status.apiAvailable, true);
-  // The fake API has no version property: a ProjectionLab 4 page.
-  assert.equal(status.apiContract, 1);
-  // validateApiKey is absent from the fake API object; the snippet reports
-  // "method unavailable" and the bridge records a key error - matching how
-  // older PL builds behave. Not asserting apiKeyValid here.
-
-  const described = await bridge.describePluginApi();
-  assert.equal(described.exportData, "function(1 args)");
-  assert.equal(described.updateAccount, "function(3 args)");
-
-  const data = await bridge.exportData({ fresh: true });
-  assert.deepEqual(data.plans, []);
-
-  // The snippet has no plan-edits switch, so it only reads: the bridge
-  // refuses the write before sending it, and the page never sees it.
-  assert.equal(status.writesEnabled, false);
-  assert.equal(await bridge.editAccess(), "unsupported");
-  await assert.rejects(bridge.updateAccount("acct-1", { balance: 42 }, true, "v4"), {
-    code: "READ_ONLY_MODE",
-    message: /no plan-edits switch/,
-  });
-  assert.deepEqual(calls, []);
-
-  // A ProjectionLab 5 page reports api.version 2, and restoreProgress, which
-  // ProjectionLab 5 removed, is refused before it reaches the API.
-  pluginApi.version = 2;
-  assert.equal(await bridge.apiContract(), 2);
-  await assert.rejects(bridge.restoreProgress({}, "v5"), (err) => err.code === "WRITE_NOT_SUPPORTED");
-  assert.deepEqual(calls, []);
-  delete pluginApi.version;
-
-  // Second install in the same tab is a no-op
-  vm.runInContext(bridge.bootstrapSnippet(), sandbox);
-  assert.equal(sandbox.window.__plmcpBootstrap, true);
-
-  // Stub out WebSocket so the snippet's reconnect loop can't create live
-  // sockets after shutdown and hold the process open.
-  sandbox.WebSocket = class {
-    send() {}
-    close() {}
-  };
-  await bridge.close();
 });
 
 test("bootstrap snippet refuses a method outside the wire protocol", async () => {

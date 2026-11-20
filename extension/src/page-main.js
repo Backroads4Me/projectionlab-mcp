@@ -4,7 +4,7 @@ export async function executePageRequest(request) {
   // The Plugin API calls the wire protocol defines (src/types/wire.ts
   // WireMethod). Kept inside this function because executeScript serializes
   // it into the page without its module scope.
-  const PLUGIN_METHODS = ["exportData", "getAccounts", "updateAccount", "updateAccountValues", "restoreCurrentFinances", "restorePlans", "restoreProgress", "restoreSettings", "validateApiKey"];
+  const PLUGIN_METHODS = ["exportData", "getAccounts", "updateAccount", "updateAccountValues", "restoreCurrentFinances", "restorePlans", "restoreSettings", "validateApiKey"];
   const META_METHODS = ["waitForApi", "describeApi", "apiVersion"];
   function waitForApi(timeoutMs) {
     return new Promise((resolve, reject) => {

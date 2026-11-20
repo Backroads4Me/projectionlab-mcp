@@ -13,8 +13,8 @@ export function registerExportTool(server: McpServer, bridge: Bridge) {
       title: "Export Data",
       description:
         "Export the complete current state from ProjectionLab as a JSON object: plans, current " +
-        "finances, settings, and progress (ProjectionLab 4) or account history (ProjectionLab 5). " +
-        "The layout differs by version. This is the primary source of truth. " +
+        "finances, settings, and account history, in ProjectionLab 5's documents envelope. " +
+        "This is the primary source of truth. " +
         "WARNING: the full export is very large; results over the inline limit are saved " +
         "to a file and a pointer is returned. " +
         "Prefer projectionlab_get_plan or projectionlab_get_plan_section for targeted access. " +

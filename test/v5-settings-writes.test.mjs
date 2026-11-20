@@ -43,8 +43,8 @@ function v5Bridge(state = stampedExport()) {
     async exportData() {
       return structuredClone(state);
     },
-    async restoreSettings(submitted, layout) {
-      writes.push({ name: "restoreSettings", submitted: structuredClone(submitted), layout });
+    async restoreSettings(submitted) {
+      writes.push({ name: "restoreSettings", submitted: structuredClone(submitted) });
       const next = structuredClone(submitted);
       next.lastUpdated = (state.documents.settings.lastUpdated ?? 0) + 1;
       state.documents.settings = next;
@@ -53,7 +53,6 @@ function v5Bridge(state = stampedExport()) {
     restoreCurrentFinances: refuse("restoreCurrentFinances"),
     restorePlans: refuse("restorePlans"),
     restorePlansIfUnchanged: refuse("restorePlansIfUnchanged"),
-    restoreProgress: refuse("restoreProgress"),
   };
 }
 
@@ -62,13 +61,13 @@ function snapshotStore() {
   const created = [];
   return {
     created,
-    async create(operation, sections, data, layout) {
+    async create(operation, sections, data) {
       const snapshot = {
         id: `snap-${created.length + 1}`,
         timestamp: new Date(created.length).toISOString(),
         operation,
         sections,
-        layout,
+        layout: "v5",
         data: structuredClone(data),
       };
       created.push(snapshot);
@@ -128,13 +127,12 @@ test("restore_settings on v5 previews, then replaces the settings and verifies d
   assert.doesNotMatch(JSON.stringify(done), new RegExp(STORED_KEY));
 
   assert.equal(snapshots.created.length, 1);
-  assert.equal(snapshots.created[0].layout, "v5");
   assert.deepEqual(snapshots.created[0].sections, ["settings"]);
   assert.deepEqual(snapshots.created[0].data.settings, stampedExport().documents.settings);
 
   const written = structuredClone(settings);
   written.plugins.apiKey = STORED_KEY;
-  assert.deepEqual(bridge.writes, [{ name: "restoreSettings", submitted: written, layout: "v5" }]);
+  assert.deepEqual(bridge.writes, [{ name: "restoreSettings", submitted: written }]);
   assert.equal(bridge.state.documents.settings.plugins.apiKey, STORED_KEY);
   assert.deepEqual(bridge.state.documents.settings.plan.alignment, { type: "rolling" });
   assert.notEqual(bridge.state.documents.settings.lastUpdated, settings.lastUpdated);
@@ -142,8 +140,8 @@ test("restore_settings on v5 previews, then replaces the settings and verifies d
 
 test("restore_settings on v5 reports a settings change that did not land as unverified", async () => {
   const bridge = v5Bridge();
-  bridge.restoreSettings = async (submitted, layout) => {
-    bridge.writes.push({ name: "restoreSettings", submitted: structuredClone(submitted), layout });
+  bridge.restoreSettings = async (submitted) => {
+    bridge.writes.push({ name: "restoreSettings", submitted: structuredClone(submitted) });
   };
   const call = tools(bridge, snapshotStore());
   const done = await call("projectionlab_restore_settings", { settings: changedSettings(), confirm: true });
@@ -168,7 +166,6 @@ test("rollback undoes a v5 settings change exactly", async () => {
   assert.equal(done.verified, true, JSON.stringify(done));
   assert.deepEqual(done.restoredSections, ["settings"]);
   assert.equal(bridge.writes.at(-1).name, "restoreSettings");
-  assert.equal(bridge.writes.at(-1).layout, "v5");
   const { lastUpdated: _restamped, ...restored } = bridge.state.documents.settings;
   const { lastUpdated: _original, ...original } = stampedExport().documents.settings;
   assert.deepEqual(restored, original);

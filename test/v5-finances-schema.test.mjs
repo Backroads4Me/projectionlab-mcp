@@ -1,5 +1,4 @@
-// projectionlab_describe_schema on a ProjectionLab 5 export, and its unchanged
-// ProjectionLab 4 output.
+// projectionlab_describe_schema on a ProjectionLab 5 export.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -139,50 +138,4 @@ test("a v5 export without a plans list is refused", async () => {
 
   assert.equal(result.isError, true);
   assert.match(JSON.parse(result.content[0].text).message, /documents\.plans/);
-});
-
-test("v4 schema is unchanged and carries no v5 fields", async () => {
-  const schema = await schemaOf({
-    meta: { version: "4.6.0" },
-    today: {
-      investmentAccounts: [{ id: "inv1", name: "Brokerage", balance: 120000 }],
-      savingsAccounts: [{ id: "sav1", name: "Emergency", value: 9000 }],
-      debts: [{ id: "d1", name: "Car loan", balance: 8000 }],
-      assets: [
-        { id: "re1", name: "Lake house", type: "real-estate", balance: 210000, amount: 465000 },
-      ],
-    },
-    plans: [{ id: "p1", name: "Base", income: { events: [{}] }, milestones: [{}, {}] }],
-    settings: {},
-    progress: { data: [{}, {}, {}] },
-  });
-
-  assert.deepEqual(schema, {
-    topLevelKeys: {
-      meta: "object",
-      today: "object",
-      plans: "array(1)",
-      settings: "object",
-      progress: "object",
-    },
-    accounts: [
-      { id: "inv1", name: "Brokerage", type: "investmentAccounts", balance: 120000 },
-      { id: "sav1", name: "Emergency", type: "savingsAccounts", balance: 9000 },
-      { id: "d1", name: "Car loan", type: "debts", balance: 8000 },
-      { id: "re1", name: "Lake house", type: "real-estate", marketValue: 465000, loanBalance: 210000 },
-    ],
-    plans: [{ id: "p1", name: "Base", incomeCount: 1, expenseCount: 0, milestoneCount: 2 }],
-    progressEntryCount: 3,
-  });
-});
-
-test("v4 schema of an empty export is empty", async () => {
-  const schema = await schemaOf({});
-
-  assert.deepEqual(schema, {
-    topLevelKeys: {},
-    accounts: [],
-    plans: [],
-    progressEntryCount: 0,
-  });
 });

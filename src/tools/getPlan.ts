@@ -5,7 +5,6 @@ import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
 import { redactSecrets } from "../redact.js";
-import { detectLayout } from "../layout.js";
 import {
   NOT_REPORTED,
   resolvePlan,
@@ -57,9 +56,8 @@ export function registerGetPlanTool(server: McpServer, bridge: Bridge) {
           sections: Object.keys(plan).sort(),
           // A ProjectionLab 5 plan carries no `active` flag, so the header
           // says so rather than implying the plan is inactive.
-          ...(detectLayout(data) === "v5"
-            ? { layout: "v5", active: NOT_REPORTED }
-            : {}),
+          layout: "v5",
+          active: NOT_REPORTED,
         };
 
         const output = `Plan summary: ${toJson(header)}\n\nFull plan data:\n${toJson(redactSecrets(plan, { byName: true }))}`;

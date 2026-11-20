@@ -3,18 +3,16 @@
 // when the caller addresses that leaf. Only a leaf the write changes is
 // checked, so a value the plan already stores outside the list rides through a
 // whole-object write instead of blocking every other field beside it.
-// ProjectionLab 4 is where the enforced
-// entries below an array path and below a second nested object live:
-// `milestones.criteria.*.type`, `milestones.criteria.*.householdMemberId`, and
-// `variables.bondSettings.location.type`, all evidence "observed".
+// The enforced entries here are `assets.yearlyChange.type` and
+// `variables.alignment.type`, both evidence "observed".
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
-import { contractOf } from "./helpers/contract.mjs";
 import { z } from "zod";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -30,11 +28,8 @@ const { registerUpdatePlanSettingsTool } = await import(
   "../dist/tools/updatePlanSettings.js"
 );
 const { SnapshotManager } = await import("../dist/snapshot.js");
-const { registerUpdateAccountTool } = await import(
-  "../dist/tools/updateAccount.js"
-);
 
-/** A v4 plan holding each container whose nested enums are observed. */
+/** A ProjectionLab 5 plan holding each container whose nested enums are observed. */
 function planState() {
   return {
     plans: [
@@ -45,40 +40,23 @@ function planState() {
         variables: {
           assumptionsMode: "fixed",
           inflation: 3,
-          bondSettings: {
-            allocationType: "target",
-            location: { type: "evenly", accountOrder: [] },
-          },
+          alignment: { type: "calendar", month: 1 },
         },
         assets: {
           events: [
             {
               id: "asset-1",
+              kind: "real-asset",
+              type: "house",
               name: "House",
-              type: "real-estate",
-              amount: 400_000,
-              amountType: "today$",
+              value: 400_000,
               yearlyChange: { type: "appreciate", amount: 0.02 },
             },
           ],
         },
-        milestones: [
-          {
-            id: "m1",
-            name: "Retirement",
-            criteria: [
-              { type: "year", value: "2040-01-01", modifier: "include" },
-            ],
-          },
-        ],
+        milestones: [],
       },
     ],
-    today: {
-      savingsAccounts: [],
-      investmentAccounts: [],
-      debts: [],
-      assets: [],
-    },
   };
 }
 
@@ -87,25 +65,18 @@ function fakeBridge(state) {
     state,
     writes: [],
     async apiContract() {
-      return contractOf(state);
+      return 2;
     },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
-      return structuredClone(state);
+      return asV5Export(structuredClone(state));
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {
       bridge.writes.push(structuredClone(plans));
       state.plans = structuredClone(plans);
-    },
-    async updateAccount(accountId, data) {
-      bridge.writes.push(structuredClone(data));
-      for (const collection of Object.values(state.today)) {
-        const account = collection.find((item) => item.id === accountId);
-        if (account) Object.assign(account, structuredClone(data));
-      }
     },
   };
   return bridge;
@@ -138,7 +109,7 @@ const eventCaller = (bridge) =>
     bridge,
   );
 
-test("a whole yearlyChange object on a v4 asset is checked leaf by leaf", async () => {
+test("a whole yearlyChange object on an asset is checked leaf by leaf", async () => {
   const state = planState();
   const bridge = fakeBridge(state);
   const call = eventCaller(bridge);
@@ -156,7 +127,7 @@ test("a whole yearlyChange object on a v4 asset is checked leaf by leaf", async 
   assert.match(refused.message, /"assets\.yearlyChange\.type"/);
   assert.match(
     refused.message,
-    /Allowed values: inflation\+, inflation-, depreciate, appreciate\./,
+    /Allowed values: none, appreciate, depreciate, custom, match-inflation, inflation\+, inflation-\./,
   );
   assert.deepEqual(bridge.writes, []);
   assert.equal(
@@ -174,58 +145,7 @@ test("a whole yearlyChange object on a v4 asset is checked leaf by leaf", async 
   );
 });
 
-test("a whole criteria array is checked element by element", async () => {
-  const state = planState();
-  const bridge = fakeBridge(state);
-  const call = eventCaller(bridge);
-  const write = (criteria) =>
-    call({
-      planIdentifier: "Retire",
-      section: "milestones",
-      eventIdentifier: "Retirement",
-      pathChanges: { criteria },
-      confirm: true,
-    });
-
-  // `criteria.0.type` sits two segments below the changed path, inside the
-  // object the array element holds.
-  const refusedType = await write([
-    { type: "someday", value: "2040-01-01", modifier: "include" },
-  ]);
-  assert.equal(refusedType.error, "INVALID_INPUT", JSON.stringify(refusedType));
-  assert.match(refusedType.message, /"milestones\.criteria\.0\.type"/);
-  assert.match(
-    refusedType.message,
-    /Allowed values: date, year, milestone, netWorth, totalDebt, age\./,
-  );
-
-  // The other enforced entry under the same array path.
-  const refusedMember = await write([
-    { type: "age", age: 65, householdMemberId: "partner", modifier: "include" },
-  ]);
-  assert.equal(refusedMember.error, "INVALID_INPUT", JSON.stringify(refusedMember));
-  assert.match(
-    refusedMember.message,
-    /"milestones\.criteria\.0\.householdMemberId"/,
-  );
-  assert.deepEqual(bridge.writes, []);
-  assert.deepEqual(state.plans[0].milestones[0].criteria, [
-    { type: "year", value: "2040-01-01", modifier: "include" },
-  ]);
-
-  const done = await write([
-    { type: "age", age: 65, householdMemberId: "me", modifier: "include" },
-  ]);
-  assert.equal(done.success, true, JSON.stringify(done));
-  assert.equal(done.verified, true, JSON.stringify(done));
-  assert.deepEqual(bridge.writes[0][0].milestones[0].criteria, [
-    { type: "age", age: 65, householdMemberId: "me", modifier: "include" },
-  ]);
-});
-
-test("a whole bondSettings object is checked two nested objects down", async () => {
-  // `bondSettings.location.type` is three segments below the scope, so a
-  // one-level walk would miss it.
+test("a whole alignment object is checked one nested object down", async () => {
   const state = planState();
   const bridge = fakeBridge(state);
   const call = toolCaller(
@@ -233,48 +153,45 @@ test("a whole bondSettings object is checked two nested objects down", async () 
     "projectionlab_update_plan_settings",
     bridge,
   );
-  const write = (bondSettings) =>
+  const write = (alignment) =>
     call({
       planIdentifier: "Retire",
       section: "variables",
-      changes: { bondSettings },
+      changes: { alignment },
       confirm: true,
     });
 
-  const refused = await write({
-    allocationType: "target",
-    location: { type: "sideways", accountOrder: [] },
-  });
+  const refused = await write({ type: "sideways", month: 1 });
   assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
-  assert.match(refused.message, /"variables\.bondSettings\.location\.type"/);
-  assert.match(refused.message, /Allowed values: evenly, account-order\./);
+  assert.match(refused.message, /"variables\.alignment\.type"/);
+  assert.match(
+    refused.message,
+    /Allowed values: calendar, rolling, au-tax, uk-tax, custom\./,
+  );
   assert.deepEqual(bridge.writes, []);
   assert.equal(
-    state.plans[0].variables.bondSettings.location.type,
-    "evenly",
-    "the plan keeps its placement until a valid value arrives",
+    state.plans[0].variables.alignment.type,
+    "calendar",
+    "the plan keeps its alignment until a valid value arrives",
   );
 
-  const done = await write({
-    allocationType: "target",
-    location: { type: "account-order", accountOrder: ["acct-1"] },
-  });
+  const done = await write({ type: "rolling", month: 4 });
   assert.equal(done.success, true, JSON.stringify(done));
   assert.equal(done.verified, true, JSON.stringify(done));
-  assert.deepEqual(bridge.writes[0][0].variables.bondSettings.location, {
-    type: "account-order",
-    accountOrder: ["acct-1"],
+  assert.deepEqual(bridge.writes[0][0].variables.alignment, {
+    type: "rolling",
+    month: 4,
   });
 });
 
-/** A `yearlyChange.type` the ProjectionLab 4 registry never observed. */
-const STORED_OUT_OF_LIST = "match-inflation";
+/** A `yearlyChange.type` outside the observed list. */
+const STORED_OUT_OF_LIST = "legacy-rate";
 
 /**
- * The v4 plan with each out-of-list value already stored where a whole-object
- * write carries it: the asset event's and a Current Finances real asset's
- * `yearlyChange.type`. A plan can hold such a value from an older app version
- * or an import, and the fields beside it must stay writable.
+ * The plan with an out-of-list value already stored where a whole-object
+ * write carries it: the asset event's `yearlyChange.type`. A plan can hold
+ * such a value from an older app version or an import, and the fields beside
+ * it must stay writable.
  */
 function planStateWithStoredOutliers() {
   const state = planState();
@@ -282,13 +199,6 @@ function planStateWithStoredOutliers() {
     type: STORED_OUT_OF_LIST,
     amount: 0.02,
   };
-  state.today.assets = [
-    {
-      id: "real-1",
-      name: "Boat",
-      yearlyChange: { type: STORED_OUT_OF_LIST, amount: 0.02 },
-    },
-  ];
   return state;
 }
 
@@ -356,7 +266,7 @@ test("a whole yearlyChange object that moves a stored out-of-list type is refuse
   assert.match(refused.message, /"assets\.yearlyChange\.type"/);
   assert.match(
     refused.message,
-    /Allowed values: inflation\+, inflation-, depreciate, appreciate\./,
+    /Allowed values: none, appreciate, depreciate, custom, match-inflation, inflation\+, inflation-\./,
   );
   assert.deepEqual(bridge.writes, []);
   assert.equal(
@@ -382,99 +292,50 @@ test("a whole yearlyChange object that moves a stored out-of-list type to an all
   );
 });
 
-test("a whole nested object on a Current Finances asset keeps its stored out-of-list value", async () => {
-  const state = planStateWithStoredOutliers();
-  const bridge = fakeBridge(state);
-  const call = toolCaller(
-    registerUpdateAccountTool,
-    "projectionlab_update_account",
-    bridge,
-  );
-  const write = (yearlyChange) =>
-    call({ accountId: "real-1", pathChanges: { yearlyChange }, confirm: true });
-
-  const done = await write({ type: STORED_OUT_OF_LIST, amount: 0.05 });
-  assert.equal(done.success, true, JSON.stringify(done));
-  assert.equal(done.verified, true, JSON.stringify(done));
-  assert.deepEqual(state.today.assets[0].yearlyChange, {
-    type: STORED_OUT_OF_LIST,
-    amount: 0.05,
-  });
-
-  const refused = await write({ type: "keep-up", amount: 0.05 });
-  assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
-  assert.match(refused.message, /"assets\.yearlyChange\.type"/);
-  assert.equal(
-    state.today.assets[0].yearlyChange.amount,
-    0.05,
-    "the refused write left the account alone",
-  );
-});
-
-test("a new criteria element holding an out-of-list value is refused", async () => {
-  const state = planState();
-  const bridge = fakeBridge(state);
-  const call = eventCaller(bridge);
-
-  const refused = await call({
-    planIdentifier: "Retire",
-    section: "milestones",
-    eventIdentifier: "Retirement",
-    pathChanges: {
-      criteria: [
-        // The stored element, unchanged, riding along with the new one.
-        { type: "year", value: "2040-01-01", modifier: "include" },
-        { type: "someday", value: "2045-01-01", modifier: "include" },
-      ],
-    },
-    confirm: true,
-  });
-  assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
-  assert.match(refused.message, /"milestones\.criteria\.1\.type"/);
-  assert.deepEqual(bridge.writes, []);
-  assert.deepEqual(state.plans[0].milestones[0].criteria, [
-    { type: "year", value: "2040-01-01", modifier: "include" },
-  ]);
-});
-
 test("a refused second path applies neither path", async () => {
   const state = planStateWithStoredOutliers();
   const bridge = fakeBridge(state);
   const call = eventCaller(bridge);
 
   const refused = await assetWrite(call, {
-    amount: 410_000,
+    value: 410_000,
     yearlyChange: { type: "keep-up", amount: 0.02 },
   });
   assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
   assert.match(refused.message, /"assets\.yearlyChange\.type"/);
   assert.deepEqual(bridge.writes, []);
   assert.equal(
-    state.plans[0].assets.events[0].amount,
+    state.plans[0].assets.events[0].value,
     400_000,
     "the accepted first path was not applied either",
   );
 });
 
-test("a field the patch adds is checked leaf by leaf, inside an array too", async () => {
+test("a field the patch adds is checked leaf by leaf", async () => {
   const state = planState();
-  // A milestone that stores no criteria yet, so the patch adds the field.
-  state.plans[0].milestones.push({ id: "ms-bare", name: "Bare" });
+  // An asset that stores no yearlyChange yet, so the patch adds the field.
+  state.plans[0].assets.events.push({
+    id: "asset-bare",
+    kind: "real-asset",
+    type: "land",
+    name: "Bare",
+    value: 50_000,
+  });
   const bridge = fakeBridge(state);
   const call = eventCaller(bridge);
-  const patchCriteria = (type) =>
+  const patchYearlyChange = (type) =>
     call({
       planIdentifier: "Retire",
-      section: "milestones",
+      section: "assets",
       eventIdentifier: "Bare",
-      patch: { criteria: [{ type, value: "2045-01-01" }] },
+      patch: { yearlyChange: { type, amount: 0.01 } },
     });
 
-  const refused = await patchCriteria("someday");
+  const refused = await patchYearlyChange("sideways");
   assert.equal(refused.error, "INVALID_INPUT", JSON.stringify(refused));
-  assert.match(refused.message, /"milestones\.criteria\.0\.type"/);
+  assert.match(refused.message, /"assets\.yearlyChange\.type"/);
 
-  const accepted = await patchCriteria("year");
+  const accepted = await patchYearlyChange("appreciate");
   assert.equal(accepted.dryRun, true, JSON.stringify(accepted));
   assert.deepEqual(bridge.writes, []);
 });

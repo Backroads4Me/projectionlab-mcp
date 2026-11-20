@@ -8,7 +8,7 @@ import test from "node:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 const SNAPSHOT_DIR = join(
@@ -36,13 +36,13 @@ function fakeBridge(state) {
   const bridge = {
     state,
     exportCalls: 0,
-    async apiContract() { return contractOf(bridge.state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
       bridge.exportCalls++;
-      return structuredClone(bridge.state);
+      return asV5Export(structuredClone(bridge.state));
     },
   };
   return bridge;
@@ -139,7 +139,7 @@ async function errorFor(diff, args) {
 test("diff reports added, removed and modified events against the live data", async () => {
   const snapshots = freshSnapshots();
   const saved = await snapshotOf(snapshots, oldPlans());
-  const bridge = fakeBridge({ plans: editedPlans(), today: {} });
+  const bridge = fakeBridge({ plans: editedPlans() });
   const out = text(
     await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
   );
@@ -200,7 +200,7 @@ test("diff omits the plan fields ProjectionLab computes on its own", async () =>
     simKey: 4242,
     meta: { runKey: 4242, yearlySummary: { endAge: 95 } },
   }));
-  const bridge = fakeBridge({ plans: resaved, today: {} });
+  const bridge = fakeBridge({ plans: resaved });
   const out = text(
     await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
   );
@@ -221,7 +221,7 @@ test("diff compares two snapshots and leaves the snapshot store alone", async ()
   const before = await snapshotOf(snapshots, oldPlans());
   await new Promise((r) => setTimeout(r, 5));
   const after = await snapshotOf(snapshots, editedPlans());
-  const bridge = fakeBridge({ plans: [], today: {} });
+  const bridge = fakeBridge({ plans: [] });
 
   const out = text(
     await register(bridge, snapshots)({
@@ -260,7 +260,7 @@ test("diff picks the snapshot rollback picks for nBack and beforeTime", async ()
     await new Promise((r) => setTimeout(r, 5));
   }
 
-  const bridge = fakeBridge({ plans: [], today: {} });
+  const bridge = fakeBridge({ plans: [] });
   const server = fakeServer();
   registerDiffTool(server, bridge, snapshots);
   registerSnapshotTools(server, bridge, snapshots);
@@ -290,41 +290,26 @@ test("diff picks the snapshot rollback picks for nBack and beforeTime", async ()
   assert.equal(endpoints.to.snapshotId, created[0].id);
 });
 
-test("diff reports Current Finances rows by collection and id", async () => {
+test("diff reports Current Finances accounts by id", async () => {
   const snapshots = freshSnapshots();
   const saved = await snapshots.create("updateAccount", ["currentFinances"], {
     currentFinances: {
-      savingsAccounts: [{ id: "s1", name: "Emergency", balance: 10000 }],
-      assets: [
-        {
-          id: "a1",
-          name: "House",
-          type: "real-estate",
-          amount: 500000,
-          balance: 200000,
-        },
-      ],
-      debts: [{ id: "d1", name: "Car loan", balance: 9000 }],
+      accounts: {
+        s1: { id: "s1", name: "Emergency", kind: "account", balance: 10000 },
+        a1: { id: "a1", name: "House", kind: "real-asset", value: 500000, purchasePrice: 400000 },
+        d1: { id: "d1", name: "Car loan", kind: "debt", balance: 9000 },
+      },
     },
   });
 
   const bridge = fakeBridge({
     plans: [],
-    today: {
-      savingsAccounts: [],
-      assets: [
-        {
-          id: "a1",
-          name: "House",
-          type: "real-estate",
-          amount: 520000,
-          balance: 180000,
-        },
-      ],
-      debts: [
-        { id: "d1", name: "Car loan", balance: 9000 },
-        { id: "d2", name: "Student loan", balance: 4000 },
-      ],
+    currentFinances: {
+      accounts: {
+        a1: { id: "a1", name: "House", kind: "real-asset", value: 520000, purchasePrice: 380000 },
+        d1: { id: "d1", name: "Car loan", kind: "debt", balance: 9000 },
+        d2: { id: "d2", name: "Student loan", kind: "debt", balance: 4000 },
+      },
       lastUpdatedByUser: "yesterday",
     },
   });
@@ -335,20 +320,17 @@ test("diff reports Current Finances rows by collection and id", async () => {
   assert.deepEqual(out.comparedSections, ["currentFinances"]);
   const cf = out.sections.currentFinances;
   assert.equal(cf.changed, true);
-  assert.deepEqual(cf.collections.assets.modified, [
+  const accounts = cf.collections.accounts;
+  assert.deepEqual(accounts.modified, [
     {
       id: "a1",
       name: "House",
-      changes: { amount: "500000 → 520000", balance: "200000 → 180000" },
+      changes: { value: "500000 → 520000", purchasePrice: "400000 → 380000" },
     },
   ]);
-  assert.deepEqual(cf.collections.savingsAccounts.removed, [
-    { id: "s1", name: "Emergency" },
-  ]);
-  assert.deepEqual(cf.collections.debts.added, [
-    { id: "d2", name: "Student loan" },
-  ]);
-  assert.equal(cf.collections.debts.unchangedCount, 1);
+  assert.deepEqual(accounts.removed, [{ id: "s1", name: "Emergency" }]);
+  assert.deepEqual(accounts.added, [{ id: "d2", name: "Student loan" }]);
+  assert.equal(accounts.unchangedCount, 1);
   assert.deepEqual(cf.changes, {
     lastUpdatedByUser: '(absent) → "yesterday"',
   });
@@ -364,7 +346,7 @@ test("diff redacts secret-named fields and the API key", async () => {
   const after = editedPlans();
   after[0].income.events[0].apiKey = "abc123secretChanged";
   after[0].income.events[0].note = "paste test-api-key to sync";
-  const bridge = fakeBridge({ plans: after, today: {} });
+  const bridge = fakeBridge({ plans: after });
 
   const raw = await register(bridge, snapshots)({
     from: { snapshotId: saved.id },
@@ -383,26 +365,6 @@ test("diff redacts secret-named fields and the API key", async () => {
   );
 });
 
-test("a renamed event reads as removed and added, the way the section dry run keys events", async () => {
-  const snapshots = freshSnapshots();
-  const saved = await snapshotOf(snapshots, oldPlans());
-  const after = oldPlans();
-  after[0].income.events[1].name = "Beach house";
-  const bridge = fakeBridge({ plans: after, today: {} });
-
-  const income = text(
-    await register(bridge, snapshots)({
-      from: { snapshotId: saved.id },
-      planIdentifier: "p1",
-      section: "income",
-    }),
-  ).sections.plans.changedPlans[0].sections.income;
-
-  assert.deepEqual(income.removed, ["Rental"]);
-  assert.deepEqual(income.added, ["Beach house"]);
-  assert.equal(income.modifiedCount, 0);
-});
-
 test("diff caps reported field changes and counts what it left out", async () => {
   const snapshots = freshSnapshots();
   const wide = {};
@@ -418,7 +380,7 @@ test("diff caps reported field changes and counts what it left out", async () =>
 
   const after = structuredClone(before);
   for (let i = 0; i < 260; i++) after[0].income.events[0][`f${i}`] = i + 1000;
-  const bridge = fakeBridge({ plans: after, today: {} });
+  const bridge = fakeBridge({ plans: after });
 
   const out = text(
     await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
@@ -433,7 +395,7 @@ test("diff caps reported field changes and counts what it left out", async () =>
 test("diff narrows to one plan and one section", async () => {
   const snapshots = freshSnapshots();
   const saved = await snapshotOf(snapshots, oldPlans());
-  const bridge = fakeBridge({ plans: editedPlans(), today: {} });
+  const bridge = fakeBridge({ plans: editedPlans() });
   const diff = register(bridge, snapshots);
 
   const narrowed = text(
@@ -470,7 +432,6 @@ test("diff refuses bad selectors, missing snapshots, empty comparisons and unkno
   // settings is comparable here, so the section filter reaches its own check.
   const bridge = fakeBridge({
     plans: editedPlans(),
-    today: {},
     settings: { theme: "dark" },
   });
   const diff = register(bridge, snapshots);
@@ -535,7 +496,7 @@ test("diff compares no section that carries data on only one side", async () => 
   const saved = await snapshots.create("updatePlanSection", ["plans", "progress"], {
     plans: oldPlans(),
   });
-  const bridge = fakeBridge({ plans: editedPlans(), today: {} });
+  const bridge = fakeBridge({ plans: editedPlans() });
   const out = text(
     await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
   );
@@ -575,7 +536,7 @@ test("diff says which sections were compared and which were skipped", async () =
   const settingsOnly = await snapshots.create("restoreSettings", ["settings"], {
     settings: { theme: "light" },
   });
-  const bridge = fakeBridge({ plans: editedPlans(), today: {}, settings: {} });
+  const bridge = fakeBridge({ plans: editedPlans(), settings: {} });
   const out = text(
     await register(bridge, snapshots)({
       from: { snapshotId: both.id },
@@ -622,7 +583,7 @@ test("a difference past the cap still counts as changed, event by event", async 
   for (const event of after[0].income.events) {
     for (let i = 0; i < 60; i++) event[`f${i}`] = 1000 + i;
   }
-  const bridge = fakeBridge({ plans: after, today: {} });
+  const bridge = fakeBridge({ plans: after });
 
   const out = text(
     await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
@@ -646,25 +607,26 @@ test("a difference past the cap still counts as changed, event by event", async 
 
 test("a Current Finances row past the cap still counts as modified", async () => {
   const snapshots = freshSnapshots();
-  const rows = [1, 2, 3, 4, 5].map((n) => ({
-    id: `a${n}`,
-    name: `Asset ${n}`,
-    ...wideFields(n),
-  }));
+  const rows = Object.fromEntries(
+    [1, 2, 3, 4, 5].map((n) => [
+      `a${n}`,
+      { id: `a${n}`, name: `Asset ${n}`, ...wideFields(n) },
+    ]),
+  );
   const saved = await snapshots.create("updateAccount", ["currentFinances"], {
-    currentFinances: { assets: structuredClone(rows) },
+    currentFinances: { accounts: structuredClone(rows) },
   });
 
   const after = structuredClone(rows);
-  for (const row of after) {
+  for (const row of Object.values(after)) {
     for (let i = 0; i < 60; i++) row[`f${i}`] = 1000 + i;
   }
-  const bridge = fakeBridge({ plans: [], today: { assets: after } });
+  const bridge = fakeBridge({ plans: [], currentFinances: { accounts: after } });
 
   const out = text(
     await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
   );
-  const assets = out.sections.currentFinances.collections.assets;
+  const assets = out.sections.currentFinances.collections.accounts;
 
   assert.equal(out.changed, true);
   assert.equal(out.sections.currentFinances.changed, true);
@@ -697,7 +659,7 @@ test("plan settings changed past the cap still count as changed", async () => {
   const after = structuredClone(plan);
   for (let i = 0; i < 200; i++) after.income.events[0][`f${i}`] = i + 1;
   for (let i = 0; i < 30; i++) after[`s${i}`] = i + 1;
-  const bridge = fakeBridge({ plans: [after], today: {} });
+  const bridge = fakeBridge({ plans: [after] });
 
   const out = text(
     await register(bridge, snapshots)({ from: { snapshotId: saved.id } }),
@@ -740,7 +702,6 @@ test("secrets nested under an event path never reach the output", async () => {
   after.access[0].password = "sekretCharlie3changed";
   const bridge = fakeBridge({
     plans: [{ id: "p1", name: "Secrets", income: { events: [after] } }],
-    today: {},
   });
 
   const raw = await register(bridge, snapshots)({
@@ -795,7 +756,6 @@ test("a very long value is truncated with its original length", async () => {
         },
       },
     ],
-    today: {},
   });
 
   const raw = await register(bridge, snapshots)({

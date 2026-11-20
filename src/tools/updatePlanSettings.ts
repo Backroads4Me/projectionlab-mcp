@@ -19,7 +19,7 @@ import {
   requirePlans,
   type PlanObj,
 } from "../plans.js";
-import { detectLayout, exportSections } from "../layout.js";
+import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 export function registerUpdatePlanSettingsTool(
@@ -89,7 +89,6 @@ export function registerUpdatePlanSettingsTool(
           plan[section],
           incoming,
           section,
-          detectLayout(data),
         );
 
         if (!confirm) {
@@ -134,7 +133,7 @@ export function registerUpdatePlanSettingsTool(
 
         const snapshot = await snapshots.create("updatePlanSettings", ["plans"], {
           plans,
-        }, detectLayout(data));
+        });
 
         const updatedPlans = [...plans];
         updatedPlans[planIndex] = { ...plan, [section]: updated };
@@ -142,7 +141,7 @@ export function registerUpdatePlanSettingsTool(
           "updatePlanSettings",
           `Patching ${Object.keys(changes).length} setting(s) in "${section}" of plan "${plan.name}"`,
         );
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
 
         const verifyData = await bridge.exportData({ fresh: true });
         const verifiedPlan = (

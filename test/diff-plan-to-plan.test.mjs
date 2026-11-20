@@ -10,6 +10,7 @@ import test from "node:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 const SNAPSHOT_DIR = join(
@@ -42,7 +43,7 @@ function fakeBridge(state) {
     },
     async exportData() {
       bridge.exportCalls++;
-      return structuredClone(bridge.state);
+      return asV5Export(structuredClone(bridge.state));
     },
   };
   return bridge;
@@ -159,7 +160,7 @@ async function errorFor(diff, args) {
 
 test("two plans with different ids and the same content compare as equal", async () => {
   const [original, rebuilt] = sameContentPlans();
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const out = text(
     await register(bridge)({ planA: "Original", planB: "Rebuilt" }),
   );
@@ -208,7 +209,7 @@ test("a reference to the same-named milestone compares equal across plans", asyn
   assert.equal(original.income.events[0].end.value, "a-m1");
   assert.equal(rebuilt.income.events[0].end.value, "b-m1");
 
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const out = text(
     await register(bridge)({
       planA: "Original",
@@ -225,7 +226,7 @@ test("a reference to the same-named milestone compares equal across plans", asyn
 test("a reference to a differently named milestone reads as a difference", async () => {
   const [original, rebuilt] = sameContentPlans();
   rebuilt.milestones[0].name = "Stop working";
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const out = text(
     await register(bridge)({
       planA: "Original",
@@ -252,7 +253,7 @@ test("an id that is not an event of the plan is compared as it is", async () => 
   // Current Finances ids belong to the account book, not to a plan, so a plan
   // pointing at another account is a real difference and stays readable.
   rebuilt.accounts.events[0].accountId = "cf-acc-2";
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const out = text(
     await register(bridge)({
       planA: "Original",
@@ -274,7 +275,7 @@ test("events whose random keys differ compare as the same", async () => {
   // share nothing, the way two plans built separately do.
   assert.notEqual(original.income.events[0].key, rebuilt.income.events[0].key);
 
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const diff = register(bridge);
   const out = text(await diff({ planA: "Original", planB: "Rebuilt" }));
 
@@ -312,7 +313,7 @@ test("an event only one plan carries is reported against that plan", async () =>
     name: "Boat",
     amount: 9000,
   });
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const out = text(
     await register(bridge)({ planA: "Original", planB: "Rebuilt" }),
   );
@@ -334,7 +335,7 @@ test("an event only one plan carries is reported against that plan", async () =>
 test("a plan setting that differs is reported outside the sections", async () => {
   const [original, rebuilt] = sameContentPlans();
   rebuilt.retirementAge = 57;
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const out = text(
     await register(bridge)({ planA: "Original", planB: "Rebuilt" }),
   );
@@ -354,7 +355,7 @@ test("pathsOnly reports the differing paths and never a value", async () => {
   rebuilt.expenses.events[0].note = SENTINEL;
   rebuilt.expenses.events[0].amount = 61000;
   rebuilt.retirementAge = 57;
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const diff = register(bridge);
 
   // The sentinel is a value the diff would otherwise print, so its absence in
@@ -390,7 +391,7 @@ test("pathsOnly also hides values in the points-in-time mode", async () => {
   });
   const edited = structuredClone(original);
   edited.income.events[0].note = "PRIVATE-SENTINEL-live-value";
-  const bridge = fakeBridge({ plans: [edited], today: {} });
+  const bridge = fakeBridge({ plans: [edited] });
 
   const json = (
     await register(bridge, snapshots)({
@@ -413,7 +414,7 @@ test("both plans can come from one snapshot, without reading the browser", async
   const saved = await snapshots.create("updatePlanSection", ["plans"], {
     plans: [original, rebuilt],
   });
-  const bridge = fakeBridge({ plans: [], today: {} });
+  const bridge = fakeBridge({ plans: [] });
 
   const out = text(
     await register(bridge, snapshots)({
@@ -435,7 +436,7 @@ test("a snapshot with no plans data says so", async () => {
   const saved = await snapshots.create("restoreSettings", ["settings"], {
     settings: { theme: "dark" },
   });
-  const bridge = fakeBridge({ plans: sameContentPlans(), today: {} });
+  const bridge = fakeBridge({ plans: sameContentPlans() });
 
   const out = await errorFor(register(bridge, snapshots), {
     planA: "Original",
@@ -452,7 +453,7 @@ test("planA and planB cannot borrow arguments from the points-in-time mode", asy
   const saved = await snapshots.create("updatePlanSection", ["plans"], {
     plans: [original, rebuilt],
   });
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const diff = register(bridge, snapshots);
 
   const withTo = await errorFor(diff, {
@@ -491,7 +492,7 @@ test("planA and planB cannot borrow arguments from the points-in-time mode", asy
 
 test("a plan-to-plan call refuses to compare a plan with itself", async () => {
   const [original, rebuilt] = sameContentPlans();
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
 
   const out = await errorFor(register(bridge), {
     planA: "Original",
@@ -503,7 +504,7 @@ test("a plan-to-plan call refuses to compare a plan with itself", async () => {
 
 test("a plan name that matches nothing names the side that failed", async () => {
   const [original, rebuilt] = sameContentPlans();
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
 
   const out = await errorFor(register(bridge), {
     planA: "Original",
@@ -517,7 +518,7 @@ test("a plan name that matches nothing names the side that failed", async () => 
 
 test("the plan-to-plan mode reads the live app once and writes nothing", async () => {
   const [original, rebuilt] = sameContentPlans();
-  const bridge = fakeBridge({ plans: [original, rebuilt], today: {} });
+  const bridge = fakeBridge({ plans: [original, rebuilt] });
   const snapshots = freshSnapshots();
   const server = fakeServer();
   registerDiffTool(server, bridge, snapshots);

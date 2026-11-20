@@ -8,6 +8,7 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 const SNAPSHOT_DIR = join(
@@ -64,7 +65,6 @@ test("diff runs with plan edits turned off and saves nothing", async () => {
         milestones: [],
       },
     ],
-    today: {},
   };
   const bridge = {
     writes: [],
@@ -72,7 +72,7 @@ test("diff runs with plan edits turned off and saves nothing", async () => {
       return "disabled";
     },
     async exportData() {
-      return structuredClone(state);
+      return asV5Export(structuredClone(state));
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {

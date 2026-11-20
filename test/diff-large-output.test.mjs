@@ -6,6 +6,7 @@ import test from "node:test";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.HOME = mkdtempSync(join(tmpdir(), "plmcp-diff-home-"));
@@ -66,7 +67,7 @@ test("a diff over the inline limit is spilled to a file with its summary", async
       return "enabled";
     },
     async exportData() {
-      return { plans: [changed], today: {} };
+      return asV5Export({ plans: [changed] });
     },
   };
   const server = fakeServer();
@@ -145,7 +146,7 @@ test("a spilled plan-to-plan diff scrubs the Plugin API key from its inline summ
       return "enabled";
     },
     async exportData() {
-      return { plans: [structuredClone(base), structuredClone(other)], today: {} };
+      return asV5Export({ plans: [structuredClone(base), structuredClone(other)] });
     },
   };
   const server = fakeServer();

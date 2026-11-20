@@ -20,11 +20,8 @@
  *
  * The baseline plan (`settings.plan.baselineId`) keeps no overrides:
  * ProjectionLab deletes `_meta.overriddenFields` from its events.
- *
- * ProjectionLab 4 plans have no such links.
  */
 
-import type { ExportLayout } from "./layout.js";
 import type { PlanObj } from "./plans.js";
 import { ProjectionLabError } from "./errors.js";
 
@@ -90,13 +87,9 @@ function linkValue(event: PlanObj, key: string): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-/** The link a plan event carries on ProjectionLab 5, or undefined. */
-export function eventLink(
-  section: string,
-  event: unknown,
-  layout: ExportLayout,
-): EventLink | undefined {
-  if (layout !== "v5" || !event || typeof event !== "object" || Array.isArray(event)) {
+/** The link a plan event carries, or undefined. */
+export function eventLink(section: string, event: unknown): EventLink | undefined {
+  if (!event || typeof event !== "object" || Array.isArray(event)) {
     return undefined;
   }
   const obj = event as PlanObj;

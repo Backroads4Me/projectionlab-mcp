@@ -1,15 +1,14 @@
-// Export layouts and Plugin API contracts (src/layout.ts): telling a
-// ProjectionLab 4 export from a ProjectionLab 5 one, reading their sections
-// under one set of names, and the rollback refusal across layouts.
+// The export layout and Plugin API contract (src/layout.ts): reading a
+// ProjectionLab 5 export's sections, refusing a ProjectionLab 4 export or
+// page, and refusing to roll back a snapshot not taken from ProjectionLab 5.
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { v5Export } from "./fixtures/v5-export.mjs";
-import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 const SNAPSHOT_DIR = join(mkdtempSync(join(tmpdir(), "plmcp-v5-layout-")), "snapshots");
@@ -21,6 +20,7 @@ const { assertPlansUnchanged } = await import("../dist/planVersion.js");
 const { registerSnapshotTools } = await import("../dist/tools/snapshots.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
 
+/** A ProjectionLab 4 export, which the server refuses. */
 const v4Export = () => ({
   meta: { version: "4.6.0" },
   today: { accounts: [{ id: "a1", name: "Brokerage", balance: 1 }] },
@@ -29,20 +29,19 @@ const v4Export = () => ({
   progress: { data: [] },
 });
 
-test("detectLayout tells the two export layouts apart by shape", () => {
-  assert.equal(layout.detectLayout(v5Export()), "v5");
-  assert.equal(layout.detectLayout(v4Export()), "v4");
-  assert.equal(layout.detectLayout({}), "v4");
-  assert.equal(layout.detectLayout(null), "v4");
+test("isV5Export recognizes the ProjectionLab 5 envelope by shape", () => {
+  assert.equal(layout.isV5Export(v5Export()), true);
+  assert.equal(layout.isV5Export(v4Export()), false);
+  assert.equal(layout.isV5Export({}), false);
+  assert.equal(layout.isV5Export(null), false);
   // A numeric schema alone, or documents alone, is not the v5 envelope.
-  assert.equal(layout.detectLayout({ schema: 1, plans: [] }), "v4");
-  assert.equal(layout.detectLayout({ documents: {} }), "v4");
+  assert.equal(layout.isV5Export({ schema: 1, plans: [] }), false);
+  assert.equal(layout.isV5Export({ documents: {} }), false);
 });
 
 test("exportSections reads v5 documents under the shared section names", () => {
   const raw = v5Export();
   const sections = layout.exportSections(raw);
-  assert.equal(sections.layout, "v5");
   assert.equal(sections.plans, raw.documents.plans);
   assert.equal(sections.currentFinances, raw.documents.currentFinances);
   assert.equal(sections.settings, raw.documents.settings);
@@ -52,15 +51,13 @@ test("exportSections reads v5 documents under the shared section names", () => {
   assert.equal(layout.sectionOf(raw, "progress"), undefined);
 });
 
-test("exportSections reads v4 sections as before", () => {
-  const raw = v4Export();
-  const sections = layout.exportSections(raw);
-  assert.equal(sections.layout, "v4");
-  assert.equal(sections.plans, raw.plans);
-  assert.equal(sections.currentFinances, raw.today);
-  assert.equal(sections.progress, raw.progress);
-  assert.equal(sections.accountHistory, undefined);
-  assert.deepEqual(layout.exportSections({}).plans, []);
+test("exportSections refuses a ProjectionLab 4 export", () => {
+  for (const raw of [v4Export(), {}, null]) {
+    assert.throws(
+      () => layout.exportSections(raw),
+      (err) => err.code === "UNSUPPORTED_API_VERSION" && /ProjectionLab 5 format/.test(err.message),
+    );
+  }
 });
 
 test("a v5 export without a plans list is refused, never read as no plans", () => {
@@ -78,24 +75,28 @@ test("the plan conflict check compares against v5 plans, not an empty list", asy
   await assert.rejects(assertPlansUnchanged(bridge, read), (err) => err.code === "PLAN_CONFLICT");
 });
 
-test("contractFromVersion maps api.version to a supported contract or refuses", () => {
-  assert.equal(layout.contractFromVersion(undefined), 1);
-  assert.equal(layout.contractFromVersion(null), 1);
+test("contractFromVersion accepts contract 2 and refuses a ProjectionLab 4 page or any other version", () => {
   assert.equal(layout.contractFromVersion(2), 2);
+  for (const version of [undefined, null]) {
+    assert.throws(
+      () => layout.contractFromVersion(version),
+      (err) => err.code === "UNSUPPORTED_API_VERSION" && /ProjectionLab 4 Plugin API/.test(err.message),
+    );
+  }
   for (const version of [1, 3, "2", true]) {
     assert.throws(() => layout.contractFromVersion(version), (err) => err.code === "UNSUPPORTED_API_VERSION");
   }
-  assert.equal(layout.layoutForContract(1), "v4");
-  assert.equal(layout.layoutForContract(2), "v5");
 });
 
-test("assertSnapshotLayout refuses a snapshot from the other layout", () => {
-  layout.assertSnapshotLayout("v5", "v5");
-  layout.assertSnapshotLayout("v4", "v4");
-  // A snapshot with no recorded layout was taken from ProjectionLab 4.
-  layout.assertSnapshotLayout(undefined, "v4");
-  assert.throws(() => layout.assertSnapshotLayout(undefined, "v5"), (err) => err.code === "LAYOUT_MISMATCH");
-  assert.throws(() => layout.assertSnapshotLayout("v5", "v4"), (err) => err.code === "LAYOUT_MISMATCH");
+test("assertSnapshotLayout accepts only a ProjectionLab 5 snapshot", () => {
+  layout.assertSnapshotLayout("v5");
+  for (const recorded of ["v4", undefined, null]) {
+    assert.throws(() => layout.assertSnapshotLayout(recorded), (err) => err.code === "LAYOUT_MISMATCH");
+  }
+  assert.throws(
+    () => layout.assertSnapshotLayout("v4", "Custom fix."),
+    (err) => err.suggestion === "Custom fix.",
+  );
 });
 
 function fakeServer() {
@@ -112,7 +113,7 @@ function fakeBridge(data) {
   const bridge = {
     writes: [],
     async editAccess() { return "enabled"; },
-    async apiContract() { return contractOf(data); },
+    async apiContract() { return 2; },
     async exportData() {
       return structuredClone(data);
     },
@@ -122,9 +123,6 @@ function fakeBridge(data) {
     },
     async restoreCurrentFinances() {
       bridge.writes.push("currentFinances");
-    },
-    async restoreProgress() {
-      bridge.writes.push("progress");
     },
     async restoreSettings() {
       bridge.writes.push("settings");
@@ -144,41 +142,40 @@ async function rollbackTool(bridge) {
 
 const parse = (result) => JSON.parse(result.content[0].text);
 
-test("snapshots record the layout they were taken from", async () => {
+/**
+ * A snapshot on disk whose recorded layout is `recorded`, or absent when
+ * `recorded` is undefined, as a ProjectionLab 4 server wrote it.
+ */
+async function legacySnapshot(snapshots, recorded) {
+  const snap = await snapshots.create("updatePlanEvent", ["plans"], { plans: v4Export().plans });
+  const file = join(SNAPSHOT_DIR, `${snap.id}.json`);
+  const stored = JSON.parse(readFileSync(file, "utf-8"));
+  if (recorded === undefined) delete stored.layout;
+  else stored.layout = recorded;
+  writeFileSync(file, JSON.stringify(stored));
+  return snap;
+}
+
+test("snapshots record the ProjectionLab 5 layout", async () => {
   const { snapshots } = await rollbackTool(fakeBridge(v5Export()));
-  const snap = await snapshots.create("test", ["plans"], { plans: [] }, "v5");
+  const snap = await snapshots.create("test", ["plans"], { plans: [] });
   assert.equal(snap.layout, "v5");
   assert.equal((await snapshots.get(snap.id)).layout, "v5");
   assert.equal((await snapshots.list())[0].layout, "v5");
 });
 
-for (const confirm of [false, true]) {
-  test(`a v4 snapshot is refused on a v5 account (confirm: ${confirm})`, async () => {
-    const bridge = fakeBridge(v5Export());
-    const { snapshots, rollback } = await rollbackTool(bridge);
-    const snap = await snapshots.create("updatePlanEvent", ["plans"], { plans: v4Export().plans }, "v4");
-    const result = parse(await rollback({ snapshotId: snap.id, confirm }));
-    assert.equal(result.error, "LAYOUT_MISMATCH");
-    assert.match(result.suggestion, /Restore action in the ProjectionLab app/);
-    assert.deepEqual(bridge.writes, []);
-  });
+for (const recorded of ["v4", undefined]) {
+  for (const confirm of [false, true]) {
+    test(`a snapshot recording layout ${recorded} is refused before any write (confirm: ${confirm})`, async () => {
+      const bridge = fakeBridge(v5Export());
+      const { snapshots, rollback } = await rollbackTool(bridge);
+      const snap = await legacySnapshot(snapshots, recorded);
+      const result = parse(await rollback({ snapshotId: snap.id, confirm }));
+      assert.equal(result.error, "LAYOUT_MISMATCH", JSON.stringify(result));
+      assert.match(result.message, /ProjectionLab 4/);
+      assert.match(result.suggestion, /Restore action in the ProjectionLab app/);
+      assert.deepEqual(bridge.writes, []);
+      assert.equal((await snapshots.list()).length, 1, "no pre-rollback snapshot was taken");
+    });
+  }
 }
-
-test("a snapshot with no recorded layout is treated as v4 and refused on v5", async () => {
-  const bridge = fakeBridge(v5Export());
-  const { snapshots, rollback } = await rollbackTool(bridge);
-  const snap = await snapshots.create("updatePlanEvent", ["plans"], { plans: v4Export().plans }, undefined);
-  const result = parse(await rollback({ snapshotId: snap.id, confirm: true }));
-  assert.equal(result.error, "LAYOUT_MISMATCH");
-  assert.deepEqual(bridge.writes, []);
-});
-
-test("a v4 snapshot still rolls back on a v4 account", async () => {
-  const data = v4Export();
-  const bridge = fakeBridge(data);
-  const { snapshots, rollback } = await rollbackTool(bridge);
-  const snap = await snapshots.create("updatePlanEvent", ["plans"], { plans: data.plans }, "v4");
-  const result = parse(await rollback({ snapshotId: snap.id, confirm: true }));
-  assert.equal(result.success, true);
-  assert.deepEqual(bridge.writes, ["plans"]);
-});

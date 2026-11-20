@@ -8,7 +8,7 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -49,25 +49,21 @@ function fakeBridge(initial) {
   const bridge = {
     state,
     writes: [],
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
-      return structuredClone(state);
+      return asV5Export(structuredClone(state));
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {
       bridge.writes.push("plans");
       state.plans = structuredClone(plans);
     },
-    async restoreCurrentFinances(today) {
+    async restoreCurrentFinances(currentFinances) {
       bridge.writes.push("currentFinances");
-      state.today = structuredClone(today);
-    },
-    async restoreProgress(progress) {
-      bridge.writes.push("progress");
-      state.progress = structuredClone(progress);
+      state.currentFinances = structuredClone(currentFinances);
     },
     async restoreSettings(settings) {
       bridge.writes.push("settings");
@@ -144,17 +140,12 @@ const restoreCases = [
   [
     "projectionlab_restore_current_finances",
     "currentFinances",
-    { investmentAccounts: [{ id: "a", credentials: { apiKey: "[REDACTED]" } }] },
+    { schema: 5, accounts: { a: { id: "a", kind: "account", credentials: { apiKey: "[REDACTED]" } } } },
   ],
   [
     "projectionlab_restore_plans",
     "plans",
     [{ id: "p1", name: "X", settings: { access_token: "[REDACTED]" } }],
-  ],
-  [
-    "projectionlab_restore_progress",
-    "progress",
-    { simulation: { password: "[REDACTED]" } },
   ],
   [
     "projectionlab_restore_settings",
@@ -166,7 +157,7 @@ const restoreCases = [
 for (const [tool, field, payload] of restoreCases) {
   for (const confirm of [false, true]) {
     test(`${tool} refuses a sentinel payload in ${confirm ? "confirm" : "dry-run"} mode`, async () => {
-      const bridge = fakeBridge({ plans: [], today: {}, progress: {}, settings: {} });
+      const bridge = fakeBridge({ plans: [], settings: {} });
       const server = registered(bridge);
       const result = await server.tools
         .get(tool)
@@ -181,7 +172,7 @@ for (const [tool, field, payload] of restoreCases) {
   }
 
   test(`${tool} accepts the payload once the real value is supplied`, async () => {
-    const bridge = fakeBridge({ plans: [], today: {}, progress: {}, settings: {} });
+    const bridge = fakeBridge({ plans: [], settings: {} });
     const server = registered(bridge);
     const real = structuredClone(payload);
     const secretPaths = findRedactedSecretPaths(real);
@@ -197,45 +188,6 @@ for (const [tool, field, payload] of restoreCases) {
     assert.equal(bridge.writes.length, 1);
   });
 }
-
-test("projectionlab_restore_settings on v4 writes the stored Plugin API key in place of [REDACTED]", async () => {
-  const storedKey = "stored-plugin-key";
-  const bridge = fakeBridge({
-    plans: [],
-    today: {},
-    progress: {},
-    settings: { theme: "dark", plugins: { enabled: true, apiKey: storedKey } },
-  });
-  const server = registered(bridge);
-  const settings = { theme: "light", plugins: { enabled: true, apiKey: "[REDACTED]" } };
-  const result = await server.tools
-    .get("projectionlab_restore_settings")
-    .handler({ settings, confirm: true });
-  assert.equal(result.isError, undefined, result.content[0].text);
-  const output = JSON.parse(result.content[0].text);
-  assert.equal(output.verified, true, result.content[0].text);
-  assert.deepEqual(output.keptSecrets, ["plugins.apiKey"]);
-  assert.doesNotMatch(result.content[0].text, new RegExp(storedKey));
-  assert.deepEqual(bridge.state.settings, { theme: "light", plugins: { enabled: true, apiKey: storedKey } });
-});
-
-test("projectionlab_restore_settings on v4 refuses a payload that leaves out the stored Plugin API key", async () => {
-  const bridge = fakeBridge({
-    plans: [],
-    today: {},
-    progress: {},
-    settings: { theme: "dark", plugins: { enabled: true, apiKey: "stored-plugin-key" } },
-  });
-  const server = registered(bridge);
-  const result = await server.tools
-    .get("projectionlab_restore_settings")
-    .handler({ settings: { theme: "light", plugins: { enabled: true } }, confirm: true });
-  assert.equal(result.isError, true);
-  const output = JSON.parse(result.content[0].text);
-  assert.equal(output.error, "INVALID_INPUT");
-  assert.match(output.message, /plugins\.apiKey/);
-  assert.deepEqual(bridge.writes, []);
-});
 
 // The path tools take whole-object values, which can carry a secret-named
 // key a read returned as [REDACTED].
@@ -264,10 +216,11 @@ function pathToolState() {
         },
       },
     ],
-    today: {
-      investmentAccounts: [
-        { id: "a1", name: "Brokerage", credentials: { label: "x", password: "stored-pass" } },
-      ],
+    currentFinances: {
+      schema: 5,
+      accounts: {
+        a1: { id: "a1", name: "Brokerage", kind: "account", credentials: { label: "x", password: "stored-pass" } },
+      },
     },
   };
 }

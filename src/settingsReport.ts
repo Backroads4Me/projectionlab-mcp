@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
 import { matchDataModelField, type DataModelField } from "./dataModel.js";
-import type { ExportLayout } from "./layout.js";
 import {
   PLAN_SETTING_SECTIONS,
   listPlanSettings,
@@ -79,7 +78,6 @@ interface TopicBlock {
  */
 export function renderSettingsReport(
   plans: readonly PlanObj[],
-  layout: ExportLayout,
   options: SettingsReportOptions = {},
 ): string {
   const compare = plans.length === 2;
@@ -90,7 +88,7 @@ export function renderSettingsReport(
   for (const topic of REPORT_TOPICS) {
     if (!sections.includes(topic.section)) continue;
     const rows = topic.rows
-      .map((row) => buildRow(topic, row, views, layout))
+      .map((row) => buildRow(topic, row, views))
       .filter((row): row is Row => row !== undefined);
     if (rows.length === 0) continue;
     const topicConditions = topic.appliesWhen ?? [];
@@ -98,7 +96,7 @@ export function renderSettingsReport(
       title: topic.title,
       tier: topic.tier,
       rows,
-      usedWhen: conditionsText(topic.section, topicConditions, layout),
+      usedWhen: conditionsText(topic.section, topicConditions),
       metCount: Math.max(
         ...views.map(
           (view) =>
@@ -233,9 +231,8 @@ function buildRow(
   topic: ReportTopic,
   row: TopicRow,
   views: readonly PlanView[],
-  layout: ExportLayout,
 ): Row | undefined {
-  const field = matchDataModelField(topic.section, row.path, layout);
+  const field = matchDataModelField(topic.section, row.path);
   const cells = views.map((view) => readCell(topic.section, row, view, field));
   if (!cells.some((cell) => cell.present)) return undefined;
 
@@ -256,7 +253,7 @@ function buildRow(
         !cells[index].present ||
         conditions.some((condition) => !conditionMet(view.sections[topic.section], condition)),
     );
-    result.usedWhen = conditionsText(topic.section, own, layout);
+    result.usedWhen = conditionsText(topic.section, own);
   }
   return result;
 }
@@ -445,18 +442,16 @@ function orderUnused(blocks: readonly TopicBlock[]): TopicBlock[] {
 function conditionsText(
   section: PlanSettingSection,
   conditions: readonly RowCondition[],
-  layout: ExportLayout,
 ): string | undefined {
   if (conditions.length === 0) return undefined;
-  return conditions.map((condition) => conditionText(section, condition, layout)).join(" and ");
+  return conditions.map((condition) => conditionText(section, condition)).join(" and ");
 }
 
 function conditionText(
   section: PlanSettingSection,
   condition: RowCondition,
-  layout: ExportLayout,
 ): string {
-  const field = matchDataModelField(section, condition.path, layout);
+  const field = matchDataModelField(section, condition.path);
   const topicRow = REPORT_TOPICS.filter((topic) => topic.section === section)
     .flatMap((topic) => topic.rows)
     .find((row) => row.path === condition.path);

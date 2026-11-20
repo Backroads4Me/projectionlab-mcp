@@ -8,7 +8,7 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -83,12 +83,12 @@ function fakeBridge(initial) {
   const bridge = {
     state,
     writes: 0,
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return editAccess.value;
     },
     async exportData() {
-      return structuredClone(state);
+      return asV5Export(structuredClone(state));
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {
@@ -99,7 +99,7 @@ function fakeBridge(initial) {
   return bridge;
 }
 
-function setup(register, initial = { today: {}, plans: samplePlans() }) {
+function setup(register, initial = { plans: samplePlans() }) {
   const bridge = fakeBridge(initial);
   const snapshots = new SnapshotManager();
   const server = fakeServer();
@@ -153,7 +153,7 @@ test("update_plan_section previews redact secret-named fields and the API key", 
   const plans = samplePlans();
   plans[0].income.events[0].auth_token = "old-secret";
   plans[0].income.events[0].note = "uses test-api-key";
-  const { server } = setup(registerUpdatePlanSectionTool, { today: {}, plans });
+  const { server } = setup(registerUpdatePlanSectionTool, { plans });
   const out = parse(
     await server.tools.get("projectionlab_update_plan_section").handler(
       sectionArgs({
@@ -367,7 +367,7 @@ test("clone_plan verifies originals the app re-stamped and left otherwise intact
   // The fake bridge re-stamps every plan on restore, as ProjectionLab may.
   const plans = samplePlans().map((p, i) => ({ ...p, simKey: i + 1 }));
   const { server } = setup(registerClonePlanTool, {
-    today: { savingsAccounts: [{ id: "s1", name: "Emergency", balance: 25000 }] },
+    currentFinances: { schema: 5, accounts: { s1: { id: "s1", name: "Emergency", kind: "account", type: "savings", balance: 25000 } } },
     plans,
   });
   const out = parse(
@@ -378,13 +378,13 @@ test("clone_plan verifies originals the app re-stamped and left otherwise intact
 
 test("clone_plan reports a Current Finances balance the write moved", async () => {
   const { bridge, server } = setup(registerClonePlanTool, {
-    today: { savingsAccounts: [{ id: "s1", name: "Emergency", balance: 25000 }] },
+    currentFinances: { schema: 5, accounts: { s1: { id: "s1", name: "Emergency", kind: "account", type: "savings", balance: 25000 } } },
     plans: samplePlans(),
   });
   const restorePlans = bridge.restorePlans;
   bridge.restorePlans = async (plans) => {
     await restorePlans(plans);
-    bridge.state.today.savingsAccounts[0].balance = 1;
+    bridge.state.currentFinances.accounts.s1.balance = 1;
   };
   const out = parse(
     await server.tools.get("projectionlab_clone_plan").handler(cloneArgs),
@@ -394,7 +394,7 @@ test("clone_plan reports a Current Finances balance the write moved", async () =
   assert.ok(
     out.verificationProblems.some((p) =>
       p.includes(
-        "Current Finances savingsAccounts s1 balance changed from 25000 to 1",
+        "Current Finances accounts s1 balance changed from 25000 to 1",
       ),
     ),
     JSON.stringify(out.verificationProblems),
@@ -407,10 +407,7 @@ test("clone_plan reports a Current Finances balance the write moved", async () =
 
 test("clone_plan reports a pre-existing plan that lost its simKey", async () => {
   const plans = samplePlans().map((p, i) => ({ ...p, simKey: i + 1 }));
-  const { bridge, server } = setup(registerClonePlanTool, {
-    today: {},
-    plans,
-  });
+  const { bridge, server } = setup(registerClonePlanTool, { plans });
   const restorePlans = bridge.restorePlans;
   bridge.restorePlans = async (incoming) => {
     await restorePlans(incoming);
@@ -442,7 +439,7 @@ test("plan-data resource redacts the API key and secret-named fields", async () 
   registerPlanDataResource(
     server,
     fakeBridge({
-      today: { note: "key is test-api-key", authToken: "abc123" },
+      currentFinances: { schema: 5, note: "key is test-api-key", authToken: "abc123", accounts: {} },
       plans: samplePlans(),
     }),
   );
@@ -497,7 +494,10 @@ test("summary resource reports the same per-plan counts as the tool", async () =
   const server = fakeServer();
   registerSummaryResource(
     server,
-    fakeBridge({ today: { savingsAccounts: [{ balance: 500 }] }, plans: samplePlans() }),
+    fakeBridge({
+      currentFinances: { schema: 5, accounts: { s1: { id: "s1", kind: "account", type: "savings", balance: 500 } } },
+      plans: samplePlans(),
+    }),
   );
   const summary = JSON.parse(await readResource(server, "projectionlab://summary"));
   assert.equal(summary.scope, "currentFinances");

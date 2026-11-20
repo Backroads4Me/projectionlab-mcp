@@ -10,7 +10,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 const KEY = "pl-key-9f3a-test";
 const HOME = mkdtempSync(join(tmpdir(), "plmcp-key-home-"));
@@ -43,17 +43,17 @@ function fakeServer() {
 }
 
 function fakeBridge(initial) {
-  const state = structuredClone(initial);
+  const state = { plans: [], ...structuredClone(initial) };
   const bridge = {
     state,
     writes: [],
     payloads: [],
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
-      return structuredClone(state);
+      return asV5Export(structuredClone(state));
     },
     async restoreSettings(settings) {
       bridge.writes.push("settings");
@@ -149,14 +149,14 @@ test("rollback refuses a placeholder snapshot when PL_API_KEY is unset", async (
   const script = `
     const { registerSnapshotTools } = await import(${JSON.stringify(pathToFileURL(join(root, "dist", "tools", "snapshots.js")).href)});
     const { SnapshotManager } = await import(${JSON.stringify(pathToFileURL(join(root, "dist", "snapshot.js")).href)});
-    const state = { settings: {}, plans: [], today: {} };
+    const state = { currentFinances: { schema: 5, accounts: {} }, settings: { schema: 5 }, plans: [] };
     const writes = [];
     const bridge = {
-      async apiContract() { return contractOf(state); },
+      async apiContract() { return 2; },
       async editAccess() {
         return "enabled";
       },
-      async exportData() { return structuredClone(state); },
+      async exportData() { return { schema: 1, exportedAt: 1, documents: structuredClone(state) }; },
       async restoreSettings(s) { writes.push(s); state.settings = s; },
     };
     const tools = new Map();

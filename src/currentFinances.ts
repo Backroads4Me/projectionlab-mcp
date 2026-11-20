@@ -1,51 +1,6 @@
 import { ProjectionLabError } from "./errors.js";
 import { containsSubset, type PlanObj } from "./plans.js";
 
-export const CURRENT_FINANCE_COLLECTIONS = [
-  "investmentAccounts",
-  "savingsAccounts",
-  "debts",
-  "assets",
-] as const;
-
-export interface CurrentFinanceEntry {
-  collection: (typeof CURRENT_FINANCE_COLLECTIONS)[number];
-  index: number;
-  account: PlanObj;
-}
-
-export function listCurrentFinanceEntries(
-  today: unknown,
-): CurrentFinanceEntry[] {
-  if (!today || typeof today !== "object" || Array.isArray(today)) return [];
-  const root = today as PlanObj;
-  const entries: CurrentFinanceEntry[] = [];
-  for (const collection of CURRENT_FINANCE_COLLECTIONS) {
-    const values = root[collection];
-    if (!Array.isArray(values)) continue;
-    for (let index = 0; index < values.length; index++) {
-      const value = values[index];
-      if (value && typeof value === "object" && !Array.isArray(value)) {
-        entries.push({
-          collection,
-          index,
-          account: value as PlanObj,
-        });
-      }
-    }
-  }
-  return entries;
-}
-
-export function findCurrentFinanceEntry(
-  today: unknown,
-  accountId: string,
-): CurrentFinanceEntry | undefined {
-  return listCurrentFinanceEntries(today).find(
-    ({ account }) => String(account.id ?? "") === accountId,
-  );
-}
-
 export function requireCurrentFinances(today: unknown): PlanObj {
   if (!today || typeof today !== "object" || Array.isArray(today)) {
     throw new ProjectionLabError(
@@ -85,8 +40,8 @@ const nonEmptyString = (value: unknown): string | undefined =>
 
 /**
  * Every account record of a v5 Current Finances document, archived ones
- * included, in stored order. Empty for a v4 `today`, which keeps its accounts
- * in per-type arrays and has no `accounts` object.
+ * included, in stored order. Empty when the document has no `accounts`
+ * object.
  */
 export function listV5Accounts(finances: unknown): V5AccountEntry[] {
   const accounts = isPlainObject(finances) ? finances.accounts : undefined;
@@ -195,7 +150,7 @@ export function withoutArchivedAccounts(finances: PlanObj): PlanObj {
  * The stored ProjectionLab 5 accounts that restoring `submitted` keeps
  * unchanged because the submission leaves them out. ProjectionLab 5's
  * restoreCurrentFinances replaces each submitted account and never deletes
- * one, so these survive the restore as they are. Empty for a v4 `today`.
+ * one, so these survive the restore as they are.
  */
 export function v5AccountsKept(
   submitted: unknown,
@@ -211,11 +166,10 @@ export function v5AccountsKept(
 }
 
 export function currentFinanceAccountNotFoundError(
-  today: unknown,
+  currentFinances: unknown,
   accountId: string,
 ): ProjectionLabError {
-  const count =
-    listCurrentFinanceEntries(today).length + listV5Accounts(today).length;
+  const count = listV5Accounts(currentFinances).length;
   return new ProjectionLabError(
     "INVALID_INPUT",
     `No Current Finances account with ID "${accountId}" found`,
@@ -224,18 +178,14 @@ export function currentFinanceAccountNotFoundError(
 }
 
 /** The money fields of a Current Finances account. */
-const BALANCE_FIELDS = ["balance", "amount", "value", "costBasis"] as const;
+const BALANCE_FIELDS = ["balance", "value", "costBasis"] as const;
 
 /**
- * The id-bearing accounts of one read, keyed by collection and id. A v5
- * account is keyed under the `accounts` collection, archived ones included.
+ * The accounts of one read, keyed by collection and id, archived ones
+ * included.
  */
 function accountsById(today: unknown): Map<string, PlanObj> {
   const accounts = new Map<string, PlanObj>();
-  for (const entry of listCurrentFinanceEntries(today)) {
-    const id = String(entry.account.id ?? "");
-    if (id) accounts.set(`${entry.collection} ${id}`, entry.account);
-  }
   for (const entry of listV5Accounts(today)) {
     accounts.set(`accounts ${entry.id}`, entry.account);
   }

@@ -10,7 +10,7 @@ import { v5AccountsKept } from "../currentFinances.js";
 import { log } from "../logger.js";
 import { assertPlansUnchanged } from "../planVersion.js";
 import { restoredSectionMatches } from "./restore.js";
-import { assertSnapshotLayout, detectLayout, exportSections, sectionOf } from "../layout.js";
+import { assertSnapshotLayout, exportSections, sectionOf } from "../layout.js";
 import type { WireMethod } from "../types/wire.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
@@ -18,7 +18,6 @@ import { assertWritesSupported } from "./writeGuard.js";
 const RESTORE_METHODS: Partial<Record<string, WireMethod>> = {
   currentFinances: "restoreCurrentFinances",
   plans: "restorePlans",
-  progress: "restoreProgress",
   settings: "restoreSettings",
 };
 
@@ -141,11 +140,10 @@ export function registerSnapshotTools(
           );
         }
 
-        // A snapshot from the other export layout cannot be written back
-        // through the Plugin API; refuse it in the preview as well.
+        // A ProjectionLab 4 snapshot cannot be written back through the
+        // Plugin API; refuse it in the preview as well.
+        assertSnapshotLayout(snapshot.layout);
         const currentData = await bridge.exportData({ fresh: true });
-        const liveLayout = detectLayout(currentData);
-        assertSnapshotLayout(snapshot.layout, liveLayout);
         await assertWritesSupported(
           bridge,
           snapshot.sections.flatMap((section) => RESTORE_METHODS[section] ?? []),
@@ -155,7 +153,7 @@ export function registerSnapshotTools(
         // keeps an account the snapshot does not hold, such as one added
         // since; name those so the preview does not promise to remove them.
         const keptAccounts =
-          liveLayout === "v5" && snapshot.data.currentFinances !== undefined
+          snapshot.data.currentFinances !== undefined
             ? v5AccountsKept(
                 snapshot.data.currentFinances,
                 sectionOf(currentData, "currentFinances"),
@@ -196,7 +194,6 @@ export function registerSnapshotTools(
           `rollback_pre_${snapshot.id}`,
           snapshot.sections,
           sectionsToBackup,
-          liveLayout,
         );
 
         // restorePlans replaces every plan, so refuse when a plan was saved
@@ -224,20 +221,16 @@ export function registerSnapshotTools(
 
           switch (section) {
             case "currentFinances":
-              await bridge.restoreCurrentFinances(sectionData, liveLayout);
+              await bridge.restoreCurrentFinances(sectionData);
               break;
             case "plans":
               await bridge.restorePlansIfUnchanged(
                 currentPlans,
                 sectionData as unknown[],
-                liveLayout,
               );
               break;
-            case "progress":
-              await bridge.restoreProgress(sectionData, liveLayout);
-              break;
             case "settings":
-              await bridge.restoreSettings(sectionData, liveLayout);
+              await bridge.restoreSettings(sectionData);
               break;
             default:
               continue;

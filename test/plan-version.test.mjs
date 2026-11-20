@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.LOG_LEVEL = "error";
 
@@ -55,7 +56,7 @@ test("planChanges trusts an unmoved stamp over content", () => {
 
 test("assertPlansUnchanged refuses when a plan was saved after the read", async () => {
   const read = [plan("a", 1)];
-  const bridge = (plans) => ({ exportData: async () => ({ plans }) });
+  const bridge = (plans) => ({ exportData: async () => asV5Export({ plans }) });
   await assertPlansUnchanged(bridge([plan("a", 1)]), read);
   await assert.rejects(assertPlansUnchanged(bridge([plan("a", 5)]), read), (err) => {
     assert.equal(err.code, "PLAN_CONFLICT");

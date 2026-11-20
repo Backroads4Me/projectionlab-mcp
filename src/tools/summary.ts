@@ -42,7 +42,7 @@ export function registerSummaryTool(server: McpServer, bridge: Bridge) {
         layout: z
           .literal("v5")
           .optional()
-          .describe("Present on ProjectionLab 5 exports only"),
+          .describe("The export layout: always \"v5\", the ProjectionLab 5 export"),
         accountsByKind: z
           .record(z.string(), z.object({ count: z.number(), total: z.number() }))
           .optional()

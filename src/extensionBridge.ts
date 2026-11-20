@@ -35,8 +35,8 @@ import {
   type WireMethod,
 } from "./types/wire.js";
 
-/** ProjectionLab's own app origins: the main app and v5 Early Access, where
- * ProjectionLab moves accounts that join Early Access. */
+/** ProjectionLab's own app origins: the main app and Early Access, where
+ * accounts that join Early Access try changes before the main app has them. */
 const PROJECTIONLAB_ORIGINS = ["https://app.projectionlab.com", "https://ea.projectionlab.com"];
 
 /** Origins allowed to open the WebSocket. Extensions plus the PL app itself
@@ -96,7 +96,7 @@ const EXTENSION_HELP =
   "or Firefox Add-ons (https://addons.mozilla.org/en-US/firefox/addon/mcp-bridge-for-projectionlab/); " +
   "the store keeps it up to date. Then enter the token from " +
   "~/.projectionlab-mcp/ws-token on its options page, and open https://app.projectionlab.com. " +
-  "An account on ProjectionLab v5 Early Access runs at https://ea.projectionlab.com instead: " +
+  "An account on ProjectionLab Early Access runs at https://ea.projectionlab.com instead: " +
   "press Allow ea.projectionlab.com on the extension's options page, then open that site. " +
   "Or call projectionlab_get_bootstrap and paste the snippet into the ProjectionLab tab's console. " +
   "Install the extension from one source only: an unpacked copy alongside a store copy leaves the " +
@@ -663,7 +663,7 @@ export class ExtensionBridge implements Bridge {
           "PAGE_NOT_LOADED",
           `No ProjectionLab tab: ${message}`,
           "Open https://app.projectionlab.com in the browser running the bridge extension. " +
-            "On ProjectionLab v5 Early Access, open https://ea.projectionlab.com and press " +
+            "On ProjectionLab Early Access, open https://ea.projectionlab.com and press " +
             "Allow ea.projectionlab.com on the extension's options page.",
         );
       case "API_NOT_AVAILABLE":

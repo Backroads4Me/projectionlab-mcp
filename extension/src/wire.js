@@ -180,7 +180,7 @@ function compareVersions(a, b) {
 
 /** The ProjectionLab app, granted at install (manifest `host_permissions`). */
 export const APP_URL_PATTERN = "https://app.projectionlab.com/*";
-/** ProjectionLab v5 Early Access, granted only when the user allows it on the
+/** ProjectionLab Early Access, granted only when the user allows it on the
  * options page (manifest `optional_host_permissions`). */
 export const EARLY_ACCESS_URL_PATTERN = "https://ea.projectionlab.com/*";
 /** The `tabs.query` URL patterns for the executor's tab: always the main app,

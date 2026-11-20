@@ -1,5 +1,5 @@
 // Page origins allowed to connect the bootstrap snippet: both ProjectionLab
-// app origins (main and v5 Early Access) plus the one PL_APP_URL names.
+// app origins (main and Early Access) plus the one PL_APP_URL names.
 // Any other page origin is refused before its hello is read.
 //
 // Run: npm run build && node --test test/origin.test.mjs

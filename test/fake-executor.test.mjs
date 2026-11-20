@@ -12,6 +12,7 @@ import net from "node:net";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { freePort } from "./helpers/free-port.mjs";
+import { v5Export } from "./fixtures/v5-export.mjs";
 
 const PORT = await freePort();
 const TOKEN = "test-token";
@@ -63,12 +64,14 @@ function connectExecutor({ token = TOKEN, protocolVersion = PROTOCOL_VERSION, ex
   return { ws, ready, done, events };
 }
 
-/** Handler mimicking a healthy PL tab. */
+/** Handler mimicking a healthy ProjectionLab 5 tab. */
 function healthyHandler(frame) {
   const [first] = frame.params;
   switch (frame.method) {
     case "waitForApi":
       return { ok: true };
+    case "apiVersion":
+      return { ok: true, result: 2 };
     case "validateApiKey":
       return first?.key === "test-api-key"
         ? { ok: true }
@@ -76,11 +79,10 @@ function healthyHandler(frame) {
     case "describeApi":
       return { ok: true, result: { exportData: "function(1 args)" } };
     case "exportData":
-      return { ok: true, result: { plans: [], today: { accounts: [] }, exportedAt: 1 } };
+      return { ok: true, result: v5Export() };
     case "updateAccount":
     case "restoreCurrentFinances":
     case "restorePlans":
-    case "restoreProgress":
     case "restoreSettings":
       return { ok: true };
     default:
@@ -121,7 +123,7 @@ test("all Bridge methods round-trip through a healthy executor", async () => {
     apiAvailable: true,
     apiKeyValid: true,
     executor: "fake/1.0",
-    apiContract: 1,
+    apiContract: 2,
     errors: [],
     writesEnabled: true,
   });
@@ -129,18 +131,18 @@ test("all Bridge methods round-trip through a healthy executor", async () => {
   assert.deepEqual(await bridge.describePluginApi(), { exportData: "function(1 args)" });
 
   const data = await bridge.exportData();
-  assert.deepEqual(data.plans, []);
+  assert.deepEqual(data.documents.plans, v5Export().documents.plans);
   // Second call must hit the cache (handler would still work, but verify identity)
   assert.equal(await bridge.exportData(), data);
 
-  await bridge.updateAccount("acct-1", { balance: 100 }, true, "v4");
+  await bridge.updateAccount("acct-1", { balance: 100 }, true);
   // Write invalidated the cache: next export is a fresh object
   assert.notEqual(await bridge.exportData(), data);
 
-  await bridge.restoreCurrentFinances({}, "v4");
-  await bridge.restorePlans([], "v4");
-  await bridge.restoreProgress({}, "v4");
-  await bridge.restoreSettings({}, "v4");
+  await bridge.restoreCurrentFinances({});
+  await bridge.restorePlans([]);
+  await bridge.restorePlansIfUnchanged(v5Export().documents.plans, []);
+  await bridge.restoreSettings({});
   exec.ws.close();
   await exec.done;
 });
@@ -158,7 +160,7 @@ test("executor wire errors map to ProjectionLabError codes", async () => {
     assert.equal(err.code, "API_KEY_INVALID");
     return true;
   });
-  await assert.rejects(bridge.updateAccount("a", {}, undefined, "v4"), (err) => {
+  await assert.rejects(bridge.updateAccount("a", {}, undefined), (err) => {
     assert.equal(err.code, "PAGE_NOT_LOADED");
     return true;
   });
@@ -222,14 +224,14 @@ test("concurrent cold reads share one exportData round trip", async () => {
           type: "response",
           id: frame.id,
           ok: true,
-          result: { plans: [], today: {}, exportedAt: exportCalls },
+          result: { ...v5Export(), exportedAt: exportCalls },
         }));
       }, 100);
       return undefined;
     },
   });
   await exec.ready;
-  await bridge.restorePlans([], "v4"); // a write clears the export cache
+  await bridge.restorePlans([]); // a write clears the export cache
 
   const [a, b] = await Promise.all([bridge.exportData(), bridge.exportData()]);
   assert.equal(exportCalls, 1);
@@ -309,99 +311,79 @@ test("helloAck carries the server release and checkConnection names the executor
   exec.ws.close();
 });
 
-/** A ProjectionLab 5 page: healthyHandler plus api.version 2 and a v5
- * export, recording every method the server asks for. */
-function v5Handler(seen) {
-  return (frame) => {
-    seen.push(frame.method);
-    if (frame.method === "apiVersion") return { ok: true, result: 2 };
-    if (frame.method === "exportData") return { ok: true, result: { schema: 1, exportedAt: 1, documents: { plans: [] } } };
-    return healthyHandler(frame);
-  };
-}
-
 test("checkConnection reports contract 2 on a ProjectionLab 5 page", async () => {
-  const exec = connectExecutor({ handler: v5Handler([]) });
+  const exec = connectExecutor({ handler: healthyHandler });
   await exec.ready;
   const status = await bridge.checkConnection();
   assert.equal(status.apiContract, 2);
-  // The resources choose their text from this without contacting the page.
-  assert.equal(bridge.knownApiContract(), 2);
   assert.equal(status.apiKeyValid, true);
   assert.deepEqual(status.errors, []);
   exec.ws.close();
   await exec.done;
 });
 
-test("restoreProgress is refused on contract 2 before anything is sent", async () => {
-  const seen = [];
-  const exec = connectExecutor({ handler: v5Handler(seen) });
-  await exec.ready;
-  await assert.rejects(bridge.restoreProgress({}, "v5"), (err) => {
-    assert.equal(err.code, "WRITE_NOT_SUPPORTED");
-    assert.equal(err.message, "ProjectionLab 5 removed restoreProgress");
-    return true;
+test("checkConnection on a ProjectionLab 4 page reports the refusal and no contract", async () => {
+  const exec = connectExecutor({
+    handler: (frame) => (frame.method === "apiVersion" ? { ok: true, result: null } : healthyHandler(frame)),
   });
-  assert.deepEqual(seen.filter((m) => m !== "apiVersion"), []);
-  exec.ws.close();
-  await exec.done;
-});
-
-test("plan, Current Finances and settings writes reach a contract 2 page", async () => {
-  const seen = [];
-  const exec = connectExecutor({ handler: v5Handler(seen) });
   await exec.ready;
-  await bridge.restorePlans([], "v5");
-  await bridge.restorePlansIfUnchanged([], [], "v5");
-  await bridge.updateAccount("a", { balance: 1 }, undefined, "v5");
-  await bridge.restoreCurrentFinances({}, "v5");
-  await bridge.restoreSettings({}, "v5");
-  const writes = ["restorePlans", "updateAccount", "restoreCurrentFinances", "restoreSettings"];
-  assert.deepEqual(
-    seen.filter((m) => writes.includes(m)),
-    ["restorePlans", "restorePlans", "updateAccount", "restoreCurrentFinances", "restoreSettings"],
-  );
-  // A write prepared from ProjectionLab 4 data is still refused.
-  await assert.rejects(bridge.restorePlans([], "v4"), (err) => err.code === "CONTRACT_CHANGED");
-  await assert.rejects(
-    bridge.updateAccount("a", { balance: 1 }, undefined, "v4"),
-    (err) => err.code === "CONTRACT_CHANGED",
-  );
+  const status = await bridge.checkConnection();
+  assert.equal(status.apiAvailable, true);
+  assert.equal(status.apiContract, undefined);
+  assert.equal(status.errors.length, 1);
+  assert.match(status.errors[0], /^UNSUPPORTED_API_VERSION: .*ProjectionLab 4/);
   exec.ws.close();
   await exec.done;
 });
 
-const WRITE_METHODS = ["updateAccount", "restoreCurrentFinances", "restorePlans", "restoreProgress", "restoreSettings"];
+test("the bridge offers no restoreProgress write", () => {
+  assert.equal(typeof bridge.restoreProgress, "undefined");
+});
 
-/** healthyHandler on a ProjectionLab 4 page (api.version absent), recording
- * every request frame. `onWrite` may answer a write instead. */
-function recordingV4Handler(frames, onWrite) {
+const WRITE_METHODS = ["updateAccount", "restoreCurrentFinances", "restorePlans", "restoreSettings"];
+
+/** healthyHandler reporting `apiVersion` as the page's Plugin API version,
+ * recording every request frame. `onWrite` may answer a write instead. */
+function recordingHandler(frames, { apiVersion = 2, onWrite } = {}) {
   return (frame) => {
     frames.push(frame);
-    if (frame.method === "apiVersion") return { ok: true, result: null };
+    if (frame.method === "apiVersion") return { ok: true, result: apiVersion };
     if (onWrite && WRITE_METHODS.includes(frame.method)) return onWrite(frame);
     return healthyHandler(frame);
   };
 }
 
+test("plan, Current Finances and settings writes reach a contract 2 page", async () => {
+  const frames = [];
+  const exec = connectExecutor({ handler: recordingHandler(frames) });
+  await exec.ready;
+  await bridge.restorePlans([]);
+  await bridge.restorePlansIfUnchanged(v5Export().documents.plans, []);
+  await bridge.updateAccount("a", { balance: 1 }, undefined);
+  await bridge.restoreCurrentFinances({});
+  await bridge.restoreSettings({});
+  assert.deepEqual(
+    frames.map((f) => f.method).filter((m) => WRITE_METHODS.includes(m)),
+    ["restorePlans", "restorePlans", "updateAccount", "restoreCurrentFinances", "restoreSettings"],
+  );
+  exec.ws.close();
+  await exec.done;
+});
+
 test("each write carries the checked API version to an executor that honors it", async () => {
   const frames = [];
   const exec = connectExecutor({
     hello: { features: ["expectApiVersion"] },
-    handler: recordingV4Handler(frames),
+    handler: recordingHandler(frames),
   });
   await exec.ready;
-  await bridge.updateAccount("a", { balance: 1 }, undefined, "v4");
-  await bridge.restorePlansIfUnchanged([], [], "v4");
-  await bridge.restoreCurrentFinances({}, "v4");
-  await bridge.restoreProgress({}, "v4");
-  await bridge.restoreSettings({}, "v4");
+  await bridge.updateAccount("a", { balance: 1 }, undefined);
+  await bridge.restorePlansIfUnchanged(v5Export().documents.plans, []);
+  await bridge.restoreCurrentFinances({});
+  await bridge.restoreSettings({});
   const writes = frames.filter((f) => WRITE_METHODS.includes(f.method));
-  assert.deepEqual(writes.map((f) => f.method), ["updateAccount", "restorePlans", "restoreCurrentFinances", "restoreProgress", "restoreSettings"]);
-  for (const f of writes) {
-    assert.equal(Object.hasOwn(f, "expectApiVersion"), true, f.method);
-    assert.equal(f.expectApiVersion, null, f.method);
-  }
+  assert.deepEqual(writes.map((f) => f.method), ["updateAccount", "restorePlans", "restoreCurrentFinances", "restoreSettings"]);
+  for (const f of writes) assert.equal(f.expectApiVersion, 2, f.method);
   // Reads, including the conflict check's export, are never guarded.
   for (const f of frames.filter((f) => !WRITE_METHODS.includes(f.method))) {
     assert.equal(Object.hasOwn(f, "expectApiVersion"), false, f.method);
@@ -412,10 +394,10 @@ test("each write carries the checked API version to an executor that honors it",
 
 test("an executor that does not list the feature gets no expectApiVersion", async () => {
   const frames = [];
-  const exec = connectExecutor({ handler: recordingV4Handler(frames) });
+  const exec = connectExecutor({ handler: recordingHandler(frames) });
   await exec.ready;
-  await bridge.updateAccount("a", { balance: 1 }, undefined, "v4");
-  await bridge.restorePlansIfUnchanged([], [], "v4");
+  await bridge.updateAccount("a", { balance: 1 }, undefined);
+  await bridge.restorePlansIfUnchanged(v5Export().documents.plans, []);
   const writes = frames.filter((f) => WRITE_METHODS.includes(f.method));
   assert.equal(writes.length, 2);
   for (const f of writes) assert.equal(Object.hasOwn(f, "expectApiVersion"), false, f.method);
@@ -427,13 +409,18 @@ test("a write the page refuses with CONTRACT_CHANGED rejects with that code", as
   const frames = [];
   const exec = connectExecutor({
     hello: { features: ["expectApiVersion"] },
-    handler: recordingV4Handler(frames, () => ({
-      ok: false,
-      error: { code: "CONTRACT_CHANGED", message: "Plugin API version is 2, not the null the server checked" },
-    })),
+    handler: recordingHandler(frames, {
+      onWrite: () => ({
+        ok: false,
+        error: { code: "CONTRACT_CHANGED", message: "Plugin API version is null, not the 2 the server checked" },
+      }),
+    }),
   });
   await exec.ready;
-  for (const write of [() => bridge.updateAccount("a", { balance: 1 }, undefined, "v4"), () => bridge.restorePlansIfUnchanged([], [], "v4")]) {
+  for (const write of [
+    () => bridge.updateAccount("a", { balance: 1 }, undefined),
+    () => bridge.restorePlansIfUnchanged(v5Export().documents.plans, []),
+  ]) {
     await assert.rejects(write(), (err) => {
       assert.equal(err.code, "CONTRACT_CHANGED");
       assert.match(err.suggestion, /Nothing was written/);
@@ -444,23 +431,22 @@ test("a write the page refuses with CONTRACT_CHANGED rejects with that code", as
   await exec.done;
 });
 
-test("a write prepared from ProjectionLab 5 data is refused on a ProjectionLab 4 page", async () => {
+test("every write is refused on a ProjectionLab 4 page before anything is sent", async () => {
   const frames = [];
-  const exec = connectExecutor({ handler: recordingV4Handler(frames) });
+  const exec = connectExecutor({ handler: recordingHandler(frames, { apiVersion: null }) });
   await exec.ready;
   const writes = [
-    () => bridge.updateAccount("a", { balance: 1 }, undefined, "v5"),
-    () => bridge.restoreCurrentFinances({}, "v5"),
-    () => bridge.restorePlans([], "v5"),
-    () => bridge.restorePlansIfUnchanged([], [], "v5"),
-    () => bridge.restoreProgress({}, "v5"),
-    () => bridge.restoreSettings({}, "v5"),
+    () => bridge.updateAccount("a", { balance: 1 }, undefined),
+    () => bridge.restoreCurrentFinances({}),
+    () => bridge.restorePlans([]),
+    () => bridge.restorePlansIfUnchanged(v5Export().documents.plans, []),
+    () => bridge.restoreSettings({}),
   ];
   for (const write of writes) {
     await assert.rejects(write(), (err) => {
-      assert.equal(err.code, "CONTRACT_CHANGED");
-      assert.match(err.message, /prepared from ProjectionLab 5 data/);
-      assert.match(err.suggestion, /Nothing was written/);
+      assert.equal(err.code, "UNSUPPORTED_API_VERSION");
+      assert.match(err.message, /ProjectionLab 4/);
+      assert.match(err.suggestion, /Nothing was read or written/);
       return true;
     });
   }
@@ -470,20 +456,19 @@ test("a write prepared from ProjectionLab 5 data is refused on a ProjectionLab 4
   await exec.done;
 });
 
-test("a plan write is refused when its in-entry re-read has the other layout", async () => {
-  // The contract check answers ProjectionLab 4, but the export the write
-  // re-reads comes from a ProjectionLab 5 tab.
+test("a plan write is refused when its in-entry re-read is not a ProjectionLab 5 export", async () => {
+  // The contract check answers ProjectionLab 5, but the export the write
+  // re-reads has the ProjectionLab 4 shape.
   const frames = [];
   const exec = connectExecutor({
     handler: (frame) =>
       frame.method === "exportData"
-        ? (frames.push(frame), { ok: true, result: { schema: 1, documents: { plans: [] } } })
-        : recordingV4Handler(frames)(frame),
+        ? (frames.push(frame), { ok: true, result: { plans: [], today: { accounts: [] }, exportedAt: 1 } })
+        : recordingHandler(frames)(frame),
   });
   await exec.ready;
-  await assert.rejects(bridge.restorePlansIfUnchanged([], [], "v4"), (err) => {
-    assert.equal(err.code, "CONTRACT_CHANGED");
-    assert.match(err.message, /prepared from ProjectionLab 4 data/);
+  await assert.rejects(bridge.restorePlansIfUnchanged([], []), (err) => {
+    assert.equal(err.code, "UNSUPPORTED_API_VERSION");
     return true;
   });
   assert.deepEqual(frames.filter((f) => WRITE_METHODS.includes(f.method)), []);
@@ -492,22 +477,34 @@ test("a plan write is refused when its in-entry re-read has the other layout", a
 });
 
 test("an executor without apiVersion falls back to the member list", async () => {
-  // healthyHandler rejects apiVersion and lists no version member: contract 1.
-  const exec = connectExecutor({ handler: healthyHandler });
+  // This executor rejects apiVersion and the API lists no version member:
+  // a ProjectionLab 4 page.
+  const exec = connectExecutor({
+    handler: (frame) =>
+      frame.method === "apiVersion"
+        ? { ok: false, error: { code: "UNKNOWN", message: "unexpected apiVersion" } }
+        : healthyHandler(frame),
+  });
   await exec.ready;
-  assert.equal(await bridge.apiContract(), 1);
+  await assert.rejects(bridge.apiContract(), (err) => {
+    assert.equal(err.code, "UNSUPPORTED_API_VERSION");
+    assert.match(err.message, /ProjectionLab 4/);
+    return true;
+  });
   exec.ws.close();
   await exec.done;
 
   // An old executor on a page whose API has a version member is refused.
   const outdated = connectExecutor({
     handler: (frame) =>
-      frame.method === "describeApi"
-        ? { ok: true, result: { exportData: "function(1 args)", version: "number" } }
-        : healthyHandler(frame),
+      frame.method === "apiVersion"
+        ? { ok: false, error: { code: "UNKNOWN", message: "unexpected apiVersion" } }
+        : frame.method === "describeApi"
+          ? { ok: true, result: { exportData: "function(1 args)", version: "number" } }
+          : healthyHandler(frame),
   });
   await outdated.ready;
-  await assert.rejects(bridge.restorePlans([], "v4"), (err) => {
+  await assert.rejects(bridge.restorePlans([]), (err) => {
     assert.equal(err.code, "EXECUTOR_OUTDATED");
     return true;
   });
@@ -524,7 +521,7 @@ test("an unknown api.version refuses writes", async () => {
     },
   });
   await exec.ready;
-  await assert.rejects(bridge.restoreSettings({}, "v4"), (err) => {
+  await assert.rejects(bridge.restoreSettings({}), (err) => {
     assert.equal(err.code, "UNSUPPORTED_API_VERSION");
     return true;
   });

@@ -8,7 +8,7 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -68,12 +68,12 @@ function fakeBridge(initial) {
   const bridge = {
     state,
     writes: [],
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
-      return structuredClone(state);
+      return asV5Export(structuredClone(state));
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {
@@ -81,13 +81,9 @@ function fakeBridge(initial) {
       // ProjectionLab saves each plan and re-stamps it.
       state.plans = structuredClone(plans).map((p) => ({ ...p, lastUpdated: ++stamp }));
     },
-    async restoreCurrentFinances(today) {
+    async restoreCurrentFinances(currentFinances) {
       bridge.writes.push("currentFinances");
-      state.today = { ...structuredClone(today), appDefault: true };
-    },
-    async restoreProgress(progress) {
-      bridge.writes.push("progress");
-      state.progress = structuredClone(progress);
+      state.currentFinances = { ...structuredClone(currentFinances), appDefault: true };
     },
     async restoreSettings(settings) {
       bridge.writes.push("settings");
@@ -125,7 +121,7 @@ test("replacement tools refuse a call that omits the replacement data", () => {
   registerRestoreTools(server, bridge, snapshots);
   const cases = [
     ["projectionlab_update_plan_section", { planIdentifier: "Retire", section: "income", confirm: true }, "sectionData"],
-    ["projectionlab_restore_progress", { confirm: true }, "progress"],
+    ["projectionlab_restore_settings", { confirm: true }, "settings"],
   ];
   for (const [name, args, field] of cases) {
     const schema = z.object(server.tools.get(name).definition.inputSchema);
@@ -136,7 +132,7 @@ test("replacement tools refuse a call that omits the replacement data", () => {
 });
 
 test("schema and summary report event counts per plan", async () => {
-  const data = { today: { investmentAccounts: [{ id: "a", balance: 10 }] }, plans: samplePlans() };
+  const data = { currentFinances: { schema: 5, accounts: { a: { id: "a", kind: "account", balance: 10 } } }, plans: samplePlans() };
   const server = fakeServer();
   registerSchemaTool(server, fakeBridge(data));
   registerSummaryTool(server, fakeBridge(data));
@@ -172,7 +168,7 @@ test("restore verification tolerates re-stamped plans and app-added fields", () 
 });
 
 test("restore_plans reports verified when ProjectionLab re-stamps the plans", async () => {
-  const bridge = fakeBridge({ today: {}, plans: samplePlans() });
+  const bridge = fakeBridge({ plans: samplePlans() });
   const server = fakeServer();
   registerRestoreTools(server, bridge, new SnapshotManager());
   const incoming = samplePlans();
@@ -199,7 +195,7 @@ async function snapshotFor(bridge, snapshots) {
 }
 
 test("rollback restores the snapshot and verifies it landed", async () => {
-  const bridge = fakeBridge({ today: {}, plans: samplePlans() });
+  const bridge = fakeBridge({ plans: samplePlans() });
   const snapshots = new SnapshotManager();
   const snapshotId = await snapshotFor(bridge, snapshots);
   assert.equal(bridge.state.plans[0].name, "Edited by agent");
@@ -218,7 +214,7 @@ test("rollback restores the snapshot and verifies it landed", async () => {
 });
 
 test("rollback reports unverified sections when the re-read differs", async () => {
-  const bridge = fakeBridge({ today: {}, plans: samplePlans() });
+  const bridge = fakeBridge({ plans: samplePlans() });
   const snapshots = new SnapshotManager();
   const snapshotId = await snapshotFor(bridge, snapshots);
   // The app accepts the write but drops the first plan's milestones.
@@ -241,7 +237,7 @@ test("rollback reports unverified sections when the re-read differs", async () =
 });
 
 test("rollback refuses with PLAN_CONFLICT when a plan is saved meanwhile", async () => {
-  const bridge = fakeBridge({ today: {}, plans: samplePlans() });
+  const bridge = fakeBridge({ plans: samplePlans() });
   const snapshots = new SnapshotManager();
   const snapshotId = await snapshotFor(bridge, snapshots);
   const before = structuredClone(bridge.state.plans);
@@ -270,7 +266,7 @@ test("rollback refuses with PLAN_CONFLICT when a plan is saved meanwhile", async
 
 for (const confirm of [false, true]) {
   test(`restore_plans refuses an empty array in ${confirm ? "confirm" : "dry-run"} mode`, async () => {
-    const bridge = fakeBridge({ today: {}, plans: samplePlans() });
+    const bridge = fakeBridge({ plans: samplePlans() });
     const server = fakeServer();
     registerRestoreTools(server, bridge, new SnapshotManager());
     const result = await server.tools

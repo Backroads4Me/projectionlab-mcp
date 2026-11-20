@@ -93,9 +93,9 @@ async function main() {
   // Register resources
   registerPlanDataResource(server, bridge);
   registerSummaryResource(server, bridge);
-  registerKnowledgeResource(server, bridge);
+  registerKnowledgeResource(server);
   registerGuideResource(server);
-  registerDataModelResource(server, bridge);
+  registerDataModelResource(server);
 
   // Register prompts
   registerPrompts(server, bridge);

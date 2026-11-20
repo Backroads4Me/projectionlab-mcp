@@ -14,7 +14,7 @@ export function registerPlanDataResource(
     {
       title: "ProjectionLab Plan Data",
       description:
-        "Full export of all ProjectionLab data (plans, current finances, settings, and progress or account history, in the layout of the connected ProjectionLab version). Refreshed on each access.",
+        "Full export of all ProjectionLab data (plans, current finances, settings, and account history). Refreshed on each access.",
       mimeType: "application/json",
     },
     async (uri) => {

@@ -40,8 +40,8 @@ function v5Bridge(state = v5Export()) {
     async exportData() {
       return structuredClone(state);
     },
-    async updateAccount(accountId, data, force, layout) {
-      writes.push({ name: "updateAccount", accountId, data: structuredClone(data), force, layout });
+    async updateAccount(accountId, data, force) {
+      writes.push({ name: "updateAccount", accountId, data: structuredClone(data), force });
       const account = finances().accounts[accountId];
       if (!account) throw new Error(`No account matches id "${accountId}".`);
       if (!force) {
@@ -51,8 +51,8 @@ function v5Bridge(state = v5Export()) {
       }
       Object.assign(account, structuredClone(data));
     },
-    async restoreCurrentFinances(submitted, layout) {
-      writes.push({ name: "restoreCurrentFinances", submitted: structuredClone(submitted), layout });
+    async restoreCurrentFinances(submitted) {
+      writes.push({ name: "restoreCurrentFinances", submitted: structuredClone(submitted) });
       const next = structuredClone(submitted);
       next.accounts = { ...finances().accounts, ...next.accounts };
       next.lastUpdated = (finances().lastUpdated ?? 0) + 1;
@@ -60,7 +60,6 @@ function v5Bridge(state = v5Export()) {
     },
     restorePlans: refuse("restorePlans"),
     restorePlansIfUnchanged: refuse("restorePlansIfUnchanged"),
-    restoreProgress: refuse("restoreProgress"),
     restoreSettings: refuse("restoreSettings"),
   };
 }
@@ -70,13 +69,13 @@ function snapshotStore() {
   const created = [];
   const store = {
     created,
-    async create(operation, sections, data, layout) {
+    async create(operation, sections, data) {
       const snapshot = {
         id: `snap-${created.length + 1}`,
         timestamp: new Date(created.length).toISOString(),
         operation,
         sections,
-        layout,
+        layout: "v5",
         data: structuredClone(data),
       };
       created.push(snapshot);
@@ -127,12 +126,11 @@ test("update_account previews, then patches one v5 account and verifies it", asy
   assert.equal(done.kind, "account");
 
   assert.equal(snapshots.created.length, 1);
-  assert.equal(snapshots.created[0].layout, "v5");
   assert.deepEqual(snapshots.created[0].sections, ["currentFinances"]);
   assert.deepEqual(snapshots.created[0].data.currentFinances, v5Export().documents.currentFinances);
 
   assert.deepEqual(bridge.writes, [
-    { name: "updateAccount", accountId: "acct_brokerage", data: { balance: 55_000 }, force: undefined, layout: "v5" },
+    { name: "updateAccount", accountId: "acct_brokerage", data: { balance: 55_000 }, force: undefined },
   ]);
   const expected = v5Export().documents.currentFinances;
   expected.accounts.acct_brokerage.balance = 55_000;
@@ -216,7 +214,6 @@ test("rollback undoes a v5 account change exactly", async () => {
   assert.equal(done.verified, true, JSON.stringify(done));
   assert.deepEqual(done.restoredSections, ["currentFinances"]);
   assert.equal(bridge.writes.at(-1).name, "restoreCurrentFinances");
-  assert.equal(bridge.writes.at(-1).layout, "v5");
   const { lastUpdated: _restamped, ...restored } = bridge.state.documents.currentFinances;
   const { lastUpdated: _original, ...original } = v5Export().documents.currentFinances;
   assert.deepEqual(restored, original);
@@ -275,7 +272,6 @@ test("restore_current_finances on v5 lists the accounts it keeps, then merges", 
   const done = await call("projectionlab_restore_current_finances", { currentFinances: submitted, confirm: true });
   assert.equal(done.success, true, JSON.stringify(done));
   assert.equal(done.verified, true, JSON.stringify(done));
-  assert.equal(snapshots.created[0].layout, "v5");
   assert.deepEqual(snapshots.created[0].data.currentFinances, v5Export().documents.currentFinances);
   const after = bridge.state.documents.currentFinances;
   assert.equal(after.location.state, "UT");

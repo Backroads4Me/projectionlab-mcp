@@ -2,7 +2,6 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
-import { detectLayout } from "../layout.js";
 import { PLAN_SETTING_SECTIONS } from "../planSettings.js";
 import { planNotFoundError, requirePlans, resolvePlan } from "../plans.js";
 import { renderSettingsReport } from "../settingsReport.js";
@@ -77,7 +76,7 @@ export function registerSettingsReportTool(server: McpServer, bridge: Bridge) {
           }
           selected.push(second);
         }
-        const report = renderSettingsReport(selected, detectLayout(data), {
+        const report = renderSettingsReport(selected, {
           section,
           differencesOnly,
         });

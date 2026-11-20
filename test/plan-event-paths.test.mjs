@@ -4,7 +4,7 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -62,12 +62,12 @@ function initialState() {
 test("get plan section lists typed paths for one event", async () => {
   const server = fakeServer();
   const bridge = {
-    async apiContract() { return contractOf(initialState()); },
+    async apiContract() { return 2; },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
-      return initialState();
+      return asV5Export(initialState());
     },
   };
   registerGetPlanSectionTool(server, bridge);
@@ -97,12 +97,12 @@ test("get plan section redacts a secret-named field read by its path or listed",
   state.plans[0].income.events[0].sync = { authToken: "secret-value", source: "bank" };
   const server = fakeServer();
   const bridge = {
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
-      return structuredClone(state);
+      return asV5Export(structuredClone(state));
     },
   };
   registerGetPlanSectionTool(server, bridge);
@@ -134,12 +134,12 @@ test("event path changes preserve nested siblings, snapshot, and verify", async 
   let state = initialState();
   const actions = [];
   const bridge = {
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
-      return state;
+      return asV5Export(state);
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {
@@ -221,14 +221,14 @@ test("event update requires exactly one patch mode before reading", async () => 
   const bridge = {
     async apiContract() {
       bridgeCalled = true;
-      return contractOf(initialState());
+      return 2;
     },
     async editAccess() {
       return "enabled";
     },
     async exportData() {
       bridgeCalled = true;
-      return initialState();
+      return asV5Export(initialState());
     },
   };
   registerUpdatePlanEventTool(server, bridge, { create: async () => {} });

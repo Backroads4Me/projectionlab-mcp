@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { v5Export } from "./fixtures/v5-export.mjs";
 import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
-import { contractOf } from "./helpers/contract.mjs";
+import { asV5Export } from "./helpers/v5-envelope.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -35,13 +35,12 @@ function snapshotStore() {
   const created = [];
   return {
     created,
-    async create(operation, sections, data, layout) {
+    async create(operation, sections, data) {
       const snapshot = {
         id: `snap-${created.length + 1}`,
         timestamp: new Date(created.length).toISOString(),
         operation,
         sections,
-        layout,
         data: structuredClone(data),
       };
       created.push(snapshot);
@@ -92,13 +91,12 @@ function financesBridge(state = v5Export()) {
     async exportData() {
       return structuredClone(state);
     },
-    async updateAccount(accountId, data, force, layout) {
+    async updateAccount(accountId, data, force) {
       writes.push({
         name: "updateAccount",
         accountId,
         data: structuredClone(data),
         force,
-        layout,
       });
       const account = state.documents.currentFinances.accounts[accountId];
       if (!account) throw new Error(`No account matches id "${accountId}".`);
@@ -184,7 +182,7 @@ test("update_account reports a verification that could not run only when the rea
 });
 
 /**
- * A ProjectionLab 4 bridge whose plans write stores what `keep` says the app
+ * A bridge whose plans write stores what `keep` says the app
  * kept. Once the write has gone in, `dropPlan` removes the plan from every
  * read, so the tool verifies against a plan that is no longer there.
  */
@@ -207,7 +205,7 @@ function planBridge({ keep, dropPlan = false } = {}) {
     state,
     actions,
     async apiContract() {
-      return contractOf(state);
+      return 2;
     },
     async editAccess() {
       return "enabled";
@@ -215,7 +213,7 @@ function planBridge({ keep, dropPlan = false } = {}) {
     async exportData() {
       const data = structuredClone(state);
       if (dropPlan && actions.includes("restore")) data.plans = [];
-      return data;
+      return asV5Export(data);
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {
@@ -310,7 +308,7 @@ test("update_plan_settings fails verification when the fresh read lost the plan"
 });
 
 /**
- * A v4 bridge holding one plan with one income event. After the write, the
+ * A bridge holding one plan with one income event. After the write, the
  * fresh read can lose the event (`drop: "event"`) or the whole plan
  * (`drop: "plan"`).
  */
@@ -339,7 +337,7 @@ function eventBridge({ drop } = {}) {
     state,
     actions,
     async apiContract() {
-      return contractOf(state);
+      return 2;
     },
     async editAccess() {
       return "enabled";
@@ -350,7 +348,7 @@ function eventBridge({ drop } = {}) {
         if (drop === "plan") data.plans = [];
         if (drop === "event") data.plans[0].income.events = [];
       }
-      return data;
+      return asV5Export(data);
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {

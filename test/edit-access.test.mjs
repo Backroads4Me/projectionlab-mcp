@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { freePort } from "./helpers/free-port.mjs";
+import { v5Export } from "./fixtures/v5-export.mjs";
 
 const PORT = await freePort();
 const TOKEN = "test-token";
@@ -39,9 +40,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * A fake executor. `hello` is merged into the hello frame, so leaving out
  * allowEdits plays an executor without the switch. `refuseWrites` answers
- * writes the way the extension does while its switch is off.
+ * writes the way the extension does while its switch is off. `apiVersion` is
+ * what the page reports as its Plugin API version; ProjectionLab 4 reports
+ * none.
  */
-async function connect({ hello = {}, refuseWrites = false } = {}) {
+async function connect({ hello = {}, refuseWrites = false, apiVersion = 2 } = {}) {
   const methods = [];
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   ws.on("open", () =>
@@ -54,8 +57,8 @@ async function connect({ hello = {}, refuseWrites = false } = {}) {
     methods.push(frame.method);
     const read = READ_METHODS.includes(frame.method);
     const result =
-      frame.method === "exportData" ? { plans: [], today: { accounts: [{ id: "a1", name: "Cash", balance: 1 }] }, settings: {} }
-      : frame.method === "apiVersion" ? null // a ProjectionLab 4 page
+      frame.method === "exportData" ? v5Export()
+      : frame.method === "apiVersion" ? apiVersion
       : true;
     const reply = !read && refuseWrites
       ? { ok: false, error: { code: "EDITS_DISABLED", message: "Agent plan edits are turned off" } }
@@ -92,12 +95,11 @@ test("an executor without the switch can read but never write", async () => {
     assert.equal((await bridge.checkConnection()).writesEnabled, false);
     await bridge.exportData({ fresh: true });
     for (const write of [
-      () => bridge.restorePlans([], "v4"),
-      () => bridge.restorePlansIfUnchanged([], [], "v4"),
-      () => bridge.restoreCurrentFinances({}, "v4"),
-      () => bridge.restoreProgress({}, "v4"),
-      () => bridge.restoreSettings({}, "v4"),
-      () => bridge.updateAccount("a1", { balance: 2 }, undefined, "v4"),
+      () => bridge.restorePlans([]),
+      () => bridge.restorePlansIfUnchanged(v5Export().documents.plans, []),
+      () => bridge.restoreCurrentFinances({}),
+      () => bridge.restoreSettings({}),
+      () => bridge.updateAccount("a1", { balance: 2 }, undefined),
     ]) {
       await assert.rejects(write(), { code: "READ_ONLY_MODE", message: /no plan-edits switch/ });
     }
@@ -111,17 +113,17 @@ test("the switch reported in the hello and in settings frames decides each write
   const exec = await connect({ hello: { allowEdits: false } });
   try {
     assert.equal(await bridge.editAccess(), "disabled");
-    await assert.rejects(bridge.restoreSettings({}, "v4"), { code: "READ_ONLY_MODE", message: /turned off/ });
+    await assert.rejects(bridge.restoreSettings({}), { code: "READ_ONLY_MODE", message: /turned off/ });
     assert.deepEqual(writes(exec.methods), []);
 
     await exec.settings(true);
     assert.equal(await bridge.editAccess(), "enabled");
     assert.equal((await bridge.checkConnection()).writesEnabled, true);
-    await bridge.restoreSettings({}, "v4");
+    await bridge.restoreSettings({});
     assert.deepEqual(writes(exec.methods), ["restoreSettings"]);
 
     await exec.settings(false);
-    await assert.rejects(bridge.restoreSettings({}, "v4"), { code: "READ_ONLY_MODE" });
+    await assert.rejects(bridge.restoreSettings({}), { code: "READ_ONLY_MODE" });
     assert.deepEqual(writes(exec.methods), ["restoreSettings"]);
   } finally {
     await exec.close();
@@ -132,8 +134,27 @@ test("a write the browser refuses maps to READ_ONLY_MODE and turns edits off", a
   // The switch went off in the browser before its settings frame arrived.
   const exec = await connect({ hello: { allowEdits: true }, refuseWrites: true });
   try {
-    await assert.rejects(bridge.restoreSettings({}, "v4"), { code: "READ_ONLY_MODE", message: /turned off/ });
+    await assert.rejects(bridge.restoreSettings({}), { code: "READ_ONLY_MODE", message: /turned off/ });
     assert.equal(await bridge.editAccess(), "disabled");
+  } finally {
+    await exec.close();
+  }
+});
+
+test("a ProjectionLab 4 page refuses every write, with edits on, before it reaches the executor", async () => {
+  const exec = await connect({ hello: { allowEdits: true }, apiVersion: null });
+  try {
+    assert.equal(await bridge.editAccess(), "enabled");
+    for (const write of [
+      () => bridge.restorePlans([]),
+      () => bridge.restorePlansIfUnchanged(v5Export().documents.plans, []),
+      () => bridge.restoreCurrentFinances({}),
+      () => bridge.restoreSettings({}),
+      () => bridge.updateAccount("a1", { balance: 2 }, undefined),
+    ]) {
+      await assert.rejects(write(), { code: "UNSUPPORTED_API_VERSION", message: /ProjectionLab 4/ });
+    }
+    assert.deepEqual(writes(exec.methods), []);
   } finally {
     await exec.close();
   }

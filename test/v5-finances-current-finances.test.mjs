@@ -1,6 +1,6 @@
 // projectionlab_get_current_finances on a ProjectionLab 5 export: accounts
 // keyed by id and narrowed by kind, archived accounts, real-asset equity from
-// secured debts, redaction, and unchanged ProjectionLab 4 output.
+// secured debts, and redaction.
 
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
@@ -194,7 +194,7 @@ test("a v5 account listing describes each value with the entry update_account en
   const sources = ["plan", "fixed", "custom", "none"];
   assert.deepEqual(growth.allowedValues, sources);
   assert.deepEqual(
-    refusedEnumChoices("accounts", "investmentGrowthType", "rate", "v5"),
+    refusedEnumChoices("accounts", "investmentGrowthType", "rate"),
     sources,
   );
 });
@@ -225,87 +225,6 @@ test("a v5 export without Current Finances is refused", async () => {
   const exported = v5Export();
   delete exported.documents.currentFinances;
   const result = await call(exported);
-
-  assert.equal(result.isError, true);
-  assert.match(JSON.parse(result.content[0].text).message, /No current finances data/);
-});
-
-// ProjectionLab 4 regressions.
-
-const v4Export = () => ({
-  meta: { version: "4.6.0" },
-  today: {
-    investmentAccounts: [
-      { id: "inv-1", name: "Brokerage", balance: 100000, allocation: { stocks: 0.6 } },
-    ],
-    savingsAccounts: [],
-    debts: [{ id: "debt-1", name: "Car loan", balance: 8000 }],
-    assets: [
-      {
-        id: "home-1",
-        name: "Home",
-        type: "real-estate",
-        amount: 500000,
-        balance: 200000,
-      },
-    ],
-  },
-  plans: [],
-  settings: {},
-  progress: { data: [] },
-});
-
-test("v4 whole-section read is the stored section plus real-estate blocks, with no v5 fields", async () => {
-  const output = await json(v4Export());
-
-  assert.deepEqual(Object.keys(output), [
-    "investmentAccounts",
-    "savingsAccounts",
-    "debts",
-    "assets",
-  ]);
-  assert.equal(output.assets[0].realEstate.netEquity, 300000);
-  assert.equal("archivedAccounts" in output, false);
-  assert.equal("accounts" in output, false);
-});
-
-test("v4 account read by id is unchanged", async () => {
-  const output = await json(v4Export(), { accountId: "inv-1" });
-
-  assert.deepEqual(output, {
-    accountId: "inv-1",
-    accountName: "Brokerage",
-    collection: "investmentAccounts",
-    data: { id: "inv-1", name: "Brokerage", balance: 100000, allocation: { stocks: 0.6 } },
-  });
-});
-
-test("v4 listPaths keeps its data model annotations", async () => {
-  const output = await json(v4Export(), { accountId: "inv-1", listPaths: true });
-
-  assert.equal(output.collection, "investmentAccounts");
-  const balance = output.data.find((item) => item.path === "balance");
-  assert.equal(balance.value, 100000);
-  assert.equal(typeof balance.description, "string");
-});
-
-test("v4 real-estate asset read by id carries its realEstate block", async () => {
-  const output = await json(v4Export(), { accountId: "home-1" });
-
-  assert.equal(output.collection, "assets");
-  assert.equal(output.data.realEstate.marketValue, 500000);
-  assert.equal(output.data.realEstate.loanBalance, 200000);
-});
-
-test("v4 unknown account id keeps its error and count", async () => {
-  const result = await call(v4Export(), { accountId: "nope" });
-
-  assert.equal(result.isError, true);
-  assert.match(JSON.parse(result.content[0].text).suggestion, /3 available account record/);
-});
-
-test("v4 read without Current Finances is refused as before", async () => {
-  const result = await call({ meta: {}, plans: [] });
 
   assert.equal(result.isError, true);
   assert.match(JSON.parse(result.content[0].text).message, /No current finances data/);

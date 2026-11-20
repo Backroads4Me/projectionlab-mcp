@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Bridge } from "../bridge.js";
-import { detectLayout, exportSections } from "../layout.js";
+import { exportSections } from "../layout.js";
 import { baselinePlanId, eventLink, linkedPathsChanged } from "../linkedFields.js";
 import { annotateAddressableValues } from "../dataModel.js";
 import { ProjectionLabError, errorResult } from "../errors.js";
@@ -129,7 +129,7 @@ export function registerGetPlanSectionTool(
           let index = resolveEventIndex(events, eventIdentifier);
           // A ProjectionLab 5 event names its Current Finances account or
           // asset by accountId/assetId, so that id selects the event too.
-          if (index === -1 && detectLayout(data) === "v5") {
+          if (index === -1) {
             index = resolveLinkedEventIndex(events, eventIdentifier);
           }
           const match = index === -1 ? undefined : events[index];
@@ -159,13 +159,12 @@ export function registerGetPlanSectionTool(
           const listed = annotateAddressableValues(
             section,
             listAddressableValues(sectionData),
-            detectLayout(data),
           );
           // On one linked event, mark the paths ProjectionLab copies from the
           // item the event links to; plan writes to them are refused.
           const link =
             eventIdentifier !== undefined && path === undefined
-              ? eventLink(section, sectionData, detectLayout(data))
+              ? eventLink(section, sectionData)
               : undefined;
           if (link) {
             const isBaseline =

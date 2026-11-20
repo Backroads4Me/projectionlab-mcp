@@ -35,7 +35,7 @@ import {
   EVENT_SECTIONS,
   type PlanObj,
 } from "../plans.js";
-import { detectLayout, exportSections, type ExportLayout } from "../layout.js";
+import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 import {
   baselinePlanId,
@@ -80,14 +80,13 @@ function applyEventPatch(
   event: PlanObj,
   patch: Record<string, unknown>,
   section: string,
-  layout: ExportLayout,
 ): { updated: PlanObj; changes: Record<string, PathValueChange> } {
   for (const key of Object.keys(patch)) {
     assertMutableEventPath(key);
   }
   for (const { path, value } of listAddressableValues(patch)) {
     if (pathValueUnchanged(event, path, value)) continue;
-    const refusal = enumRefusalError(section, path, value, layout);
+    const refusal = enumRefusalError(section, path, value);
     if (refusal) throw refusal;
   }
   const existing: Record<string, unknown> = {};
@@ -109,7 +108,7 @@ function applyEventPatch(
         "New top-level fields must be plain, non-secret names; use pathChanges to change existing nested values",
       );
     }
-    const refusal = enumRefusalForNewValue(section, key, value, layout);
+    const refusal = enumRefusalForNewValue(section, key, value);
     if (refusal) throw refusal;
     additions[key] = value;
   }
@@ -122,7 +121,6 @@ function applyEventPatch(
       existing,
       EVENT_FIELD_CONTEXT,
       section,
-      layout,
     );
     updated = result.updated;
     changes = result.changes;
@@ -285,19 +283,18 @@ export function registerUpdatePlanEventTool(
             pathChanges,
             EVENT_FIELD_CONTEXT,
             section,
-            detectLayout(data),
           );
           patched = result.updated;
           changes = result.changes;
         } else {
-          const result = applyEventPatch(event, patch ?? {}, section, detectLayout(data));
+          const result = applyEventPatch(event, patch ?? {}, section);
           patched = result.updated;
           changes = result.changes;
         }
 
         // ProjectionLab 5 copies some fields onto a linked event from the
         // item it links to, so a plan value written there would not stay.
-        const link = eventLink(section, event, detectLayout(data));
+        const link = eventLink(section, event);
         if (link) {
           const linkedPaths = linkedPathsChanged(
             event,
@@ -362,7 +359,7 @@ export function registerUpdatePlanEventTool(
 
         const snapshot = await snapshots.create("updatePlanEvent", ["plans"], {
           plans,
-        }, detectLayout(data));
+        });
 
         const updatedPlan = {
           ...plan,
@@ -376,7 +373,7 @@ export function registerUpdatePlanEventTool(
           `Patching event "${eventLabel(event)}" in "${section}" of plan "${plan.name}" (${Object.keys(changes).length} fields)`,
         );
 
-        await bridge.restorePlansIfUnchanged(plans, updatedPlans, detectLayout(data));
+        await bridge.restorePlansIfUnchanged(plans, updatedPlans);
 
         // Verify the patched fields on a fresh read. A plan or event the read
         // no longer carries fails verification: with no event to look in, the

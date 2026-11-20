@@ -26,8 +26,7 @@ function v5Bridge(state = v5Export()) {
   const writes = [];
   const apply = (name) => async (...args) => {
     const plans = name === "restorePlans" ? args[0] : args[1];
-    const layout = args[args.length - 1];
-    writes.push({ name, plans: structuredClone(plans), layout });
+    writes.push({ name, plans: structuredClone(plans) });
     state.documents.plans = structuredClone(plans);
   };
   const refuse = (name) => async () => {
@@ -49,7 +48,6 @@ function v5Bridge(state = v5Export()) {
     restorePlansIfUnchanged: apply("restorePlansIfUnchanged"),
     updateAccount: refuse("updateAccount"),
     restoreCurrentFinances: refuse("restoreCurrentFinances"),
-    restoreProgress: refuse("restoreProgress"),
     restoreSettings: refuse("restoreSettings"),
   };
 }
@@ -59,8 +57,8 @@ function snapshotStore(held) {
   const created = [];
   return {
     created,
-    async create(operation, sections, data, layout) {
-      created.push({ operation, sections, data: structuredClone(data), layout });
+    async create(operation, sections, data) {
+      created.push({ operation, sections, data: structuredClone(data), layout: "v5" });
       return { id: `snap-${created.length}` };
     },
     async get() {
@@ -113,13 +111,11 @@ test("update_plan_event previews, then writes the v5 plans with only that event 
   assert.equal(done.verified, true, JSON.stringify(done));
 
   assert.equal(snapshots.created.length, 1);
-  assert.equal(snapshots.created[0].layout, "v5");
   assert.deepEqual(snapshots.created[0].data.plans, before);
 
   assert.equal(bridge.writes.length, 1);
   const [write] = bridge.writes;
   assert.equal(write.name, "restorePlansIfUnchanged");
-  assert.equal(write.layout, "v5");
   assert.equal(write.plans.length, before.length);
   assert.deepEqual(planById(write.plans, "plan_early"), planById(before, "plan_early"));
   const expected = structuredClone(planById(before, "plan_main"));
@@ -142,7 +138,6 @@ test("update_plan_section replaces one v5 section and leaves the rest of the pla
   assert.equal(done.success, true, JSON.stringify(done));
   assert.equal(done.verified, true, JSON.stringify(done));
   const [write] = bridge.writes;
-  assert.equal(write.layout, "v5");
   assert.deepEqual(planById(write.plans, "plan_main"), { ...planById(before, "plan_main"), milestones });
   assert.deepEqual(planById(write.plans, "plan_early"), planById(before, "plan_early"));
 });
@@ -205,7 +200,6 @@ test("restore_plans writes v5 plans", async () => {
   const done = await call("projectionlab_restore_plans", { plans, confirm: true });
   assert.equal(done.success, true, JSON.stringify(done));
   assert.equal(done.verified, true, JSON.stringify(done));
-  assert.equal(bridge.writes[0].layout, "v5");
   assert.deepEqual(bridge.writes[0].plans, plans);
 });
 
@@ -226,7 +220,6 @@ test("rollback restores the plans of a v5 plans snapshot", async () => {
   const done = await call("projectionlab_rollback", { snapshotId: "snap-v5", confirm: true });
   assert.equal(done.success, true, JSON.stringify(done));
   assert.equal(bridge.writes.length, 1);
-  assert.equal(bridge.writes[0].layout, "v5");
   assert.deepEqual(bridge.writes[0].plans, v5Export().documents.plans);
 });
 
@@ -313,7 +306,7 @@ test("a whole yearlyChange object is refused value by value against the v5 enum"
 });
 
 test("a v5 yearlyChange enum is refused by its leaf path as well as inside the object", async () => {
-  // Both layouts of the same change answer the same way, which is what the
+  // Both forms of the same change answer the same way, which is what the
   // whole-object walk is for.
   const state = v5Export();
   const salary = planById(state.documents.plans, "plan_main").income.events[0];

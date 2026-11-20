@@ -6,7 +6,6 @@ import { errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
 import { redactSecrets } from "../redact.js";
-import { CONTRACT_2_WRITES, detectLayout } from "../layout.js";
 import {
   PLAN_SETTING_SECTIONS,
   listPlanSettings,
@@ -37,9 +36,9 @@ export function registerGetPlanSettingsTool(
         "fields so one year or rate can be patched without replacing the schedule. Use the returned " +
         "paths and JSON types with " +
         "projectionlab_update_plan_settings. " +
-        "On ProjectionLab 5 the result also carries planSelection, the workspace's plan settings " +
+        "The result also carries planSelection, the workspace's plan settings " +
         "(active and baseline plan ids, alignment, tabs); a value the export leaves null reads " +
-        "'not reported', and mutableWith is null while writes are unsupported there.",
+        "'not reported'.",
       inputSchema: {
         planIdentifier: z
           .string()
@@ -68,13 +67,11 @@ export function registerGetPlanSettingsTool(
         const plan = resolvePlan(plans, planIdentifier);
         if (!plan) throw planNotFoundError(plans, planIdentifier);
 
-        const layout = detectLayout(data);
         const selected = section ? [section] : PLAN_SETTING_SECTIONS;
         const sections = selected.map((name) => {
           const settings = annotateAddressableValues(
             name,
             listPlanSettings(plan[name], name),
-            layout,
           );
           return {
             section: name,
@@ -82,18 +79,15 @@ export function registerGetPlanSettingsTool(
             settings,
           };
         });
-        // The update tool writes through restorePlans, which a ProjectionLab 5
-        // page refuses until contract 2 allows it.
-        const writable =
-          layout === "v4" || CONTRACT_2_WRITES.has("restorePlans");
-        // v5 keeps the workspace's active/baseline plan ids, alignment and
-        // tabs in documents.settings.plan; v4 output has no such block.
+        // ProjectionLab 5 keeps the workspace's active/baseline plan ids,
+        // alignment and tabs in documents.settings.plan.
         const selection = planSelection(data);
         const output = {
           planName: plan.name,
           planId: plan.id,
-          mutableWith: writable ? "projectionlab_update_plan_settings" : null,
-          ...(selection ? { layout: "v5", planSelection: selection } : {}),
+          mutableWith: "projectionlab_update_plan_settings",
+          layout: "v5",
+          planSelection: selection,
           sections,
         };
 

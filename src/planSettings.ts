@@ -1,4 +1,4 @@
-import { exportSections, type ExportLayout } from "./layout.js";
+import { exportSections } from "./layout.js";
 import {
   applyExistingPathChanges,
   listAddressableValues,
@@ -48,7 +48,6 @@ export function applyPlanSettingChanges(
   sectionData: unknown,
   incoming: Record<string, unknown>,
   section?: PlanSettingSection,
-  layout: ExportLayout = "v4",
 ): {
   updated: Record<string, unknown>;
   changes: Record<string, PlanSettingChange>;
@@ -58,7 +57,6 @@ export function applyPlanSettingChanges(
     incoming,
     PLAN_SETTING_CONTEXT,
     section,
-    layout,
   );
 }
 
@@ -71,15 +69,12 @@ export interface PlanSelection {
 }
 
 /**
- * The workspace-level plan settings of a ProjectionLab 5 export
- * (`documents.settings.plan`), or null for a ProjectionLab 4 export, whose
- * plans carry their own flags. A value the export leaves unset or null is
+ * The workspace-level plan settings of an export
+ * (`documents.settings.plan`). A value the export leaves unset or null is
  * NOT_REPORTED; no plan is ever picked as the active or baseline one here.
  */
-export function planSelection(raw: unknown): PlanSelection | null {
-  const sections = exportSections(raw);
-  if (sections.layout !== "v5") return null;
-  const settings = sections.settings;
+export function planSelection(raw: unknown): PlanSelection {
+  const settings = exportSections(raw).settings;
   const held =
     settings && typeof settings === "object"
       ? (settings as PlanObj).plan

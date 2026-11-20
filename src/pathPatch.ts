@@ -1,6 +1,5 @@
 import { enumRefusalError } from "./dataModel.js";
 import { ProjectionLabError } from "./errors.js";
-import type { ExportLayout } from "./layout.js";
 import type { PlanObj } from "./plans.js";
 import { isSecretFieldName } from "./redact.js";
 
@@ -259,12 +258,11 @@ function enumRefusalForValue(
   path: string,
   value: unknown,
   stored: StoredValue,
-  layout: ExportLayout,
 ): ProjectionLabError | undefined {
   if (stored.present && storedValueMatches(value, stored.value)) {
     return undefined;
   }
-  const refusal = enumRefusalError(scope, path, value, layout);
+  const refusal = enumRefusalError(scope, path, value);
   if (refusal) return refusal;
   if (!isContainer(value)) return undefined;
   for (const key of Object.keys(value)) {
@@ -273,7 +271,6 @@ function enumRefusalForValue(
       `${path}.${key}`,
       containerValue(value, key),
       storedCounterpart(stored, key),
-      layout,
     );
     if (nested) return nested;
   }
@@ -288,9 +285,8 @@ export function enumRefusalForNewValue(
   scope: string,
   path: string,
   value: unknown,
-  layout: ExportLayout,
 ): ProjectionLabError | undefined {
-  return enumRefusalForValue(scope, path, value, ABSENT, layout);
+  return enumRefusalForValue(scope, path, value, ABSENT);
 }
 
 /**
@@ -312,7 +308,7 @@ export function pathValueUnchanged(
  * Apply path-addressed changes immutably. Paths must already exist and values
  * must retain their JSON type. When `scope` names a group in the data model
  * registry (a settings section, event section, or Current Finances
- * collection) of the `layout` data model, a string value outside an observed
+ * collection), a string value outside an observed
  * enum's choices is refused with INVALID_INPUT, at the addressed path and at
  * every path nested inside a whole-object or whole-array value. A leaf is
  * checked only when the write changes it, so an out-of-list value the stored
@@ -323,7 +319,6 @@ export function applyExistingPathChanges(
   incoming: Record<string, unknown>,
   context: PathPatchContext,
   scope?: string,
-  layout: ExportLayout = "v4",
 ): {
   updated: PlanObj;
   changes: Record<string, PathValueChange>;
@@ -367,7 +362,6 @@ export function applyExistingPathChanges(
         path,
         after,
         readStoredPath(data, parts),
-        layout,
       );
       if (refusal) throw refusal;
     }

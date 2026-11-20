@@ -6,10 +6,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
+import { v5Export } from "./fixtures/v5-export.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -22,7 +22,7 @@ const { registerDataModelResource } = await import(
   "../dist/resources/dataModel.js"
 );
 const { matchDataModelField, UI_LABELS_V5 } = await import("../dist/dataModel.js");
-const { renderDataModelV5Markdown } = await import(
+const { renderDataModelMarkdown } = await import(
   "../dist/resources/dataModel.js"
 );
 const { registerGetPlanSettingsTool } = await import(
@@ -87,75 +87,36 @@ async function errorFor(call, args) {
   return text(result);
 }
 
+/** The v5 fixture with the settings, events and account fields these tests
+ * read and write placed on its Main Plan and brokerage account. */
 function planState() {
-  return {
-    plans: [
-      {
-        id: "plan-1",
-        name: "Retire",
-        lastUpdated: 100,
-        variables: {
-          assumptionsMode: "fixed",
-          inflation: 3,
-          filingStatus: "single",
-          taxStrategy: { bracketRate: 0.22 },
-        },
-        montecarlo: { trials: 1000, sampling: "block-bootstrap" },
-        withdrawalStrategy: { enabled: false, strategy: "fixed-%" },
-        expenses: {
-          events: [
-            {
-              id: "e1",
-              name: "Living",
-              type: "living-expenses",
-              spendingType: "essential",
-              amount: 50000,
-              amountType: "today$",
-              frequency: "yearly",
-            },
-          ],
-        },
-        milestones: [
-          {
-            id: "m1",
-            name: "Retirement",
-            criteria: [{ type: "year", value: "2040-01-01", modifier: "include" }],
-          },
-        ],
-      },
-    ],
-    today: {
-      savingsAccounts: [],
-      investmentAccounts: [
-        {
-          id: "i1",
-          name: "Brokerage",
-          type: "taxable",
-          balance: 100000,
-          costBasis: 60000,
-          allocation: { stocks: 0.6 },
-        },
-      ],
-      debts: [],
-      assets: [
-        {
-          id: "a1",
-          name: "House",
-          type: "real-estate",
-          amount: 400000,
-          amountType: "today$",
-          paymentMethod: "pay-in-full",
-        },
-      ],
-    },
+  const state = v5Export();
+  const plan = state.documents.plans[0];
+  plan.variables = {
+    assumptionsMode: "fixed",
+    inflation: 3,
+    filingStatus: "single",
+    alignment: { type: "calendar" },
+    taxStrategy: { bracketRate: 0.22 },
   };
+  plan.withdrawalStrategy = { enabled: false };
+  plan.expenses.events[0].spendingType = "essential";
+  plan.expenses.events[0].unregisteredNote = "not in the data model";
+  plan.milestones[0].criteria = [{ type: "year", value: "2040-01-01", modifier: "include" }];
+  Object.assign(state.documents.currentFinances.accounts.acct_brokerage, {
+    investmentGrowthType: "plan",
+    allocation: { stocks: 0.6 },
+  });
+  return state;
 }
+
+const mainPlan = (state) => state.documents.plans[0];
 
 function fakeBridge(state) {
   const bridge = {
     state,
     writes: [],
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return "enabled";
     },
@@ -165,14 +126,11 @@ function fakeBridge(state) {
     restorePlansIfUnchanged,
     async restorePlans(plans) {
       bridge.writes.push("plans");
-      state.plans = structuredClone(plans);
+      state.documents.plans = structuredClone(plans);
     },
     async updateAccount(accountId, data) {
       bridge.writes.push(`account:${accountId}`);
-      for (const collection of ["assets", "investmentAccounts"]) {
-        const entry = state.today[collection].find((a) => a.id === accountId);
-        if (entry) Object.assign(entry, data);
-      }
+      Object.assign(state.documents.currentFinances.accounts[accountId], data);
     },
   };
   return bridge;
@@ -187,16 +145,16 @@ test("data-model resource is version-stamped and names each rate's scale", async
   const server = fakeServer();
   registerDataModelResource(server);
   const markdown = await resourceText(server, "projectionlab://data-model");
-  assert.match(markdown, /ProjectionLab 4\.6\.0/);
-  assert.match(markdown, /\[ui-label\][^]*not yet confirmed by a stored-value test/);
-  assert.match(markdown, /v5/);
+  assert.match(markdown, /^# ProjectionLab Data Model \(ProjectionLab 5\.0\.0\)/);
+  assert.match(markdown, /\[export-shape\][^]*not yet confirmed by a stored-value test/);
+  assert.doesNotMatch(markdown, /ProjectionLab 4/);
   assert.match(
     markdown,
-    /`inflation` \[observed\][^]*Units: percentage points/,
+    /`inflation` \[export-shape\][^\n]*Units: percentage points/,
   );
   assert.match(
     markdown,
-    /`taxStrategy\.bracketRate` \[observed\][^]*Units: decimal fraction/,
+    /`taxStrategy\.bracketRate` \[export-shape\][^\n]*Units: decimal fraction/,
   );
   assert.equal(/\$\d/.test(markdown), false);
 });
@@ -205,7 +163,7 @@ test("listPaths for variables carries units for inflation and bracketRate", asyn
   const server = fakeServer();
   const getSettings = caller(server, "projectionlab_get_plan_settings", fakeBridge(planState()));
   const output = text(
-    await getSettings({ planIdentifier: "Retire", section: "variables" }),
+    await getSettings({ planIdentifier: "Main Plan", section: "variables" }),
   );
   const settings = output.sections[0].settings;
   const inflation = settings.find((item) => item.path === "inflation");
@@ -226,15 +184,15 @@ test("listPaths marks which allowed values list a write is held to", async () =>
   const server = fakeServer();
   const getSettings = caller(server, "projectionlab_get_plan_settings", fakeBridge(planState()));
   const output = text(
-    await getSettings({ planIdentifier: "Retire", section: "variables" }),
+    await getSettings({ planIdentifier: "Main Plan", section: "variables" }),
   );
   const settings = output.sections[0].settings;
 
-  // variables.assumptionsMode is observed, so a write outside its list fails.
-  const mode = settings.find((item) => item.path === "assumptionsMode");
-  assert.equal(mode.allowedValuesEnforced, true);
+  // variables.alignment.type is observed, so a write outside its list fails.
+  const alignment = settings.find((item) => item.path === "alignment.type");
+  assert.equal(alignment.allowedValuesEnforced, true);
 
-  // variables.filingStatus is ui-label: the list is what the app shows, not a rule.
+  // variables.filingStatus is export-shape: the list is what exports show, not a rule.
   const filing = settings.find((item) => item.path === "filingStatus");
   assert.ok(filing.allowedValues.length > 0, "the entry carries a list");
   assert.equal(filing.allowedValuesEnforced, false);
@@ -253,11 +211,11 @@ test("the data-model resource marks an enforced list and leaves a hint unmarked"
     markdown.split("\n").find((line) => line.startsWith(`- \`${pattern}\` [`));
 
   assert.match(
-    entry("assumptionsMode"),
-    /Allowed values: fixed, historical, custom\. A write of any other value is refused\./,
+    entry("alignment.type"),
+    /Allowed values: calendar, rolling, au-tax, uk-tax, custom\. A write of any other value is refused\./,
   );
   assert.equal(
-    entry("filingStatus").includes("A write of any other value is refused"),
+    entry("assumptionsMode").includes("A write of any other value is refused"),
     false,
   );
 });
@@ -265,7 +223,7 @@ test("the data-model resource marks an enforced list and leaves a hint unmarked"
 test("plan settings listings carry the app's label and location where recorded", async () => {
   const server = fakeServer();
   const getSettings = caller(server, "projectionlab_get_plan_settings", fakeBridge(planState()));
-  const output = text(await getSettings({ planIdentifier: "Retire" }));
+  const output = text(await getSettings({ planIdentifier: "Main Plan" }));
   const find = (section, path) =>
     output.sections
       .find((entry) => entry.section === section)
@@ -280,33 +238,31 @@ test("plan settings listings carry the app's label and location where recorded",
   assert.equal("uiLocation" in mode, false);
 });
 
-test("data-model resources show where each labelled plan setting is in the app", async () => {
+test("the data-model resource shows where each labelled plan setting is in the app", async () => {
   const server = fakeServer();
   registerDataModelResource(server);
-  const v4 = await resourceText(server, "projectionlab://data-model");
+  const markdown = await resourceText(server, "projectionlab://data-model");
+  assert.equal(markdown, renderDataModelMarkdown());
   assert.match(
-    v4,
-    /`inflation` \[observed\][^\n]*In the app \(ProjectionLab 5\.0\.0\): "Inflation Rate" under Plan Settings > Rates \(Fixed mode\)\./,
+    markdown,
+    /`inflation` \[export-shape\][^\n]*In the app \(ProjectionLab 5\.0\.0\): "Inflation Rate" under Plan Settings > Rates \(Fixed mode\)\./,
   );
-  const v5 = renderDataModelV5Markdown();
-  assert.match(v5, /## Fields in the app/);
-  assert.match(v5, /- `income\.owner`: "Earner" under Plan > income event\./);
-  assert.match(v5, /## Fields the tools cannot change/);
+  assert.match(markdown, /## Fields in the app/);
+  assert.match(markdown, /- `income\.owner`: "Earner" under Plan > income event\./);
+  assert.match(markdown, /## Fields the tools cannot change/);
   assert.match(
-    v5,
+    markdown,
     /- `withdrawalStrategy\.guyton-klinger\.guardrail`: "Guardrail" under Optimize > Drawdown Strategy > Textbook Withdrawals, Strategy "Guyton-Klinger"\./,
   );
-  assert.equal(/`variables\.assumptionsMode`:/.test(v5), false);
+  assert.equal(/`variables\.assumptionsMode`:/.test(markdown), false);
 });
 
-test("UI labels attach to matching fields in both export layouts", () => {
-  assert.equal(matchDataModelField("variables", "inflation", "v5")?.uiLabel, "Inflation Rate");
-  assert.equal(matchDataModelField("expenses", "spendingType", "v4")?.uiLabel, "Spending Type");
-  assert.equal(matchDataModelField("expenses", "spendingType", "v5")?.uiLabel, "Spending Type");
-  assert.equal(matchDataModelField("accounts", "EWAge", "v4")?.uiLabel, "Qualified Age");
-  assert.equal(matchDataModelField("accounts", "value", "v5")?.uiLabel, "Current Value");
+test("UI labels attach to matching fields", () => {
+  assert.equal(matchDataModelField("variables", "inflation")?.uiLabel, "Inflation Rate");
+  assert.equal(matchDataModelField("expenses", "spendingType")?.uiLabel, "Spending Type");
+  assert.equal(matchDataModelField("accounts", "value")?.uiLabel, "Current Value");
   assert.equal(
-    matchDataModelField("currentFinances", "household.people.me.lifeExpectancy", "v5")?.uiLabel,
+    matchDataModelField("currentFinances", "household.people.me.lifeExpectancy")?.uiLabel,
     "Life Expectancy",
   );
 });
@@ -314,7 +270,7 @@ test("UI labels attach to matching fields in both export layouts", () => {
 test("every UI_LABELS_V5 path resolves with its label against the v5 data model", () => {
   for (const [scope, labels] of Object.entries(UI_LABELS_V5)) {
     for (const [path, [label, location]] of Object.entries(labels)) {
-      const field = matchDataModelField(scope, path, "v5");
+      const field = matchDataModelField(scope, path);
       assert.ok(
         field,
         `UI_LABELS_V5.${scope}.${path} has no ProjectionLab 5 data model entry`,
@@ -330,26 +286,28 @@ test("listPaths for an event annotates the spending type and leaves unknown fiel
   const getSection = caller(server, "projectionlab_get_plan_section", fakeBridge(planState()));
   const output = text(
     await getSection({
-      planIdentifier: "Retire",
+      planIdentifier: "Main Plan",
       section: "expenses",
       eventIdentifier: "Living",
       listPaths: true,
     }),
   );
   const spending = output.data.find((item) => item.path === "spendingType");
-  assert.deepEqual(spending.allowedValues, ["essential", "discretionary"]);
-  assert.match(spending.description, /essential or discretionary/);
+  assert.deepEqual(spending.allowedValues, ["essential", "discretionary", "hybrid", "none"]);
+  assert.match(spending.description, /total spending/);
   const amount = output.data.find((item) => item.path === "amount");
   assert.equal(amount.units, "dollars");
-  const id = output.data.find((item) => item.path === "id");
-  assert.equal(id.description, undefined);
+  // A field the data model does not register gains no annotation.
+  const note = output.data.find((item) => item.path === "unregisteredNote");
+  assert.equal(note.description, undefined);
+  assert.equal(note.units, undefined);
 });
 
 test("listPaths for a Current Finances account annotates balance only where registered", async () => {
   const server = fakeServer();
   const getFinances = caller(server, "projectionlab_get_current_finances", fakeBridge(planState()));
   const output = text(
-    await getFinances({ accountId: "i1", listPaths: true }),
+    await getFinances({ accountId: "acct_brokerage", listPaths: true }),
   );
   const balance = output.data.find((item) => item.path === "balance");
   assert.equal(balance.units, "dollars");
@@ -369,17 +327,17 @@ test("writing an unobserved value to an observed enum is refused with the choice
     new SnapshotManager(),
   );
   const err = await errorFor(update, {
-    planIdentifier: "Retire",
+    planIdentifier: "Main Plan",
     section: "variables",
-    changes: { assumptionsMode: "turbo" },
+    changes: { "alignment.type": "turbo" },
     confirm: true,
   });
   assert.equal(err.error, "INVALID_INPUT");
-  assert.match(err.message, /"variables\.assumptionsMode"/);
-  assert.match(err.message, /Allowed values: fixed, historical, custom/);
+  assert.match(err.message, /"variables\.alignment\.type"/);
+  assert.match(err.message, /Allowed values: calendar, rolling, au-tax, uk-tax, custom/);
   assert.match(err.suggestion, /projectionlab:\/\/data-model/);
   assert.deepEqual(bridge.writes, []);
-  assert.equal(state.plans[0].variables.assumptionsMode, "fixed");
+  assert.equal(mainPlan(state).variables.alignment.type, "calendar");
 });
 
 test("writing an allowed value goes through and verifies", async () => {
@@ -394,19 +352,19 @@ test("writing an allowed value goes through and verifies", async () => {
   );
   const out = text(
     await update({
-      planIdentifier: "Retire",
+      planIdentifier: "Main Plan",
       section: "variables",
-      changes: { assumptionsMode: "historical" },
+      changes: { "alignment.type": "rolling" },
       confirm: true,
     }),
   );
   assert.equal(out.success, true);
   assert.equal(out.verified, true);
   assert.deepEqual(bridge.writes, ["plans"]);
-  assert.equal(state.plans[0].variables.assumptionsMode, "historical");
+  assert.equal(mainPlan(state).variables.alignment.type, "rolling");
 });
 
-test("a ui-label enum accepts a value outside its listed options", async () => {
+test("an export-shape enum accepts a value outside its listed options", async () => {
   const server = fakeServer();
   const bridge = fakeBridge(planState());
   const update = caller(
@@ -417,7 +375,7 @@ test("a ui-label enum accepts a value outside its listed options", async () => {
   );
   const out = text(
     await update({
-      planIdentifier: "Retire",
+      planIdentifier: "Main Plan",
       section: "variables",
       changes: { filingStatus: "common-law" },
     }),
@@ -440,7 +398,7 @@ test("numeric fields are not range-checked", async () => {
   );
   const out = text(
     await update({
-      planIdentifier: "Retire",
+      planIdentifier: "Main Plan",
       section: "variables",
       changes: { inflation: 0.03 },
     }),
@@ -460,7 +418,7 @@ test("writing an unobserved event enum value is refused with the choices", async
     new SnapshotManager(),
   );
   const err = await errorFor(update, {
-    planIdentifier: "Retire",
+    planIdentifier: "Main Plan",
     section: "expenses",
     eventIdentifier: "Living",
     pathChanges: { spendingType: "luxury" },
@@ -468,12 +426,12 @@ test("writing an unobserved event enum value is refused with the choices", async
   });
   assert.equal(err.error, "INVALID_INPUT");
   assert.match(err.message, /"expenses\.spendingType"/);
-  assert.match(err.message, /Allowed values: essential, discretionary/);
+  assert.match(err.message, /Allowed values: essential, discretionary, hybrid, none/);
   assert.deepEqual(bridge.writes, []);
-  assert.equal(state.plans[0].expenses.events[0].spendingType, "essential");
+  assert.equal(mainPlan(state).expenses.events[0].spendingType, "essential");
 });
 
-test("writing an asset payment method refuses unobserved values and accepts observed ones", async () => {
+test("writing an account enum refuses unobserved values and accepts observed ones", async () => {
   const server = fakeServer();
   const bridge = fakeBridge(planState());
   const update = caller(
@@ -483,54 +441,47 @@ test("writing an asset payment method refuses unobserved values and accepts obse
     new SnapshotManager(),
   );
   const err = await errorFor(update, {
-    accountId: "a1",
-    pathChanges: { paymentMethod: "lease" },
+    accountId: "acct_brokerage",
+    pathChanges: { investmentGrowthType: "turbo" },
   });
   assert.equal(err.error, "INVALID_INPUT");
-  assert.match(err.message, /"assets\.paymentMethod"/);
-  assert.match(err.message, /Allowed values: pay-in-full, financed/);
+  assert.match(err.message, /"accounts\.investmentGrowthType"/);
+  assert.match(err.message, /Allowed values: plan, fixed, custom, none/);
   assert.deepEqual(bridge.writes, []);
   const out = text(
     await update({
-      accountId: "a1",
-      pathChanges: { paymentMethod: "financed" },
+      accountId: "acct_brokerage",
+      pathChanges: { investmentGrowthType: "fixed" },
     }),
   );
   assert.equal(out.dryRun, true);
-  assert.deepEqual(out.changes.paymentMethod, {
-    before: "pay-in-full",
-    after: "financed",
+  assert.deepEqual(out.changes.investmentGrowthType, {
+    before: "plan",
+    after: "fixed",
   });
 });
 
-test("a milestone criterion's type is refused outside the observed kinds, by its indexed path", async () => {
+test("a milestone criterion's type matches its indexed path and its export-shape list is not enforced", async () => {
+  const field = matchDataModelField("milestones", "criteria.0.type");
+  assert.ok(field.allowedValues.includes("year"));
   const server = fakeServer();
-  const state = planState();
-  const bridge = fakeBridge(state);
+  const bridge = fakeBridge(planState());
   const update = caller(
     server,
     "projectionlab_update_plan_event",
     bridge,
     new SnapshotManager(),
   );
-  const err = await errorFor(update, {
-    planIdentifier: "Retire",
-    section: "milestones",
-    eventIdentifier: "Retirement",
-    pathChanges: { "criteria.0.type": "someday" },
-  });
-  assert.equal(err.error, "INVALID_INPUT");
-  assert.match(err.message, /"milestones\.criteria\.0\.type"/);
-  assert.deepEqual(bridge.writes, []);
   const out = text(
     await update({
-      planIdentifier: "Retire",
+      planIdentifier: "Main Plan",
       section: "milestones",
       eventIdentifier: "Retirement",
-      pathChanges: { "criteria.0.type": "age" },
+      pathChanges: { "criteria.0.type": "someday" },
     }),
   );
   assert.equal(out.dryRun, true);
+  assert.deepEqual(bridge.writes, []);
 });
 
 test("the legacy patch input refuses an unobserved enum value too", async () => {
@@ -544,7 +495,7 @@ test("the legacy patch input refuses an unobserved enum value too", async () => 
     new SnapshotManager(),
   );
   const err = await errorFor(update, {
-    planIdentifier: "Retire",
+    planIdentifier: "Main Plan",
     section: "expenses",
     eventIdentifier: "Living",
     patch: { spendingType: "luxury" },
@@ -553,7 +504,7 @@ test("the legacy patch input refuses an unobserved enum value too", async () => 
   assert.equal(err.error, "INVALID_INPUT");
   assert.match(err.message, /"expenses\.spendingType"/);
   assert.deepEqual(bridge.writes, []);
-  assert.equal(state.plans[0].expenses.events[0].spendingType, "essential");
+  assert.equal(mainPlan(state).expenses.events[0].spendingType, "essential");
 });
 
 test("path patches reject non-index segments on arrays", async () => {

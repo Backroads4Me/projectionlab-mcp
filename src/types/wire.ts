@@ -55,7 +55,6 @@ export type WireMethod =
   | "updateAccountValues" // params: [{ accountId, values, key }] (contract 2)
   | "restoreCurrentFinances" // params: [state, { key }]
   | "restorePlans" // params: [plans, { key }]
-  | "restoreProgress" // params: [progress, { key }]
   | "restoreSettings" // params: [settings, { key }]
   | "validateApiKey" // params: [{ key }]
   | "describeApi" // params: []

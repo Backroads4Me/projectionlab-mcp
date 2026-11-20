@@ -1,12 +1,12 @@
-// projectionlab_diff: ProjectionLab 5 layout support and layout mismatch checks.
-// Validates v5 point-in-time diffing, account matching by id with v5 amount names,
-// plan event matching by id within sections, settings and accountHistory diffing,
-// plan-to-plan diffing on v5, redaction of v5 secrets, refusal of cross-layout diffs,
-// and v4 regression behavior.
+// projectionlab_diff on ProjectionLab 5: point-in-time diffing, account
+// matching by id with v5 amount names, plan event matching by id within
+// sections, settings and accountHistory diffing, plan-to-plan diffing,
+// redaction of v5 secrets, and refusal of a ProjectionLab 4 snapshot or
+// export.
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -22,12 +22,6 @@ process.env.LOG_LEVEL = "error";
 
 const { registerDiffTool } = await import("../dist/tools/diff.js");
 const { SnapshotManager } = await import("../dist/snapshot.js");
-const {
-  diffCurrentFinances,
-  diffPlanList,
-  diffPlanPair,
-  createDiffBudget,
-} = await import("../dist/diff.js");
 
 function fakeServer() {
   const tools = new Map();
@@ -86,7 +80,6 @@ test("v5 diff against live export: accounts by id, events by id, settings and ac
     "testBaseline",
     ["plans", "currentFinances", "settings", "accountHistory"],
     snapshotData,
-    "v5",
   );
 
   // Prepare modified live v5 state
@@ -233,7 +226,6 @@ test("v5 snapshot to snapshot diff", async () => {
       plans: structuredClone(baseExport.documents.plans),
       currentFinances: structuredClone(baseExport.documents.currentFinances),
     },
-    "v5",
   );
 
   const edited = v5Export();
@@ -246,7 +238,6 @@ test("v5 snapshot to snapshot diff", async () => {
       plans: structuredClone(edited.documents.plans),
       currentFinances: structuredClone(edited.documents.currentFinances),
     },
-    "v5",
   );
 
   const bridge = fakeBridge(v5Export());
@@ -299,207 +290,54 @@ test("v5 plan-to-plan diff comparing two v5 plans", async () => {
   assert.equal(incomeDiff.different[0].changes.amount, "90000 → 120000");
 });
 
-test("refuses diff across different layouts with LAYOUT_MISMATCH", async () => {
+/**
+ * A snapshot on disk whose recorded layout is `recorded`, or absent when
+ * `recorded` is undefined, as a ProjectionLab 4 server wrote it.
+ */
+async function legacySnapshot(snapshots, recorded) {
+  const snap = await snapshots.create("v4Snap", ["plans"], {
+    plans: [{ id: "p1", name: "V4 Plan" }],
+  });
+  const file = join(SNAPSHOT_DIR, `${snap.id}.json`);
+  const stored = JSON.parse(readFileSync(file, "utf-8"));
+  if (recorded === undefined) delete stored.layout;
+  else stored.layout = recorded;
+  writeFileSync(file, JSON.stringify(stored));
+  return snap;
+}
+
+for (const recorded of ["v4", undefined]) {
+  test(`refuses a diff from or to a snapshot recording layout ${recorded}`, async () => {
+    const snapshots = freshSnapshots();
+    const legacy = await legacySnapshot(snapshots, recorded);
+    const current = await snapshots.create("v5Snap", ["plans"], {
+      plans: v5Export().documents.plans,
+    });
+    const diff = register(fakeBridge(v5Export()), snapshots);
+
+    for (const args of [
+      { from: { snapshotId: legacy.id } },
+      { from: { snapshotId: legacy.id }, to: { snapshotId: current.id } },
+      { from: { snapshotId: current.id }, to: { snapshotId: legacy.id } },
+    ]) {
+      const err = await errorFor(diff, args);
+      assert.equal(err.error, "LAYOUT_MISMATCH", JSON.stringify(args));
+      assert.match(err.message, /ProjectionLab 4/);
+      assert.match(err.suggestion, /Compare snapshots taken from ProjectionLab 5/);
+      assert.match(err.suggestion, /Nothing was compared/);
+    }
+  });
+}
+
+test("refuses a diff against a live ProjectionLab 4 export", async () => {
   const snapshots = freshSnapshots();
-
-  // Create a v4 snapshot
-  const v4Snapshot = await snapshots.create(
-    "v4Snap",
-    ["plans"],
-    {
-      plans: [{ id: "p1", name: "V4 Plan" }],
-      today: { investmentAccounts: [] },
-    },
-    "v4",
+  const current = await snapshots.create("v5Snap", ["plans"], {
+    plans: v5Export().documents.plans,
+  });
+  const diff = register(
+    fakeBridge({ plans: [{ id: "p1", name: "V4 Live" }], today: {} }),
+    snapshots,
   );
-
-  // Create a v5 snapshot
-  const v5Snapshot = await snapshots.create(
-    "v5Snap",
-    ["plans"],
-    {
-      plans: [{ schema: 5, id: "p1", name: "V5 Plan" }],
-    },
-    "v5",
-  );
-
-  // 1. v4 snapshot against live v5
-  const bridgeV5 = fakeBridge(v5Export());
-  const diffOnV5 = register(bridgeV5, snapshots);
-  const err1 = await errorFor(diffOnV5, {
-    from: { snapshotId: v4Snapshot.id },
-  });
-  assert.equal(err1.error, "LAYOUT_MISMATCH");
-  assert.match(err1.message, /v4/);
-  assert.match(err1.message, /v5/);
-
-  // 2. v5 snapshot against live v4
-  const bridgeV4 = fakeBridge({
-    plans: [{ id: "p1", name: "V4 Live" }],
-    today: {},
-  });
-  const diffOnV4 = register(bridgeV4, snapshots);
-  const err2 = await errorFor(diffOnV4, {
-    from: { snapshotId: v5Snapshot.id },
-  });
-  assert.equal(err2.error, "LAYOUT_MISMATCH");
-
-  // 3. v4 snapshot against v5 snapshot
-  const err3 = await errorFor(diffOnV5, {
-    from: { snapshotId: v4Snapshot.id },
-    to: { snapshotId: v5Snapshot.id },
-  });
-  assert.equal(err3.error, "LAYOUT_MISMATCH");
-});
-
-test("v4 regression: plans list with schema: 5 and kind string diffed without layout uses v4 keying and does not throw", () => {
-  const budget = createDiffBudget({});
-
-  const beforePlans = [
-    {
-      schema: 5,
-      id: "p1",
-      name: "Retire Early",
-      income: {
-        events: [
-          {
-            id: "e1",
-            schema: 5,
-            kind: "income",
-            name: "Old Salary",
-            amount: 80000,
-          },
-        ],
-      },
-    },
-  ];
-
-  const afterPlans = [
-    {
-      schema: 5,
-      id: "p1",
-      name: "Retire Early",
-      income: {
-        events: [
-          {
-            id: "e1",
-            schema: 5,
-            kind: "income",
-            name: "New Salary",
-            amount: 80000,
-          },
-        ],
-      },
-    },
-  ];
-
-  // Must not throw even with schema: 5 and kind string present
-  const result = diffPlanList(beforePlans, afterPlans, budget);
-
-  assert.equal(result.changed, true);
-  const planDiff = result.changedPlans[0];
-  const incomeDiff = planDiff.sections.income;
-
-  // With v4 name-plus-occurrence keying, renaming an event means old is removed and new is added
-  assert.equal(incomeDiff.addedCount, 1);
-  assert.deepEqual(incomeDiff.added, ["New Salary"]);
-  assert.equal(incomeDiff.removedCount, 1);
-  assert.deepEqual(incomeDiff.removed, ["Old Salary"]);
-  assert.equal(incomeDiff.modifiedCount, 0);
-});
-
-test("v4 regression check: points-in-time and plan-to-plan behave as before on v4", async () => {
-  const snapshots = freshSnapshots();
-
-  const oldV4Plans = [
-    {
-      id: "p1",
-      name: "Retire 55",
-      income: {
-        events: [{ id: "e1", name: "Salary", amount: 80000 }],
-      },
-    },
-    {
-      id: "p2",
-      name: "Work Forever",
-      income: {
-        events: [{ id: "e2", name: "Salary", amount: 80000 }],
-      },
-    },
-  ];
-
-  const editedV4Plans = [
-    {
-      id: "p1",
-      name: "Retire 55",
-      income: {
-        // In v4, renaming event means old is removed and new is added
-        events: [{ id: "e1", name: "Senior Salary", amount: 80000 }],
-      },
-    },
-    {
-      id: "p2",
-      name: "Work Forever",
-      income: {
-        events: [{ id: "e2", name: "Salary", amount: 80000 }],
-      },
-    },
-  ];
-
-  const v4TodayOld = {
-    investmentAccounts: [
-      { id: "inv1", name: "Brokerage", balance: 10000 },
-    ],
-  };
-
-  const v4TodayNew = {
-    investmentAccounts: [
-      { id: "inv1", name: "Brokerage", balance: 15000 },
-    ],
-  };
-
-  const savedV4 = await snapshots.create(
-    "v4Baseline",
-    ["plans", "currentFinances"],
-    {
-      plans: oldV4Plans,
-      today: v4TodayOld,
-    },
-    "v4",
-  );
-
-  const bridge = fakeBridge({
-    plans: editedV4Plans,
-    today: v4TodayNew,
-  });
-
-  const diff = register(bridge, snapshots);
-  const out = text(await diff({ from: { snapshotId: savedV4.id } }));
-
-  assert.equal(out.changed, true);
-  // In v4, event renaming produces added + removed (not modified)
-  const planDiff = out.sections.plans.changedPlans[0];
-  const incomeDiff = planDiff.sections.income;
-  assert.equal(incomeDiff.addedCount, 1);
-  assert.deepEqual(incomeDiff.added, ["Senior Salary"]);
-  assert.equal(incomeDiff.removedCount, 1);
-  assert.deepEqual(incomeDiff.removed, ["Salary"]);
-  assert.equal(incomeDiff.modifiedCount, 0);
-
-  // Current finances in v4 diffs collection investmentAccounts
-  const invDiff = out.sections.currentFinances.collections.investmentAccounts;
-  assert.equal(invDiff.modifiedCount, 1);
-  assert.equal(invDiff.modified[0].changes.balance, "10000 → 15000");
-
-  // Plan to plan on v4 works between two distinct plans
-  const p2p = text(
-    await diff({
-      planA: "Retire 55",
-      planB: "Work Forever",
-    }),
-  );
-  // In v4, events match by name, so Senior Salary vs Salary are reported in onlyInA / onlyInB
-  assert.equal(p2p.changed, true);
-  assert.deepEqual(p2p.sections.income.onlyInA, ["Senior Salary"]);
-  assert.deepEqual(p2p.sections.income.onlyInB, ["Salary"]);
+  const err = await errorFor(diff, { from: { snapshotId: current.id } });
+  assert.equal(err.error, "UNSUPPORTED_API_VERSION");
 });

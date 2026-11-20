@@ -144,8 +144,8 @@ export function planNotFoundError(
 }
 
 /**
- * The plans of a raw export, whichever layout it has (v4 `plans`, v5
- * `documents.plans`). An export with no plans is refused.
+ * The plans of a raw export, from `documents.plans`. An export with no plans
+ * is refused.
  */
 export function requirePlans(data: unknown): unknown[] {
   const plans = exportSections(data).plans;

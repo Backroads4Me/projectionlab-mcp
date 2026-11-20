@@ -9,7 +9,6 @@ import { restorePlansIfUnchanged } from "./helpers/checked-restore.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contractOf } from "./helpers/contract.mjs";
 
 process.env.PL_API_KEY = "test-api-key";
 process.env.PL_SNAPSHOT_DIR = join(
@@ -67,14 +66,16 @@ function samplePlans() {
   ];
 }
 
+/** An in-memory ProjectionLab 5 profile. `state` holds the export's
+ * documents; exportData wraps a copy of them in the v5 envelope. */
 function fakeBridge(initial, opts = {}) {
   let stamp = 1000;
-  const state = structuredClone(initial);
+  const state = { currentFinances: { schema: 5, accounts: {} }, settings: { schema: 5 }, ...structuredClone(initial) };
   const bridge = {
     state,
     writes: [],
     exportCalls: 0,
-    async apiContract() { return contractOf(state); },
+    async apiContract() { return 2; },
     async editAccess() {
       return editAccess.value;
     },
@@ -85,7 +86,7 @@ function fakeBridge(initial, opts = {}) {
       if (opts.saveOnSecondRead && bridge.exportCalls === 2) {
         state.plans[0].lastUpdated = 999;
       }
-      return structuredClone(state);
+      return { schema: 1, exportedAt: 1, documents: structuredClone(state) };
     },
     restorePlansIfUnchanged,
     async restorePlans(plans) {

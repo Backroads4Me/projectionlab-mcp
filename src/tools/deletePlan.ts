@@ -8,7 +8,7 @@ import { errorResult } from "../errors.js";
 import { log } from "../logger.js";
 import { toJson } from "../json.js";
 import { getEvents, requirePlans, type PlanObj } from "../plans.js";
-import { detectLayout, exportSections } from "../layout.js";
+import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 
 export function registerDeletePlanTool(
@@ -89,9 +89,9 @@ export function registerDeletePlanTool(
 
         const snapshot = await snapshots.create("deletePlan", ["plans"], {
           plans,
-        }, detectLayout(data));
+        });
         log.info("deletePlan", `Deleting plan "${String(target.name)}"`);
-        await bridge.restorePlansIfUnchanged(plans, withoutPlan(plans, String(target.id)), detectLayout(data));
+        await bridge.restorePlansIfUnchanged(plans, withoutPlan(plans, String(target.id)));
 
         const verifyData = await bridge.exportData({ fresh: true });
         const after = exportSections(verifyData).plans;

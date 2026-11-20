@@ -34,54 +34,8 @@ interface V5SchemaDescription extends SchemaDescription {
   accountHistory: { accountCount: number; entryCount: number };
 }
 
-function extractV4Accounts(finances: unknown): AccountSummary[] {
-  if (!finances || typeof finances !== "object") return [];
-
-  const accounts: AccountSummary[] = [];
-
-  // ProjectionLab stores accounts in various arrays within the "today" section
-  const sections = [
-    "investmentAccounts",
-    "savingsAccounts",
-    "debts",
-    "assets",
-  ];
-
-  for (const section of sections) {
-    const items = (finances as Record<string, unknown>)[section];
-    if (!Array.isArray(items)) continue;
-    for (const item of items) {
-      if (item && typeof item === "object") {
-        const obj = item as Record<string, unknown>;
-        // An asset record holds its loan in `balance` and its market value in
-        // `amount` (observed ProjectionLab storage, the same reading as
-        // src/summary.ts), so label them as separate named fields; a single
-        // `balance` would read as if the loan were the asset's value.
-        if (section === "assets") {
-          accounts.push({
-            id: String(obj.id ?? ""),
-            name: String(obj.name ?? "unknown"),
-            type: obj.type === "real-estate" ? "real-estate" : section,
-            marketValue: Number(obj.amount ?? obj.value ?? 0),
-            loanBalance: Number(obj.balance ?? 0),
-          });
-          continue;
-        }
-        accounts.push({
-          id: String(obj.id ?? ""),
-          name: String(obj.name ?? "unknown"),
-          type: section,
-          balance: Number(obj.balance ?? obj.value ?? 0),
-        });
-      }
-    }
-  }
-
-  return accounts;
-}
-
-// ProjectionLab exports progress tracking as `{ data: [...] }` (observed in
-// ProjectionLab 4.6.0 exports); a bare array is counted too.
+// A progress document holds its entries as `{ data: [...] }`; a bare array is
+// counted too.
 function progressEntryCount(progress: unknown): number {
   if (Array.isArray(progress)) return progress.length;
   if (progress && typeof progress === "object") {
@@ -175,12 +129,11 @@ export function registerSchemaTool(server: McpServer, bridge: Bridge) {
       title: "Describe Schema",
       description:
         "Returns a lightweight summary of the ProjectionLab data structure without the full payload. " +
-        "Includes top-level keys, account list (IDs, names, types, balances; asset rows report marketValue and loanBalance in place of balance, with type \"real-estate\" for real estate), plans (IDs, names, and each plan's income, expense, and milestone event counts), " +
-        "and the progress entry count. " +
-        "On ProjectionLab 5 the account rows carry the stored kind (account, debt, real-asset) and type, " +
-        "a real asset reports value, a debt reports balance and securedByAssetId, archived accounts are " +
-        "listed apart under archivedAccounts, the keys name each documents.* section, and accountHistory " +
-        "counts the per-account history in documents.accountHistory (ProjectionLab 5 exports no progress section). " +
+        "Includes top-level keys (each documents.* section named), the account list (IDs, names, the stored " +
+        "kind (account, debt, real-asset) and type; a real asset reports value, an account or debt reports balance, " +
+        "and a debt reports securedByAssetId), archived accounts listed apart under archivedAccounts, plans (IDs, " +
+        "names, and each plan's income, expense, and milestone event counts), the progress entry count, and " +
+        "accountHistory, which counts the per-account history in documents.accountHistory. " +
         "Use this to understand the data model before crafting queries or mutations.",
       annotations: {
         readOnlyHint: true,
@@ -202,35 +155,22 @@ export function registerSchemaTool(server: McpServer, bridge: Bridge) {
           ...planEventCounts(plan),
         })) as PlanSummary[];
 
-        if (sections.layout === "v5") {
-          // Each v5 document is named under `documents.` so the keys an agent
-          // reads match the paths it can ask for.
-          const documents = (data as ExportedData).documents;
-          if (documents && typeof documents === "object") {
-            for (const [name, value] of Object.entries(documents)) {
-              topLevelKeys[`documents.${name}`] = describeValue(value);
-            }
+        // Each v5 document is named under `documents.` so the keys an agent
+        // reads match the paths it can ask for.
+        const documents = (data as ExportedData).documents;
+        if (documents && typeof documents === "object") {
+          for (const [name, value] of Object.entries(documents)) {
+            topLevelKeys[`documents.${name}`] = describeValue(value);
           }
-          const schema: V5SchemaDescription = {
-            layout: "v5",
-            topLevelKeys,
-            ...extractV5Accounts(sections.currentFinances),
-            plans,
-            progressEntryCount: progressEntryCount(sections.progress),
-            accountHistory: accountHistoryCounts(sections.accountHistory),
-          };
-          return {
-            content: [{ type: "text", text: toJson(schema) }],
-          };
         }
-
-        const schema: SchemaDescription = {
+        const schema: V5SchemaDescription = {
+          layout: "v5",
           topLevelKeys,
-          accounts: extractV4Accounts(sections.currentFinances),
+          ...extractV5Accounts(sections.currentFinances),
           plans,
           progressEntryCount: progressEntryCount(sections.progress),
+          accountHistory: accountHistoryCounts(sections.accountHistory),
         };
-
         return {
           content: [{ type: "text", text: toJson(schema) }],
         };

@@ -1,6 +1,5 @@
 // Current Finances summary (projectionlab_get_summary, projectionlab://summary,
-// buildSummary) on a ProjectionLab 5 export, and its unchanged ProjectionLab 4
-// output.
+// buildSummary) on a ProjectionLab 5 export.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -283,95 +282,4 @@ test("the summary resource reports an unreadable v5 export as an error document"
 
   assert.equal(output.error, "Failed to build summary");
   assert.match(output.details, /documents\.plans/);
-});
-
-// ProjectionLab 4 regressions: nothing the v5 support adds appears in v4 output.
-
-const v4Export = () => ({
-  meta: { version: "4.6.0" },
-  today: {
-    investmentAccounts: [{ id: "i1", name: "Brokerage", balance: 100000 }],
-    savingsAccounts: [{ id: "s1", name: "Savings", balance: 20000 }],
-    debts: [{ id: "d1", name: "Student Loan", balance: 25000 }],
-    assets: [
-      { id: "a1", name: "House", type: "real-estate", amount: 400000, balance: 0 },
-      { id: "a2", name: "Car", type: "vehicle", amount: 35000, balance: 15000 },
-      { id: "a3", name: "Collectibles", value: 5000 },
-    ],
-  },
-  plans: [
-    {
-      id: "plan-1",
-      name: "Base",
-      retirementAge: 60,
-      income: { events: [{ id: "e1" }] },
-      expenses: { events: [] },
-      milestones: [{ id: "m1" }, { id: "m2" }],
-      endingNetWorth: 999999,
-    },
-  ],
-  settings: {},
-  progress: { data: [] },
-});
-
-test("v4 summary is unchanged and carries no v5 fields", async () => {
-  const output = await summaryOf(v4Export());
-
-  assert.deepEqual(output, {
-    scope: "currentFinances",
-    projectedOutcomesAvailable: false,
-    // 100000 + 20000 - 25000 + (400000 + 35000 - 15000) + 5000
-    totalNetWorth: 520000,
-    accountsByType: {
-      investmentAccounts: { count: 1, total: 100000 },
-      savingsAccounts: { count: 1, total: 20000 },
-      debts: { count: 1, total: 25000 },
-      assets: { count: 3, total: 440000 },
-    },
-    planCount: 1,
-    plans: [
-      {
-        id: "plan-1",
-        name: "Base",
-        incomeCount: 1,
-        expenseCount: 0,
-        milestoneCount: 2,
-        retirementAge: 60,
-      },
-    ],
-  });
-});
-
-test("v4 summary with no Current Finances or plans is empty", () => {
-  assert.deepEqual(buildSummary({}), {
-    scope: "currentFinances",
-    projectedOutcomesAvailable: false,
-    totalNetWorth: 0,
-    accountsByType: {},
-    planCount: 0,
-    plans: [],
-  });
-});
-
-test("v4 summary structured output satisfies the declared output schema", async () => {
-  const { tool, result } = await toolSummary(v4Export());
-  const schema = z.object(tool.definition.outputSchema).strict();
-  const parsed = schema.safeParse(result.structuredContent);
-  assert.equal(parsed.success, true, JSON.stringify(parsed.error?.issues));
-});
-
-test("the summary resource still reads a v4 export", async () => {
-  const server = fakeServer();
-  registerSummaryResource(server, {
-    async exportData() {
-      return v4Export();
-    },
-  });
-  const result = await server.resources
-    .get("summary")
-    .handler(new URL("projectionlab://summary"));
-  const output = JSON.parse(result.contents[0].text);
-
-  assert.equal(output.totalNetWorth, 520000);
-  assert.equal("layout" in output, false);
 });

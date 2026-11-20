@@ -1,5 +1,5 @@
 // Current Finances helpers (src/currentFinances.ts, src/realEstate.ts) on
-// ProjectionLab 5 accounts, and their unchanged ProjectionLab 4 behavior.
+// ProjectionLab 5 accounts.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -48,7 +48,7 @@ test("listV5Accounts falls back to the key for a record without an id and skips 
   assert.equal(entries.some((entry) => entry.key === "junk"), false);
 });
 
-test("listV5Accounts is empty for v4 data and for anything that is not an accounts object", () => {
+test("listV5Accounts is empty for anything that is not an accounts object", () => {
   assert.deepEqual(finances.listV5Accounts({ investmentAccounts: [{ id: "a" }] }), []);
   assert.deepEqual(finances.listV5Accounts({ accounts: [{ id: "a" }] }), []);
   assert.deepEqual(finances.listV5Accounts(undefined), []);
@@ -204,63 +204,4 @@ test("withRealAssetBlocks returns the same object when no real asset qualifies",
   assert.equal(realEstate.withRealAssetBlocks(doc), doc);
   const empty = {};
   assert.equal(realEstate.withRealAssetBlocks(empty), empty);
-});
-
-// ProjectionLab 4 regressions.
-
-const v4Today = () => ({
-  investmentAccounts: [{ id: "inv-1", name: "Brokerage", balance: 100 }],
-  savingsAccounts: [],
-  debts: [{ id: "d-1", name: "Loan", balance: 40 }],
-  assets: [{ id: "a-1", name: "House", type: "real-estate", amount: 300, balance: 120 }],
-});
-
-test("v4 entries and lookups are unchanged", () => {
-  const today = v4Today();
-
-  assert.deepEqual(
-    finances.listCurrentFinanceEntries(today).map((entry) => [entry.collection, entry.index, entry.account.id]),
-    [
-      ["investmentAccounts", 0, "inv-1"],
-      ["debts", 0, "d-1"],
-      ["assets", 0, "a-1"],
-    ],
-  );
-  assert.equal(finances.findCurrentFinanceEntry(today, "d-1").collection, "debts");
-  assert.equal(finances.findCurrentFinanceEntry(today, "nope"), undefined);
-});
-
-test("v4 currentFinancesProblems still reports missing, added and changed accounts", () => {
-  const before = v4Today();
-  assert.deepEqual(finances.currentFinancesProblems(before, structuredClone(before)), []);
-
-  const after = v4Today();
-  after.investmentAccounts[0].balance = 1;
-  after.debts = [];
-  after.savingsAccounts.push({ id: "s-9", name: "New", balance: 2 });
-
-  assert.deepEqual(finances.currentFinancesProblems(before, after).sort(), [
-    "Current Finances debts d-1 is missing",
-    "Current Finances investmentAccounts inv-1 balance changed from 100 to 1",
-    "Current Finances savingsAccounts s-9 was added",
-  ]);
-  assert.deepEqual(finances.currentFinancesProblems(before, undefined), [
-    "Current Finances is missing from the re-read",
-  ]);
-  assert.deepEqual(finances.currentFinancesProblems({}, after), []);
-});
-
-test("v4 not-found error counts the per-type records", () => {
-  const error = finances.currentFinanceAccountNotFoundError(v4Today(), "nope");
-  assert.match(error.suggestion, /3 available account record/);
-});
-
-test("v4 real-estate block and blocks-per-asset are unchanged", () => {
-  const today = v4Today();
-  const block = realEstate.buildRealEstateBlock(today.assets[0]);
-
-  assert.deepEqual(block, { loanBalance: 120, marketValue: 300, netEquity: 180 });
-  const out = realEstate.withRealEstateBlocks(today);
-  assert.deepEqual(out.assets[0].realEstate, block);
-  assert.equal(realEstate.withRealEstateBlocks({ assets: [] }).assets.length, 0);
 });

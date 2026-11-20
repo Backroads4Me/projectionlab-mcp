@@ -26,9 +26,9 @@ returns `browser`, `pageLoaded`, `apiAvailable`, `apiKeyValid`, `errors`,
 answered. When the first four flags are `true`, proceed. Otherwise fix the
 first failing item with the user, one step at a time, then check again.
 
-`apiContract` is the Plugin API contract the page offers: `1` on
-ProjectionLab 4 and `2` on ProjectionLab 5. On `2`, follow "ProjectionLab 5"
-below.
+`apiContract` is the Plugin API contract the page offers: `2` on
+ProjectionLab 5. A page that reports no contract or another one fails the
+check with `UNSUPPORTED_API_VERSION`, and nothing is read or written there.
 
 `notices` are plain sentences about the server's release, never connection
 failures. When the list is not empty, tell the user each one once, in plain
@@ -249,11 +249,9 @@ values; it is not an API, and it does not contain the application logic.
 When a change's effect matters, the user has to look at the result in the
 ProjectionLab UI. The stored data cannot show it.
 
-### ProjectionLab 5
+### How ProjectionLab 5 stores the data
 
-When `projectionlab_check_connection` reports `apiContract: 2`, the account is
-on ProjectionLab 5 and its data has a different layout. The read tools handle
-both layouts; these differences show through:
+These traits of the ProjectionLab 5 data show through the tools:
 
 - **No active plan.** A ProjectionLab 5 plan has no `active` flag, so
   `projectionlab_get_plan` reports `active: "not reported"`. Never call a plan
@@ -269,8 +267,7 @@ both layouts; these differences show through:
   `eventIdentifier` matches no event id or name. A priority's `accountId` is
   different: it holds the id of the plan's account event, not the Current
   Finances account id. Keep the two kinds of id apart.
-- **Linked fields belong to Current Finances.** On ProjectionLab 5, a linked
-  event takes some fields from the item it links to, and ProjectionLab
+- **Linked fields belong to Current Finances.** A linked event takes some fields from the item it links to, and ProjectionLab
   overwrites a value written to them in the plan. An account event takes its
   name, type, balance, owner, icon, liquidity, cost basis and withdrawal terms
   (`EWAge`, `hasEWPenalty`, `EWPenaltyRate`, `withdrawContribsFree`), among
@@ -286,22 +283,12 @@ both layouts; these differences show through:
   Finances document, not one per plan, so `projectionlab_update_account` and
   a Current Finances restore change what every plan starts from. Say so in
   the preview before confirming. Plans keep their own copies of the linked
-  fields. On ProjectionLab 5, those copies refresh when a plan is opened or
-  saved, so an export can show an old value in a plan nobody has opened
-  since. Read today's figure from Current Finances, not from a plan event. On ProjectionLab 5, a balance or value
+  fields. Those copies refresh when a plan is opened or saved, so an export
+  can show an old value in a plan nobody has opened since. Read today's
+  figure from Current Finances, not from a plan event. A balance or value
   edit also overwrites that account's `accountHistory` entry for the current
   day.
-- **Resources.** `projectionlab://data-model` and `projectionlab://knowledge`
-  follow the layout the last connection check found. Read
-  `projectionlab://data-model?layout=v4` or `?layout=v5` (the same for
-  `knowledge`) to pick one explicitly.
-- **Every write but Progress works.** The plan tools (`projectionlab_update_plan_event`,
-  `projectionlab_update_plan_section`, `projectionlab_update_plan_settings`,
-  `projectionlab_clone_plan`, `projectionlab_delete_plan`,
-  `projectionlab_restore_plans`) and `projectionlab_update_account` behave as
-  on ProjectionLab 4. `projectionlab_update_account` reports the account's
-  `kind` instead of a `collection`.
-- **Current Finances restores keep missing accounts.** On ProjectionLab 5,
+- **Current Finances restores keep missing accounts.**
   `projectionlab_restore_current_finances` and a rollback of a Current
   Finances snapshot replace every non-account field and each account they
   hold, but never delete an account: one missing from the submission or the
@@ -309,9 +296,8 @@ both layouts; these differences show through:
   lists those as `keptAccounts`; tell the user, and have them archive or
   delete such an account in the ProjectionLab app if it should go.
 - **Settings restores replace the whole document.**
-  `projectionlab_restore_settings` behaves as on ProjectionLab 4: the
-  submission replaces every setting, and ProjectionLab refuses a settings
-  document it cannot read. Settings are account-wide, not per plan.
+  With `projectionlab_restore_settings`, the submission replaces every
+  setting, and ProjectionLab refuses a settings document it cannot read. Settings are account-wide, not per plan.
 - **Year alignment can change plans.** The account's year alignment
   (`settings.plan.alignment`) and a plan's override (`variables.alignment`)
   decide where each plan year starts, and so how many plan years the plan
@@ -330,12 +316,9 @@ both layouts; these differences show through:
   document the user has just edited until a read shows the edit: a write
   replaces the unsaved change.
 - **Progress cannot be written.** ProjectionLab 5 records Progress history
-  by itself whenever a current value changes, and removed the way to
-  replace it. `projectionlab_restore_progress` and a rollback of a snapshot
-  holding progress, dry runs included, are refused with
-  `WRITE_NOT_SUPPORTED` before they preview or snapshot anything. Tell the
-  user plainly; to bring back Progress from a backup file, they use Restore
-  in the ProjectionLab app.
+  by itself whenever a current value changes and offers no way to replace
+  it, so no tool writes it. Tell the user plainly; to bring back Progress
+  from a backup file, they use Restore in the ProjectionLab app.
 - **Old snapshots.** A snapshot taken on ProjectionLab 4 cannot be compared
   with or restored onto ProjectionLab 5 data: `projectionlab_diff` and
   `projectionlab_rollback` refuse it with `LAYOUT_MISMATCH`. A ProjectionLab 4
@@ -350,7 +333,7 @@ Change the plan only when the user explicitly asks for that change.
 - Never guess a path. Read it first with `projectionlab_get_plan_settings`,
   `projectionlab_get_plan_section` or `projectionlab_get_current_finances`,
   the last two with `listPaths: true`.
-- Never assume a rate's scale. ProjectionLab 4.6.0 stores most rates as
+- Never assume a rate's scale. ProjectionLab stores most rates as
   percentage points (`variables.inflation: 3` means 3%), but some as fractions
   (`variables.taxStrategy.bracketRate: 0.22` means 22%). Read the current
   value first and write the new one on the same scale; `projectionlab://data-model`
@@ -390,8 +373,8 @@ not enable writes on your own.
 
 ### Units
 
-The scale of a number is the easiest thing to get wrong. Confirmed on
-ProjectionLab 4.6.0:
+The scale of a number is the easiest thing to get wrong.
+`projectionlab://data-model` records these scales:
 
 - Rates in `variables` are percentage points: `inflation: 3` means 3%.
 - `taxStrategy.bracketRate` and `taxStrategy.capGainsBracketRate` are decimal
@@ -466,7 +449,7 @@ Every tool below also takes `confirm` (default `false`, a dry run).
 | A what-if copy of a plan | `projectionlab_clone_plan` | `planIdentifier`, `newName` |
 | Remove a plan the user has decided to discard | `projectionlab_delete_plan` | `planId` (exact ID only) |
 | A whole plan section, rebuilt deliberately | `projectionlab_update_plan_section` | `planIdentifier`, `section`, complete `sectionData`, plus `expectedPlanVersion` from the dry run |
-| Replace a whole data area (rare) | `projectionlab_restore_plans`, `projectionlab_restore_current_finances`, `projectionlab_restore_progress`, `projectionlab_restore_settings` | `plans`, `currentFinances`, `progress`, `settings`: the complete replacement |
+| Replace a whole data area (rare) | `projectionlab_restore_plans`, `projectionlab_restore_current_finances`, `projectionlab_restore_settings` | `plans`, `currentFinances`, `settings`: the complete replacement |
 | Undo a confirmed change | `projectionlab_rollback` | exactly one of `snapshotId`, `nBack`, `beforeTime` |
 
 Prefer the targeted tools: they change only the paths given and keep sibling
@@ -494,9 +477,8 @@ patch the copy.
 refuses the last remaining plan. Its snapshot lets
 `projectionlab_rollback` restore the deleted plan.
 
-`projectionlab_restore_current_finances`, `projectionlab_restore_plans`,
-`projectionlab_restore_progress` and `projectionlab_restore_settings` replace
-an entire data area. Use them only when the user wants exactly that.
+`projectionlab_restore_current_finances`, `projectionlab_restore_plans` and
+`projectionlab_restore_settings` replace an entire data area. Use them only when the user wants exactly that.
 `projectionlab_restore_plans` refuses an empty array, which would delete every
 plan.
 
@@ -641,27 +623,10 @@ must-have." Same plan and event as the example above.
    `{"spendingType": {"before": "discretionary", "after": "essential"}}`.
    Show it, get the user's approval, then confirm.
 
-**Change a Current Finances account (ProjectionLab 4).** User: "Our rental
-property is worth 480000 now; update Current Finances."
-
-1. `projectionlab_describe_schema` gives the asset's exact `accountId` (a
-   property reads as `type: "real-estate"`). Then
-   `projectionlab_get_current_finances` with that `accountId` and
-   `listPaths: true` lists the account's editable paths, including `amount`
-   and `balance`.
-2. `projectionlab_update_account` with
-   `{"accountId": "acct_abc123", "pathChanges": {"amount": 480000}}` returns
-   `dryRun: true`, the `accountName`, `collection: "assets"`, and `changes`
-   such as `{"amount": {"before": 450000, "after": 480000}}`. A property's
-   market value is stored in `amount`; `balance` is its outstanding loan, so
-   a value change goes in `amount`, never `balance`. Show the preview.
-3. After the user approves, repeat the call with `"confirm": true`. The reply
-   gives `verified` and saves a snapshot of Current Finances.
-
-**The same change on ProjectionLab 5.** When `projectionlab_check_connection`
-reports `apiContract: 2`, Current Finances accounts are records of
-`documents.currentFinances.accounts`, keyed by id and narrowed by `kind`, and
-a property keeps its loan in a separate debt record.
+**Change a Current Finances account.** User: "Our rental property is worth
+480000 now; update Current Finances." Current Finances accounts are records
+of `documents.currentFinances.accounts`, keyed by id and narrowed by `kind`,
+and a property keeps its loan in a separate debt record.
 
 1. `projectionlab_describe_schema` reports `layout: "v5"` and lists every
    account with its stored `kind` and `type`: the property is a
@@ -677,8 +642,7 @@ a property keeps its loan in a separate debt record.
    `listPaths: true` lists the record's editable paths, including `value` and
    `purchasePrice`. Then `projectionlab_update_account` with
    `{"accountId": "asset_abc123", "pathChanges": {"value": 480000}}` returns
-   `dryRun: true`, the `accountName`, `kind: "real-asset"` where the
-   ProjectionLab 4 reply carries a `collection`, and `changes` such as
+   `dryRun: true`, the `accountName`, `kind: "real-asset"`, and `changes` such as
    `{"value": {"before": 450000, "after": 480000}}`. A property's market value
    is stored in `value`, never in `balance`: `balance` belongs to the debt, so
    the loan itself changes only by patching `debt_abc123`. Say in the preview

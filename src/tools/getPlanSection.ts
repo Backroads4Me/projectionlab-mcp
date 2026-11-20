@@ -31,8 +31,7 @@ function pathParts(path: string): string[] {
 
 /** True when a path passes through a secret-named field, so the value it
  * addresses is that secret or part of it. Redaction by name works on object
- * keys, which a value read by its path or listed under its path no longer
- * carries. */
+ * keys, which a value read by its path no longer carries. */
 function isUnderSecretName(path: string): boolean {
   return pathParts(path).some(isSecretFieldName);
 }
@@ -161,8 +160,6 @@ export function registerGetPlanSectionTool(
             section,
             listAddressableValues(sectionData),
             detectLayout(data),
-          ).map((entry) =>
-            isUnderSecretName(entry.path) ? { ...entry, value: REDACTED } : entry,
           );
           // On one linked event, mark the paths ProjectionLab copies from the
           // item the event links to; plan writes to them are refused.

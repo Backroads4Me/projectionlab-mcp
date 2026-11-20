@@ -92,6 +92,43 @@ test("get plan section lists typed paths for one event", async () => {
   );
 });
 
+test("get plan section redacts a secret-named field read by its path or listed", async () => {
+  const state = initialState();
+  state.plans[0].income.events[0].sync = { authToken: "secret-value", source: "bank" };
+  const server = fakeServer();
+  const bridge = {
+    async apiContract() { return contractOf(state); },
+    async editAccess() {
+      return "enabled";
+    },
+    async exportData() {
+      return structuredClone(state);
+    },
+  };
+  registerGetPlanSectionTool(server, bridge);
+  const get = (args) =>
+    server.handlers.get("projectionlab_get_plan_section")({
+      planIdentifier: "codex",
+      section: "income",
+      eventIdentifier: "Salary",
+      ...args,
+    });
+
+  const direct = await get({ path: "sync.authToken" });
+  assert.doesNotMatch(direct.content[0].text, /secret-value/);
+  assert.equal(resultJson(direct).data, "[REDACTED]");
+
+  const listed = await get({ listPaths: true });
+  assert.doesNotMatch(listed.content[0].text, /secret-value/);
+  const entries = resultJson(listed).data;
+  assert.equal(entries.find((item) => item.path === "sync.authToken").value, "[REDACTED]");
+  assert.equal(entries.find((item) => item.path === "sync.source").value, "bank");
+
+  const parent = await get({ path: "sync", listPaths: true });
+  assert.doesNotMatch(parent.content[0].text, /secret-value/);
+  assert.equal(resultJson(parent).data.find((item) => item.path === "authToken").value, "[REDACTED]");
+});
+
 test("event path changes preserve nested siblings, snapshot, and verify", async () => {
   const server = fakeServer();
   let state = initialState();

@@ -266,10 +266,11 @@ export function registerDiffTool(
         : {}),
     };
 
-    const json = toJson(redactSecrets(result, { byName: true }));
+    const redacted = redactSecrets(result, { byName: true });
+    const json = toJson(redacted);
     // A spilled result keeps the facts that name the comparison; the
     // sections themselves stay in the file it points at.
-    const { sections: _sections, ...summary } = result;
+    const { sections: _sections, ...summary } = redacted;
     return {
       content: [
         { type: "text" as const, text: await textOrFile(json, "diff", summary) },
@@ -617,10 +618,11 @@ export function registerDiffTool(
             : {}),
         };
 
-        const json = toJson(redactSecrets(result, { byName: true }));
+        const redacted = redactSecrets(result, { byName: true });
+        const json = toJson(redacted);
         // A spilled result keeps the facts that name the comparison; the
         // sections themselves stay in the file it points at.
-        const { sections: _sections, ...summary } = result;
+        const { sections: _sections, ...summary } = redacted;
         return {
           content: [
             { type: "text", text: await textOrFile(json, "diff", summary) },

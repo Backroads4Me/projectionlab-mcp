@@ -86,6 +86,20 @@ test("PL_WS_PORT must be all digits and within 1 to 65535", () => {
   }
 });
 
+test("integer settings must be all digits", () => {
+  for (const name of ["PL_EXPORT_CACHE_MS", "PL_API_READY_TIMEOUT_MS"]) {
+    loadConfig({ env: { [name]: "90000" } });
+    loadConfig({ env: { [name]: " 0 " } });
+    for (const bad of ["90000abc", "-1", "1.5", "1e5", "ninety", " "]) {
+      assert.match(
+        startupError({ [name]: bad }),
+        new RegExp(name),
+        `${name}=${JSON.stringify(bad)} must fail startup`,
+      );
+    }
+  }
+});
+
 test("LOG_LEVEL falls back to info unless it is one of the four levels", () => {
   assert.equal(loadConfig({}).logLevel, "info");
   for (const level of ["error", "warn", "info", "debug"]) {

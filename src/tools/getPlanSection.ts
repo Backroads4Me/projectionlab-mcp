@@ -8,7 +8,7 @@ import { ProjectionLabError, errorResult } from "../errors.js";
 import { toJson } from "../json.js";
 import { textOrFile } from "../largeOutput.js";
 import { listAddressableValues } from "../pathPatch.js";
-import { redactSecrets } from "../redact.js";
+import { isSecretFieldName, REDACTED, redactSecrets } from "../redact.js";
 import {
   PLAN_SECTIONS,
   eventLabel,
@@ -21,14 +21,26 @@ import {
   type PlanObj,
 } from "../plans.js";
 
-/** Resolve a dot-path like "events[3].rothConversions" or "events.3.name". */
-function resolvePath(root: unknown, path: string): unknown {
-  const parts = path
+/** The keys of a dot-path like "events[3].rothConversions" or "events.3.name". */
+function pathParts(path: string): string[] {
+  return path
     .replace(/\[(\d+)\]/g, ".$1")
     .split(".")
     .filter((p) => p.length > 0);
+}
+
+/** True when a path passes through a secret-named field, so the value it
+ * addresses is that secret or part of it. Redaction by name works on object
+ * keys, which a value read by its path or listed under its path no longer
+ * carries. */
+function isUnderSecretName(path: string): boolean {
+  return pathParts(path).some(isSecretFieldName);
+}
+
+/** Resolve a dot-path like "events[3].rothConversions" or "events.3.name". */
+function resolvePath(root: unknown, path: string): unknown {
   let current: unknown = root;
-  for (const part of parts) {
+  for (const part of pathParts(path)) {
     if (Array.isArray(current)) {
       current = current[Number(part)];
     } else if (current && typeof current === "object") {
@@ -141,7 +153,7 @@ export function registerGetPlanSectionTool(
               "Fetch the section without a path to inspect its structure",
             );
           }
-          sectionData = resolved;
+          sectionData = isUnderSecretName(path) ? REDACTED : resolved;
         }
 
         if (listPaths) {
@@ -149,6 +161,8 @@ export function registerGetPlanSectionTool(
             section,
             listAddressableValues(sectionData),
             detectLayout(data),
+          ).map((entry) =>
+            isUnderSecretName(entry.path) ? { ...entry, value: REDACTED } : entry,
           );
           // On one linked event, mark the paths ProjectionLab copies from the
           // item the event links to; plan writes to them are refused.

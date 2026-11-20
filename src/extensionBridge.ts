@@ -163,6 +163,10 @@ export class ExtensionBridge implements Bridge {
   private lastContract: ApiContract | undefined;
   private connEditAccess: EditAccess = "unsupported";
   private readonly pending = new Map<string, Pending>();
+  /** Random per instance, so request ids never repeat across server
+   * restarts or between instances: an executor that still holds a request
+   * from an earlier server would otherwise drop a new one with the same id. */
+  private readonly idPrefix = randomBytes(6).toString("base64url");
   private nextId = 1;
   private heartbeat: NodeJS.Timeout | null = null;
   private awaitingPong = false;
@@ -827,7 +831,7 @@ export class ExtensionBridge implements Bridge {
     if (!READ_METHODS.includes(method) && this.connEditAccess !== "enabled") {
       throw editsDisabledError(this.connEditAccess);
     }
-    const id = String(this.nextId++);
+    const id = `${this.idPrefix}-${this.nextId++}`;
     const frame: RequestFrame = { type: "request", id, method, params };
     if (guard) {
       if (conn !== guard.socket) {

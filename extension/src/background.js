@@ -13,6 +13,8 @@ let lastCloseCode = 0;
 // True between an accepted hello and the close of that socket.
 let authed = false;
 let generation = 0;
+// True from the start of connect() until its socket is created or it gives up.
+let connecting = false;
 let reconnectBlocked = false;
 const inFlight = new Map();
 
@@ -73,15 +75,30 @@ function scheduleReconnect(myGeneration) {
   reconnectTimer = setTimeout(() => { reconnectTimer = undefined; void connect(); }, delay);
 }
 
+// connect() awaits storage before it opens the socket. A plain reconnect
+// leaves an attempt already under way alone, so a takeover that a Save
+// started is never replaced by one without it. A forced connect starts a new
+// generation, and an older attempt still awaiting storage gives up when it
+// resumes, so only the newest attempt ever opens a socket.
 async function connect(force = false) {
-  if (!force && (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING)) return;
+  if (!force && (connecting || socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING)) return;
   const myGeneration = ++generation;
+  connecting = true;
+  try {
+    await openSocket(force, myGeneration);
+  } finally {
+    if (myGeneration === generation) connecting = false;
+  }
+}
+
+async function openSocket(force, myGeneration) {
   authed = false;
   clearTimeout(reconnectTimer);
   reconnectTimer = undefined;
-  if (socket) { socket.onclose = null; socket.close(); }
+  if (socket) { socket.onclose = null; socket.close(); socket = undefined; }
   await browser.storage.session.set({ lastConnectAttemptAt: Date.now() });
   const config = await browser.storage.local.get({ port: DEFAULT_PORT, token: "", allowEdits: false });
+  if (myGeneration !== generation) return;
   if (!config.token) {
     await setStatus("disconnected", "Configure the shared token to connect.");
     return;
@@ -94,6 +111,7 @@ async function connect(force = false) {
   }
   await setStatus("disconnected");
   const instanceId = await getInstanceId();
+  if (myGeneration !== generation) return;
   const ws = new WebSocket(`ws://127.0.0.1:${config.port}`);
   socket = ws;
   ws.onopen = () => {

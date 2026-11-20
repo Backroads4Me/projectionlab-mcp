@@ -20,6 +20,7 @@ import { registerSummaryTool } from "./tools/summary.js";
 import { registerGetPlanTool } from "./tools/getPlan.js";
 import { registerGetPlanSectionTool } from "./tools/getPlanSection.js";
 import { registerGetPlanSettingsTool } from "./tools/getPlanSettings.js";
+import { registerSettingsReportTool } from "./tools/settingsReport.js";
 import { registerGetCurrentFinancesTool } from "./tools/getCurrentFinances.js";
 import { registerDiffTool } from "./tools/diff.js";
 import { registerUpdateAccountTool } from "./tools/updateAccount.js";
@@ -71,6 +72,7 @@ async function main() {
   registerGetPlanTool(server, bridge);
   registerGetPlanSectionTool(server, bridge);
   registerGetPlanSettingsTool(server, bridge);
+  registerSettingsReportTool(server, bridge);
   registerGetCurrentFinancesTool(server, bridge);
   // Compares snapshots against each other or against the live export, so it
   // needs the snapshot manager but never writes to it.

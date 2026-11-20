@@ -60,6 +60,10 @@ checks on Node 20 for every pull request and push to `main`.
   `projectionlab_check_connection`.
 - `src/summary.ts`: the Current Finances summary shared by `get_summary` and
   `projectionlab://summary`.
+- `src/settingsReport.ts`: the markdown plan settings report, one plan or two
+  side by side, behind `get_settings_report`.
+- `src/settingsReportLayout.ts`: the report's topics, tiers, descriptive row
+  names and "in effect" conditions, in reading order.
 - `src/planVersion.ts`: plan version tokens and the `PLAN_CONFLICT` checks.
 - `src/pathPatch.ts`: path-addressed value listing and patching for updates.
 - `src/redact.ts`: secret scrubbing for anything persisted or exported.

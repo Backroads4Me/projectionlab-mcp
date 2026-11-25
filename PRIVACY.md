@@ -14,6 +14,12 @@ independent and is not affiliated with or endorsed by ProjectionLab.
   telemetry, advertising, tracking, or crash reporting.
 - Nothing is sold, and nothing about you or your plan data is shared with the
   developer or any third party.
+- ProjectionLab data is only what you entered in ProjectionLab: account names,
+  balances, income, expenses, ages, goals, and notes. It contains no bank
+  logins, account numbers, or live connections to financial institutions.
+- The Plugin API key works only inside a browser tab signed in to your own
+  ProjectionLab account. ProjectionLab offers no API that accepts the key on
+  its own.
 - When the server starts, it makes one request to
   `https://registry.npmjs.org` to read the latest release number of
   `projectionlab-mcp`. The request contains no personal, plan, or

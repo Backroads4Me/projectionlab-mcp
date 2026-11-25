@@ -16,12 +16,6 @@ import { containsSubset } from "../plans.js";
 import { findRedactedSecretPaths, keepStoredSecrets } from "../redact.js";
 import { assertWritesSupported } from "./writeGuard.js";
 import {
-  assertUnchangedDuringPrompt,
-  confirmWrite,
-  elicitationFallbackArg,
-  promptHint,
-} from "../writeConfirmation.js";
-import {
   restoreCurrentFinancesSummary,
   restorePlansSummary,
   restoreSettingsSummary,
@@ -209,7 +203,6 @@ export function registerRestoreTools(
           .describe(
             "Set to true to execute. Default false returns a dry-run preview.",
           ),
-        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -217,7 +210,7 @@ export function registerRestoreTools(
         openWorldHint: true,
       },
     },
-    async ({ currentFinances, confirm, elicitationFallback }, extra) => {
+    async ({ currentFinances, confirm }) => {
       try {
         await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(currentFinances);
@@ -246,7 +239,6 @@ export function registerRestoreTools(
                     topLevelKeys: topKeys,
                     keptAccounts,
                     summary,
-                    ...promptHint(server),
                     warning:
                       "This will replace every Current Finances field and each submitted account. Accounts in keptAccounts are not in the submission and stay as they are. Set confirm=true to proceed.",
                   },
@@ -254,19 +246,6 @@ export function registerRestoreTools(
               },
             ],
           };
-        }
-
-        const gate = await confirmWrite(server, {
-          tool: "projectionlab_restore_current_finances",
-          args: { currentFinances },
-          summary,
-          fallback: elicitationFallback,
-          signal: extra?.signal,
-        });
-        if (!gate.proceed) return gate.result;
-        // The snapshot and keptAccounts come from the read before the prompt.
-        if (gate.prompted) {
-          await assertUnchangedDuringPrompt(bridge, exportData, ["currentFinances"]);
         }
 
         await snapshots.create("restoreCurrentFinances", ["currentFinances"], {
@@ -329,7 +308,6 @@ export function registerRestoreTools(
           .describe(
             "Set to true to execute. Default false returns a dry-run preview.",
           ),
-        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -337,7 +315,7 @@ export function registerRestoreTools(
         openWorldHint: true,
       },
     },
-    async ({ plans, confirm, elicitationFallback }, extra) => {
+    async ({ plans, confirm }) => {
       try {
         await requireEditsEnabled(bridge);
         const redactedPaths = findRedactedSecretPaths(plans);
@@ -377,7 +355,6 @@ export function registerRestoreTools(
                     incomingPlanCount: plans.length,
                     planDiff: diff,
                     summary,
-                    ...promptHint(server),
                     warning:
                       "This will REPLACE ALL plans. Set confirm=true to proceed.",
                   },
@@ -386,17 +363,6 @@ export function registerRestoreTools(
             ],
           };
         }
-
-        const gate = await confirmWrite(server, {
-          tool: "projectionlab_restore_plans",
-          args: { plans },
-          summary,
-          fallback: elicitationFallback,
-          signal: extra?.signal,
-        });
-        if (!gate.proceed) return gate.result;
-        // The snapshot comes from the read before the prompt.
-        if (gate.prompted) await assertUnchangedDuringPrompt(bridge, exportData, ["plans"]);
 
         await snapshots.create("restorePlans", ["plans"], {
           plans: sectionOf(exportData, "plans"),
@@ -454,7 +420,6 @@ export function registerRestoreTools(
           .describe(
             "Set to true to execute. Default false returns a dry-run preview.",
           ),
-        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -462,7 +427,7 @@ export function registerRestoreTools(
         openWorldHint: true,
       },
     },
-    async ({ settings: submitted, confirm, elicitationFallback }, extra) => {
+    async ({ settings: submitted, confirm }) => {
       try {
         await requireEditsEnabled(bridge);
         await assertWritesSupported(bridge, ["restoreSettings"]);
@@ -503,7 +468,6 @@ export function registerRestoreTools(
                     topLevelKeys: Object.keys(settings),
                     ...keptSecrets,
                     summary,
-                    ...promptHint(server),
                     warning:
                       "This will REPLACE all Settings. Set confirm=true to proceed.",
                   },
@@ -511,20 +475,6 @@ export function registerRestoreTools(
               },
             ],
           };
-        }
-
-        const gate = await confirmWrite(server, {
-          tool: "projectionlab_restore_settings",
-          args: { settings: submitted },
-          summary,
-          fallback: elicitationFallback,
-          signal: extra?.signal,
-        });
-        if (!gate.proceed) return gate.result;
-        // The snapshot and the kept secrets come from the read before the
-        // prompt.
-        if (gate.prompted) {
-          await assertUnchangedDuringPrompt(bridge, exportData, ["settings"]);
         }
 
         await snapshots.create("restoreSettings", ["settings"], {

@@ -14,12 +14,6 @@ import { assertSnapshotLayout, exportSections, sectionOf } from "../layout.js";
 import type { WireMethod } from "../types/wire.js";
 import { assertWritesSupported } from "./writeGuard.js";
 import { rollbackSummary } from "../changeSummary.js";
-import {
-  assertUnchangedDuringPrompt,
-  confirmWrite,
-  elicitationFallbackArg,
-  promptHint,
-} from "../writeConfirmation.js";
 
 /** The Plugin API method that writes each snapshot section back. */
 const RESTORE_METHODS: Partial<Record<string, WireMethod>> = {
@@ -108,7 +102,6 @@ export function registerSnapshotTools(
           .describe(
             "Set to true to execute rollback. Default false returns a preview.",
           ),
-        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -116,7 +109,7 @@ export function registerSnapshotTools(
         openWorldHint: true,
       },
     },
-    async ({ snapshotId, nBack, beforeTime, confirm, elicitationFallback }, extra) => {
+    async ({ snapshotId, nBack, beforeTime, confirm }) => {
       try {
         await requireEditsEnabled(bridge);
 
@@ -194,7 +187,6 @@ export function registerSnapshotTools(
                     sections: snapshot.sections,
                     ...kept,
                     summary,
-                    ...promptHint(server),
                     message:
                       keptAccounts.length > 0
                         ? "This will restore the data sections listed above. The Current Finances accounts in keptAccounts are not in the snapshot and stay as they are. Set confirm=true to proceed."
@@ -204,21 +196,6 @@ export function registerSnapshotTools(
               },
             ],
           };
-        }
-
-        // nBack and beforeTime resolve to a snapshot when called, so the
-        // resolved id is what ties a dismissed prompt to this rollback.
-        const gate = await confirmWrite(server, {
-          tool: "projectionlab_rollback",
-          args: { snapshotId: snapshot.id },
-          summary,
-          fallback: elicitationFallback,
-          signal: extra?.signal,
-        });
-        if (!gate.proceed) return gate.result;
-        // The pre-rollback snapshot comes from the read before the prompt.
-        if (gate.prompted) {
-          await assertUnchangedDuringPrompt(bridge, currentData, snapshot.sections);
         }
 
         // Snapshot current state before rolling back

@@ -10,6 +10,7 @@ import { toJson } from "../json.js";
 import { getEvents, requirePlans, type PlanObj } from "../plans.js";
 import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import { deletePlanSummary } from "../changeSummary.js";
 
 export function registerDeletePlanTool(
   server: McpServer,
@@ -71,6 +72,11 @@ export function registerDeletePlanTool(
           },
         };
 
+        const summary = deletePlanSummary({
+          planName: target.name,
+          counts: preview.eventCounts,
+        });
+
         if (!confirm) {
           return {
             content: [
@@ -80,6 +86,7 @@ export function registerDeletePlanTool(
                   dryRun: true,
                   operation: "deletePlan",
                   ...preview,
+                  summary,
                   warning: `This will delete plan "${String(target.name)}" and all of its events. Set confirm=true to proceed. The plans are snapshotted first, so projectionlab_rollback can restore the plan.`,
                 }),
               },
@@ -105,6 +112,7 @@ export function registerDeletePlanTool(
               text: toJson({
                 success: true,
                 ...preview,
+                summary,
                 verified,
                 ...(verified ? {} : { verificationProblems: problems }),
                 snapshotId: snapshot.id,

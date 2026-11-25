@@ -546,7 +546,9 @@ Change progress:
   app shows it: "In Retire at 55, Travel goes from $10,000 to $12,000 a
   year." Leave out field paths, IDs, and internal codes. For a whole-section
   replacement, list what is added, removed, and changed rather than every
-  field.
+  field. Every write tool's dry run and confirmed result carry a `summary`
+  field that already says this in plain words; relay it as written, and add
+  context from the conversation where it helps.
 - **Every confirmed change is snapshotted first.** Tell the user before the
   first change that it can be undone: `projectionlab_list_snapshots` lists the
   snapshots and `projectionlab_rollback` restores one (also a dry run until

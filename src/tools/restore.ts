@@ -15,6 +15,11 @@ import { log } from "../logger.js";
 import { containsSubset } from "../plans.js";
 import { findRedactedSecretPaths, keepStoredSecrets } from "../redact.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import {
+  restoreCurrentFinancesSummary,
+  restorePlansSummary,
+  restoreSettingsSummary,
+} from "../changeSummary.js";
 
 type Obj = Record<string, unknown>;
 
@@ -217,6 +222,10 @@ export function registerRestoreTools(
         const exportData = await bridge.exportData({ fresh: true });
         const stored = sectionOf(exportData, "currentFinances");
         const keptAccounts = v5AccountsKept(currentFinances, stored);
+        const summary = restoreCurrentFinancesSummary({
+          topLevelKeys: Object.keys(currentFinances),
+          keptAccounts,
+        });
         if (!confirm) {
           const topKeys = Object.keys(currentFinances);
           return {
@@ -229,6 +238,7 @@ export function registerRestoreTools(
                     operation: "restoreCurrentFinances",
                     topLevelKeys: topKeys,
                     keptAccounts,
+                    summary,
                     warning:
                       "This will replace every Current Finances field and each submitted account. Accounts in keptAccounts are not in the submission and stay as they are. Set confirm=true to proceed.",
                   },
@@ -260,6 +270,7 @@ export function registerRestoreTools(
                   verified,
                   ...(detail ? { verificationDetail: detail } : {}),
                   keptAccounts,
+                  summary,
                   message: verified
                     ? "Current Finances replaced and verified. Snapshot saved."
                     : "Current Finances replaced. Snapshot saved. Verification inconclusive - check with projectionlab_get_current_finances.",
@@ -325,6 +336,11 @@ export function registerRestoreTools(
         const exportData = await bridge.exportData({ fresh: true });
         const currentPlans = exportSections(exportData).plans;
         const diff = diffPlans(currentPlans, plans);
+        const summary = restorePlansSummary({
+          currentCount: currentPlans.length,
+          incomingCount: plans.length,
+          planDiff: diff,
+        });
 
         if (!confirm) {
           return {
@@ -338,6 +354,7 @@ export function registerRestoreTools(
                     currentPlanCount: currentPlans.length,
                     incomingPlanCount: plans.length,
                     planDiff: diff,
+                    summary,
                     warning:
                       "This will REPLACE ALL plans. Set confirm=true to proceed.",
                   },
@@ -365,6 +382,7 @@ export function registerRestoreTools(
                   verified,
                   ...(detail ? { verificationDetail: detail } : {}),
                   planDiff: diff,
+                  summary,
                   message: verified
                     ? "All plans replaced and verified. Snapshot saved."
                     : "All plans replaced. Snapshot saved. Verification inconclusive - check with projectionlab_describe_schema.",
@@ -433,6 +451,10 @@ export function registerRestoreTools(
           );
         }
         const keptSecrets = kept.length > 0 ? { keptSecrets: kept } : {};
+        const summary = restoreSettingsSummary({
+          topLevelKeys: Object.keys(settings),
+          keptSecrets: kept,
+        });
 
         if (!confirm) {
           return {
@@ -445,6 +467,7 @@ export function registerRestoreTools(
                     operation: "restoreSettings",
                     topLevelKeys: Object.keys(settings),
                     ...keptSecrets,
+                    summary,
                     warning:
                       "This will REPLACE all Settings. Set confirm=true to proceed.",
                   },
@@ -472,6 +495,7 @@ export function registerRestoreTools(
                   verified,
                   ...(detail ? { verificationDetail: detail } : {}),
                   ...keptSecrets,
+                  summary,
                   message: verified
                     ? "Settings replaced and verified. Snapshot saved."
                     : "Settings replaced. Snapshot saved. Verification inconclusive.",

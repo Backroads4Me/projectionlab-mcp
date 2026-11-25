@@ -13,6 +13,7 @@ import { restoredSectionMatches } from "./restore.js";
 import { assertSnapshotLayout, exportSections, sectionOf } from "../layout.js";
 import type { WireMethod } from "../types/wire.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import { rollbackSummary } from "../changeSummary.js";
 
 /** The Plugin API method that writes each snapshot section back. */
 const RESTORE_METHODS: Partial<Record<string, WireMethod>> = {
@@ -160,6 +161,17 @@ export function registerSnapshotTools(
               )
             : [];
         const kept = keptAccounts.length > 0 ? { keptAccounts } : {};
+        // The sections the write below restores: those the backup holds
+        // data for and that have a restore method.
+        const summary = rollbackSummary({
+          timestamp: snapshot.timestamp,
+          operation: snapshot.operation,
+          sections: snapshot.sections.filter(
+            (section) =>
+              RESTORE_METHODS[section] !== undefined && snapshot.data[section] !== undefined,
+          ),
+          keptAccounts,
+        });
 
         if (!confirm) {
           return {
@@ -174,6 +186,7 @@ export function registerSnapshotTools(
                     operation: snapshot.operation,
                     sections: snapshot.sections,
                     ...kept,
+                    summary,
                     message:
                       keptAccounts.length > 0
                         ? "This will restore the data sections listed above. The Current Finances accounts in keptAccounts are not in the snapshot and stay as they are. Set confirm=true to proceed."
@@ -269,6 +282,7 @@ export function registerSnapshotTools(
                   restoredSections,
                   ...(verified ? {} : { unverifiedSections }),
                   ...kept,
+                  summary,
                   fromSnapshot: snapshot.id,
                   message: verified
                     ? "Rollback complete and verified. A pre-rollback snapshot was also saved."

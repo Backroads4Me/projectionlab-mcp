@@ -39,6 +39,7 @@ import {
   linkedRecord,
 } from "../linkedFields.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import { planSectionChangeSummary } from "../changeSummary.js";
 
 interface DiffResult {
   currentCount: number;
@@ -265,6 +266,17 @@ export function registerUpdatePlanSectionTool(
         assertSectionShape(section, String(plan.name), currentSection, sectionData);
         assertLinkedFieldsUnchanged(section, plan, sectionData, data);
         const diff = diffSection(currentSection, sectionData, milestoneNames(plan));
+        const renderedDiff = renderDiff(diff);
+        const summary = planSectionChangeSummary({
+          planName: plan.name,
+          section,
+          currentCount: diff.currentCount,
+          newCount: diff.newCount,
+          added: renderedDiff.added,
+          removed: renderedDiff.removed,
+          modified: renderedDiff.modified,
+          fieldChanges: renderedDiff.fieldChanges,
+        });
 
         if (!confirm) {
           return {
@@ -278,7 +290,8 @@ export function registerUpdatePlanSectionTool(
                   planId: plan.id,
                   planVersion: planVersion(plan),
                   section,
-                  diff: renderDiff(diff),
+                  diff: renderedDiff,
+                  summary,
                   warning: `This will replace the "${section}" section of plan "${plan.name}". Set confirm=true to proceed.`,
                 }),
               },
@@ -326,7 +339,8 @@ export function registerUpdatePlanSectionTool(
                 success: true,
                 planName: plan.name,
                 section,
-                diff: renderDiff(diff),
+                diff: renderedDiff,
+                summary,
                 verified: check.ok,
                 snapshotId: snapshot.id,
                 message: check.ok

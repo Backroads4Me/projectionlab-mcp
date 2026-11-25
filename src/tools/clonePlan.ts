@@ -17,6 +17,7 @@ import {
 } from "../plans.js";
 import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import { clonePlanSummary } from "../changeSummary.js";
 
 export function registerClonePlanTool(
   server: McpServer,
@@ -89,6 +90,12 @@ export function registerClonePlanTool(
           },
         };
 
+        const summary = clonePlanSummary({
+          sourceName: source.name,
+          newName: clone.name,
+          counts: preview.eventCounts,
+        });
+
         if (!confirm) {
           return {
             content: [
@@ -98,6 +105,7 @@ export function registerClonePlanTool(
                   dryRun: true,
                   operation: "clonePlan",
                   ...preview,
+                  summary,
                   note: "The new plan id is assigned again when confirmed.",
                   warning: `This will add plan "${String(clone.name)}" as a copy of "${String(source.name)}". Set confirm=true to proceed.`,
                 }),
@@ -141,6 +149,7 @@ export function registerClonePlanTool(
               text: toJson({
                 success: true,
                 ...preview,
+                summary,
                 verified,
                 ...(verified ? {} : { verificationProblems: problems }),
                 snapshotId: snapshot.id,

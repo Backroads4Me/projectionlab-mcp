@@ -30,6 +30,7 @@ import {
 } from "../redact.js";
 import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import { accountChangeSummary } from "../changeSummary.js";
 
 const ACCOUNT_FIELD_CONTEXT = {
   label: "Current Finances account field",
@@ -264,6 +265,11 @@ export function registerUpdateAccountTool(
         const renderedChanges = redactSecrets(result.changes, {
           byName: true,
         });
+        const summary = accountChangeSummary({
+          accountName: entry.account.name,
+          kind: entry.location.kind,
+          changes: renderedChanges,
+        });
 
         if (!confirm) {
           return {
@@ -277,6 +283,7 @@ export function registerUpdateAccountTool(
                   accountName: entry.account.name,
                   ...entry.location,
                   changes: renderedChanges,
+                  summary,
                   warning:
                     Object.keys(result.changes).length === 0
                       ? "All supplied values already match the account - nothing would change."
@@ -297,6 +304,7 @@ export function registerUpdateAccountTool(
                   accountId,
                   accountName: entry.account.name,
                   changes: renderedChanges,
+                  summary,
                   verified: true,
                   message:
                     "All supplied values already match the account; no mutation was sent.",
@@ -350,6 +358,7 @@ export function registerUpdateAccountTool(
                 accountName: entry.account.name,
                 ...entry.location,
                 changes: renderedChanges,
+                summary,
                 verified,
                 ...(verified === false
                   ? {

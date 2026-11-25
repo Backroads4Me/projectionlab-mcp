@@ -21,6 +21,7 @@ import {
 } from "../plans.js";
 import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import { planSettingsChangeSummary } from "../changeSummary.js";
 
 export function registerUpdatePlanSettingsTool(
   server: McpServer,
@@ -91,6 +92,13 @@ export function registerUpdatePlanSettingsTool(
           section,
         );
 
+        const renderedChanges = redactSecrets(changes, { byName: true });
+        const summary = planSettingsChangeSummary({
+          planName: plan.name,
+          section,
+          changes: renderedChanges,
+        });
+
         if (!confirm) {
           return {
             content: [
@@ -102,7 +110,8 @@ export function registerUpdatePlanSettingsTool(
                   planName: plan.name,
                   planId: plan.id,
                   section,
-                  changes: redactSecrets(changes, { byName: true }),
+                  changes: renderedChanges,
+                  summary,
                   warning:
                     Object.keys(changes).length === 0
                       ? "All supplied values already match the plan - nothing would change."
@@ -122,7 +131,8 @@ export function registerUpdatePlanSettingsTool(
                   success: true,
                   planName: plan.name,
                   section,
-                  changes: redactSecrets(changes, { byName: true }),
+                  changes: renderedChanges,
+                  summary,
                   verified: true,
                   message: "All supplied values already match the plan; no mutation was sent.",
                 }),
@@ -170,7 +180,8 @@ export function registerUpdatePlanSettingsTool(
                 success: true,
                 planName: plan.name,
                 section,
-                changes: redactSecrets(changes, { byName: true }),
+                changes: renderedChanges,
+                summary,
                 verified,
                 ...(verified
                   ? {}

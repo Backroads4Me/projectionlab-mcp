@@ -375,7 +375,7 @@ function valueCell(
  * words ("decrease-drawdown" as "Decrease drawdown", "netWorth" as "Net
  * worth"). Undefined for any other value.
  */
-function choiceText(
+export function choiceText(
   path: string,
   value: unknown,
   allowedValues: readonly string[] | undefined,
@@ -390,7 +390,7 @@ function choiceText(
 }
 
 /** A stored code split into words: "decrease-drawdown" as "Decrease drawdown". */
-function words(code: string): string {
+export function words(code: string): string {
   const text = code
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/-/g, " ")

@@ -60,6 +60,8 @@ checks on Node 20 for every pull request and push to `main`.
   `projectionlab_check_connection`.
 - `src/summary.ts`: the Current Finances summary shared by `get_summary` and
   `projectionlab://summary`.
+- `src/changeSummary.ts`: the plain-language `summary` every write tool
+  returns in its dry run and confirmed result, built from redacted values.
 - `src/settingsReport.ts`: the markdown plan settings report, one plan or two
   side by side, behind `get_settings_report`.
 - `src/settingsReportLayout.ts`: the report's topics, tiers, descriptive row

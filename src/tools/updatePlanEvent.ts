@@ -33,10 +33,12 @@ import {
   planNotFoundError,
   requirePlans,
   EVENT_SECTIONS,
+  milestoneNames,
   type PlanObj,
 } from "../plans.js";
 import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
+import { planEventChangeSummary } from "../changeSummary.js";
 import {
   baselinePlanId,
   eventLink,
@@ -313,6 +315,17 @@ export function registerUpdatePlanEventTool(
         }
 
         const renderedChanges = redactSecrets(changes, { byName: true });
+        const summary = planEventChangeSummary({
+          planName: plan.name,
+          section,
+          eventName: eventLabel(event),
+          changes: renderedChanges,
+          timing: {
+            before: redactSecrets(event, { byName: true }),
+            after: redactSecrets(patched, { byName: true }),
+            milestones: milestoneNames(plan),
+          },
+        });
 
         if (!confirm) {
           return {
@@ -327,6 +340,7 @@ export function registerUpdatePlanEventTool(
                   section,
                   event: eventLabel(event),
                   changes: renderedChanges,
+                  summary,
                   warning:
                     Object.keys(changes).length === 0
                       ? "Patch matches the current event - nothing would change."
@@ -348,6 +362,7 @@ export function registerUpdatePlanEventTool(
                   section,
                   event: eventLabel(event),
                   changes: renderedChanges,
+                  summary,
                   verified: true,
                   message:
                     "The supplied values already match the event; no mutation was sent.",
@@ -408,6 +423,7 @@ export function registerUpdatePlanEventTool(
                 section,
                 event: eventLabel(patched),
                 changes: renderedChanges,
+                summary,
                 verified,
                 snapshotId: snapshot.id,
                 ...(verified

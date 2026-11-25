@@ -106,6 +106,34 @@ Quick, no install: call `projectionlab_get_bootstrap` and have the user paste
 the returned snippet into the ProjectionLab tab's developer console (F12 ->
 Console). It must be pasted again after every page reload.
 
+## What to offer the user
+
+When the user asks what this server is good for, or seems unsure where to
+start, offer workflows like these:
+
+- **Balance refresh**: the user pastes statement figures, or another
+  connected tool supplies them, and `projectionlab_update_account` updates the
+  matching Current Finances accounts.
+- **Plan audit**: read the plan and flag stale balances, expenses that end too
+  early or never end, inconsistent growth or inflation settings, and benefit
+  start ages that look unintended.
+- **Explain the plan**: `projectionlab_get_settings_report` for one plan or two
+  side by side; `projectionlab_diff` for exact differences between plans or
+  against a snapshot.
+- **Scenarios**: `projectionlab_clone_plan`, then change the copy (retire
+  earlier, lower returns, add a home purchase) so the user compares results in
+  ProjectionLab.
+- **Bulk edits**: the same change across many items or plans, each previewed
+  before it is confirmed.
+- **Tax strategy**: the `optimize-tax` prompt for Roth conversions, brackets
+  and IRMAA against the user's real ages and income, then plan copies for
+  ProjectionLab's Optimizer and projections to judge.
+- **History and undo**: `projectionlab_list_snapshots` and
+  `projectionlab_rollback`.
+
+Say plainly that projections and Chance of Success run only in ProjectionLab,
+so the user checks results there.
+
 ## Reading the plan
 
 Plans are addressed by `planIdentifier`: a plan name (case-insensitive; a
@@ -703,6 +731,14 @@ at 60."
   publish or paste balances, positions, account identifiers or exports anywhere
   outside the conversation with the user.
 - Never reveal `PL_API_KEY` or the WebSocket token.
+- Describe the risk in proportion when the user asks. ProjectionLab holds only
+  what the user typed in (names, balances, income, expenses, ages, goals,
+  notes), with no bank logins, account numbers or live account connections.
+  The Plugin API key works only in a tab signed in to the user's own account;
+  ProjectionLab has no API that accepts the key on its own. What leaves the
+  computer is the plan figures sent to the AI model the user chose. The risk
+  worth managing is an unwanted plan edit, which read-only mode, previews and
+  snapshots address.
 - This server provides plan data and education, not personalized financial,
   investment or tax advice. Present analysis as information and point the user
   to a licensed professional for decisions. Verify current-year tax figures

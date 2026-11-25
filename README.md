@@ -18,6 +18,22 @@ The assistant can look at your plan and walk through tradeoffs with you, and it 
 
 ---
 
+## What you can use it for
+
+Everything the assistant does, you could do by hand in ProjectionLab. What it adds is speed on tedious work and a second pair of eyes on your inputs.
+
+- **Refresh your balances.** Paste figures from your statements, or let another tool your assistant is connected to supply them, and it updates the matching accounts in Current Finances.
+- **Audit your plan.** It looks for stale balances, expenses that end too early or never end, inconsistent growth or inflation settings, and benefit start ages that look unintended.
+- **Explain your plan.** It produces a readable report of a plan's settings, ordered by topic, or two plans side by side, and tells you exactly which values differ between plans or since a backup.
+- **Build scenarios fast.** "Copy my plan and retire two years earlier," "lower returns by 2 points," "add a home purchase in 2030." It builds the copies; you compare the results in ProjectionLab.
+- **Make bulk edits.** Raise every expense by a percentage, rename or tidy items, or apply the same change across several plans.
+- **Think through tax strategy.** Talk through Roth conversions, tax brackets, and Medicare IRMAA thresholds against your own ages and income, then set up plan copies for ProjectionLab's Optimizer and projections to judge.
+- **Undo and history.** See what changed and when, and roll any change back.
+
+The assistant sees your plan's inputs, not its results: projections and Chance of Success run only in ProjectionLab. Its analysis is reasoning about your inputs, so check the effect of any change in the app.
+
+---
+
 ## Get started
 
 Paste this into your AI assistant:
@@ -38,6 +54,8 @@ Prefer to set it up yourself? See **[Manual setup](https://github.com/Backroads4
 ---
 
 ## Safety
+
+**What's at stake.** ProjectionLab holds only what you typed into it: account names, balances, income, expenses, ages, goals, and any notes you wrote. It has no bank logins, account numbers, or live connections to your financial institutions, so there is nothing here that can move money or open an account. The Plugin API key works only inside a browser tab where you are already signed in to your own ProjectionLab account; there is no ProjectionLab API that accepts the key on its own. The data that leaves your computer is your plan's figures, which go to the AI model your assistant uses, under that provider's privacy terms. The main risk to manage is an unwanted edit to your plan, which the protections below are built for.
 
 - **Read-only by default.** The assistant can read your plan but not change it until you turn on **Enable agent plan edits** in the browser extension's options. Turning it off stops changes at once.
 - **Preview before saving.** Every change is a preview until the assistant explicitly confirms it, and the assistant is instructed to show you the preview and ask first.

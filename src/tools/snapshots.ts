@@ -161,11 +161,15 @@ export function registerSnapshotTools(
               )
             : [];
         const kept = keptAccounts.length > 0 ? { keptAccounts } : {};
+        // The sections the write below restores: those the backup holds
+        // data for and that have a restore method.
         const summary = rollbackSummary({
-          snapshotId: snapshot.id,
           timestamp: snapshot.timestamp,
           operation: snapshot.operation,
-          sections: snapshot.sections,
+          sections: snapshot.sections.filter(
+            (section) =>
+              RESTORE_METHODS[section] !== undefined && snapshot.data[section] !== undefined,
+          ),
           keptAccounts,
         });
 

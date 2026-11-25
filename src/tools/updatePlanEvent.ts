@@ -321,8 +321,8 @@ export function registerUpdatePlanEventTool(
           eventName: eventLabel(event),
           changes: renderedChanges,
           timing: {
-            before: redactSecrets(event, { byName: true }),
-            after: redactSecrets(patched, { byName: true }),
+            before: redactSecrets({ start: event.start, end: event.end }, { byName: true }),
+            after: redactSecrets({ start: patched.start, end: patched.end }, { byName: true }),
             milestones: milestoneNames(plan),
           },
         });

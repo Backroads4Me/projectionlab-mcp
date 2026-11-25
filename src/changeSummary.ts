@@ -1,4 +1,5 @@
 import { matchDataModelField } from "./dataModel.js";
+import { MAX_VALUE_CHARS } from "./diff.js";
 import { startLabel } from "./plans.js";
 import { REDACTED } from "./redact.js";
 import { choiceText, formatValue, words } from "./settingsReport.js";
@@ -62,7 +63,7 @@ function valueText(
   units: string | undefined,
   allowedValues: readonly string[] | undefined,
 ): string {
-  if (value === ABSENT || value === undefined) return "not set";
+  if (value === ABSENT || value === undefined || value === null) return "not set";
   if (value === REDACTED) return "(hidden)";
   if (
     Array.isArray(value) &&
@@ -71,11 +72,15 @@ function valueText(
     return `${value.length} entr${value.length === 1 ? "y" : "ies"}`;
   }
   const leaf = path.split(".").pop() ?? path;
-  return (
+  const text =
     choiceText(path, value, allowedValues) ??
     choiceText(leaf, value, allowedValues) ??
-    formatValue(value, units)
-  );
+    formatValue(value, units);
+  // The same bound the diff puts on a value, so one long note cannot flood
+  // the summary.
+  return text.length > MAX_VALUE_CHARS
+    ? `${text.slice(0, MAX_VALUE_CHARS)}… (${text.length} characters)`
+    : text;
 }
 
 /** "Label: old → new" lines for path-addressed changes in one data-model
@@ -116,6 +121,12 @@ function render(head: string, lines: readonly string[], tail?: string): string {
 const NO_CHANGE = "Nothing changes: every supplied value already matches.";
 const BACKUP = "A backup is taken first, so this can be undone.";
 
+/** A word list's entry for `key`, ignoring keys inherited from
+ * Object.prototype, since the keys come from stored documents. */
+function ownWord(table: Record<string, string>, key: string): string | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
 /** A Current Finances record's kind as ProjectionLab names it. */
 const KIND_WORDS: Record<string, string> = {
   account: "account",
@@ -128,7 +139,7 @@ export function accountChangeSummary(input: {
   kind?: string;
   changes: Record<string, SummaryFieldChange>;
 }): string {
-  const what = `Current Finances ${KIND_WORDS[input.kind ?? ""] ?? "account"} ${quoted(input.accountName)}`;
+  const what = `Current Finances ${ownWord(KIND_WORDS, input.kind ?? "") ?? "account"} ${quoted(input.accountName)}`;
   if (Object.keys(input.changes).length === 0) return `${what}: ${NO_CHANGE}`;
   return render(`${what}:`, fieldChangeLines("accounts", input.changes), BACKUP);
 }
@@ -157,8 +168,9 @@ export function planEventChangeSummary(input: {
   section: string;
   eventName: string;
   changes: Record<string, SummaryFieldChange>;
-  /** The event before and after the change, and the plan's milestone names,
-   * so a start or end reads as the plan shows it ("Retirement", "age 65"). */
+  /** The event's start and end before and after the change, and the plan's
+   * milestone names, so a start or end reads as the plan shows it
+   * ("Retirement", "age 65"). */
   timing?: {
     before: Record<string, unknown>;
     after: Record<string, unknown>;
@@ -178,8 +190,9 @@ export function planEventChangeSummary(input: {
       if (paths.length === 0) continue;
       const from = timingText(timing.before[field], timing.milestones);
       const to = timingText(timing.after[field], timing.milestones);
-      // A start or end of a kind with no words stays as its field changes.
-      if (from === undefined || to === undefined) continue;
+      // A start or end of a kind with no words, or a change the words do not
+      // show (such as a modifier on an age), stays as its field changes.
+      if (from === undefined || to === undefined || from === to) continue;
       for (const path of paths) delete rest[path];
       lines.push(`${label}: ${from} → ${to}`);
     }
@@ -225,25 +238,49 @@ export function planSectionChangeSummary(input: {
     lines.push(`Change ${fieldNames(input.section, input.fieldChanges ?? {})}`);
   }
   const what = `Plan ${quoted(input.planName)}, ${sectionTitle(input.section).toLowerCase()} section`;
-  if (lines.length === 0) return `${what}: Nothing changes.`;
+  if (lines.length === 0) return `${what}: ${NO_CHANGE}`;
+  // A settings-shaped section (variables, montecarlo, withdrawalStrategy)
+  // holds fields, not items, so it has no count to show.
+  if (fields.length > 0 && input.currentCount === 0 && input.newCount === 0) {
+    return render(`${what}:`, lines, BACKUP);
+  }
   const counts =
     input.currentCount === input.newCount
-      ? `${input.newCount} item${input.newCount === 1 ? "" : "s"}`
-      : `${input.currentCount} → ${input.newCount} items`;
+      ? itemsText(input.newCount)
+      : `${input.currentCount} → ${itemsText(input.newCount)}`;
   return render(`${what} (${counts}):`, lines, BACKUP);
 }
 
-function fieldNames(scope: string, changes: Record<string, unknown>): string {
-  return Object.keys(changes)
-    .map((path) => matchDataModelField(scope, path)?.uiLabel ?? pathWords(path))
-    .join(", ");
+function itemsText(count: number): string {
+  return `${count} item${count === 1 ? "" : "s"}`;
 }
 
-/** Item counts in words: "3 income, 12 expenses, 4 accounts". */
+/** How many field names one summary line lists before folding the rest. */
+const FIELD_NAMES_MAX = 8;
+
+function fieldNames(scope: string, changes: Record<string, unknown>): string {
+  return namesText(
+    Object.keys(changes).map(
+      (path) => matchDataModelField(scope, path)?.uiLabel ?? pathWords(path),
+    ),
+    FIELD_NAMES_MAX,
+    "field",
+  );
+}
+
+/** A comma-separated list of names, the ones past `max` folded into
+ * "and N more <noun>s". */
+function namesText(names: readonly string[], max: number, noun: string): string {
+  if (names.length <= max) return names.join(", ");
+  const rest = names.length - max;
+  return [...names.slice(0, max), `and ${rest} more ${noun}${rest === 1 ? "" : "s"}`].join(", ");
+}
+
+/** Item counts by section: "income: 3, expenses: 12, accounts: 4". */
 function countsText(counts: Record<string, number>): string {
   const parts = Object.entries(counts)
     .filter(([, count]) => count > 0)
-    .map(([section, count]) => `${count} ${sectionTitle(section).toLowerCase()}`);
+    .map(([section, count]) => `${sectionTitle(section).toLowerCase()}: ${count}`);
   return parts.length > 0 ? parts.join(", ") : "no items";
 }
 
@@ -254,7 +291,7 @@ export function clonePlanSummary(input: {
 }): string {
   return [
     `Add plan ${quoted(input.newName)} as a copy of ${quoted(input.sourceName)} (${countsText(input.counts)}).`,
-    "Current Finances and the other plans are not changed.",
+    "A plan copy does not change Current Finances or the other plans.",
     BACKUP,
   ].join("\n");
 }
@@ -269,13 +306,16 @@ export function deletePlanSummary(input: {
   ].join("\n");
 }
 
+/** How many kept accounts one summary line names before folding the rest. */
+const KEPT_ACCOUNTS_MAX = 10;
+
 function keptAccountsLine(kept: readonly unknown[] | undefined): string[] {
   if (!kept || kept.length === 0) return [];
   const names = kept.map((entry) =>
     isPlainObject(entry) ? quoted(entry.name ?? entry.id) : quoted(entry),
   );
   return [
-    `Kept as they are (not in the replacement): ${capLines(names, 10).join(", ")}`,
+    `Kept as they are (not in the replacement): ${namesText(names, KEPT_ACCOUNTS_MAX, "account")}`,
   ];
 }
 
@@ -310,7 +350,9 @@ export function restorePlansSummary(input: {
       const parts = Object.entries(entry.changes ?? {}).map(
         ([key, change]) => `${sectionTitle(key).toLowerCase()} ${change}`,
       );
-      return `Change plan ${quoted(entry.name)}: ${parts.join("; ")}`;
+      return parts.length > 0
+        ? `Change plan ${quoted(entry.name)}: ${parts.join("; ")}`
+        : `Replace plan ${quoted(entry.name)}`;
     });
   const unchanged = input.planDiff.filter((e) => e.status === "unchanged").length;
   if (unchanged > 0) {
@@ -355,7 +397,7 @@ const OPERATION_WORDS: Record<string, string> = {
 
 function operationText(operation: string): string {
   if (operation.startsWith("rollback_pre_")) return "a rollback";
-  return OPERATION_WORDS[operation] ?? `"${words(operation).toLowerCase()}"`;
+  return ownWord(OPERATION_WORDS, operation) ?? `"${words(operation).toLowerCase()}"`;
 }
 
 /** A backup's time as a reader names it, in the server's time zone. */
@@ -373,7 +415,6 @@ function timeText(timestamp: string): string {
 }
 
 export function rollbackSummary(input: {
-  snapshotId: string;
   timestamp: string;
   operation: string;
   sections: readonly string[];
@@ -385,6 +426,6 @@ export function rollbackSummary(input: {
       `Restored: ${input.sections.map((section) => sectionTitle(section)).join(", ")}`,
       ...keptAccountsLine(input.keptAccounts),
     ],
-    `The current state is backed up first, so this rollback can itself be undone. Backup id: ${input.snapshotId}.`,
+    "The current state is backed up first, so this rollback can itself be undone.",
   );
 }

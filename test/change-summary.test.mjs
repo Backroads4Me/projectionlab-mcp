@@ -13,7 +13,15 @@ process.env.PL_SNAPSHOT_DIR = join(mkdtempSync(join(tmpdir(), "plmcp-change-summ
 process.env.LOG_LEVEL = "error";
 process.env.TZ = "UTC";
 
-const { capLines, fieldChangeLines, SUMMARY_MAX_LINES } = await import("../dist/changeSummary.js");
+const {
+  accountChangeSummary,
+  capLines,
+  fieldChangeLines,
+  planSectionChangeSummary,
+  restoreCurrentFinancesSummary,
+  restorePlansSummary,
+  SUMMARY_MAX_LINES,
+} = await import("../dist/changeSummary.js");
 const { registerUpdatePlanSettingsTool } = await import("../dist/tools/updatePlanSettings.js");
 const { registerUpdatePlanSectionTool } = await import("../dist/tools/updatePlanSection.js");
 const { registerClonePlanTool } = await import("../dist/tools/clonePlan.js");
@@ -51,11 +59,13 @@ function v5Bridge(state = v5Export()) {
       writes.push("updateAccount");
       Object.assign(state.documents.currentFinances.accounts[accountId], data);
     },
-    async restoreCurrentFinances() {
-      throw new Error("restoreCurrentFinances must not be called");
+    async restoreCurrentFinances(currentFinances) {
+      writes.push("restoreCurrentFinances");
+      Object.assign(state.documents.currentFinances, structuredClone(currentFinances));
     },
-    async restoreSettings() {
-      throw new Error("restoreSettings must not be called");
+    async restoreSettings(settings) {
+      writes.push("restoreSettings");
+      state.documents.settings = structuredClone(settings);
     },
   };
 }
@@ -234,7 +244,7 @@ test("update_plan_section lists added, removed and changed items by name", async
 test("clone_plan and delete_plan describe the plan and its item counts", async () => {
   const call = tools(v5Bridge());
   const clone = await call("projectionlab_clone_plan", { planIdentifier: "plan_main", newName: "Copy" });
-  assert.match(clone.summary, /^Add plan "Copy" as a copy of "Main Plan" \(1 income, 1 expenses,/);
+  assert.match(clone.summary, /^Add plan "Copy" as a copy of "Main Plan" \(income: 1, expenses: 1,/);
 
   const remove = await call("projectionlab_delete_plan", { planId: "plan_early" });
   assert.match(remove.summary, /^Delete plan "Retire Early" and everything in it \(/);
@@ -267,7 +277,7 @@ test("rollback names the backup and the sections it restores", async () => {
     id: "snap-v5",
     timestamp: "2026-11-25T10:00:00.000Z",
     operation: "updatePlanEvent",
-    sections: ["plans"],
+    sections: ["plans", "currentFinances"],
     layout: "v5",
     data: { plans: v5Export().documents.plans },
   };
@@ -277,7 +287,7 @@ test("rollback names the backup and the sections it restores", async () => {
     dry.summary,
     "Restore the backup taken Nov 25, 2026, 10:00 AM UTC, before a plan item change:\n" +
       "- Restored: Plans\n" +
-      "The current state is backed up first, so this rollback can itself be undone. Backup id: snap-v5.",
+      "The current state is backed up first, so this rollback can itself be undone.",
   );
 });
 
@@ -360,8 +370,119 @@ test("no summary line shows a dotted path or a camelCase code", async () => {
       .summary,
   ];
   for (const summary of summaries) {
-    const body = summary.replace(/Backup id: \S+\.$/, "");
-    assert.doesNotMatch(body, /\b[a-z]+\.[a-z]/, summary);
-    assert.doesNotMatch(body, /\b[a-z]+[A-Z][a-z]/, summary);
+    assert.doesNotMatch(summary, /\b[a-z]+\.[a-z]/, summary);
+    assert.doesNotMatch(summary, /\b[a-z]+[A-Z][a-z]/, summary);
+    assert.doesNotMatch(summary, /snap-/, summary);
+  }
+});
+
+test("null reads as not set, and a long value is cut to the diff's bound", () => {
+  assert.deepEqual(fieldChangeLines("income", { note: { before: null, after: "Raise" } }), [
+    "Note: not set → Raise",
+  ]);
+  const [line] = fieldChangeLines("income", { note: { before: "a", after: "x".repeat(300) } });
+  assert.match(line, /^Note: a → x{200}… \(300 characters\)$/);
+});
+
+test("a kind inherited from Object.prototype falls back to account", () => {
+  assert.match(
+    accountChangeSummary({ accountName: "Cash", kind: "constructor", changes: { balance: { before: 1, after: 2 } } }),
+    /^Current Finances account "Cash":/,
+  );
+});
+
+test("section counts agree in number, and long name lists fold", () => {
+  const fieldChanges = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`field${i}`, {}]));
+  const summary = planSectionChangeSummary({
+    planName: "Main Plan",
+    section: "expenses",
+    currentCount: 3,
+    newCount: 1,
+    removed: ["A", "B"],
+    modified: [{ name: "Living", changes: fieldChanges }],
+  });
+  assert.match(summary, /\(3 → 1 item\):/);
+  assert.match(summary, /- Change "Living": Field0, .*Field7, and 2 more fields\n/);
+});
+
+test("a settings-shaped section replacement shows no item count", async () => {
+  const state = v5Export();
+  state.documents.plans[0].variables = { inflation: 3 };
+  const call = tools(v5Bridge(state));
+  const dry = await call("projectionlab_update_plan_section", {
+    planIdentifier: "plan_main",
+    section: "variables",
+    sectionData: { inflation: 2.5 },
+  });
+  assert.equal(
+    dry.summary,
+    'Plan "Main Plan", variables section:\n' +
+      "- Change Inflation Rate\n" +
+      "A backup is taken first, so this can be undone.",
+  );
+});
+
+test("a timing change the words do not show stays as its field change", async () => {
+  const state = v5Export();
+  state.documents.plans[0].income.events[0].start = { type: "age", value: 65, modifier: 0 };
+  const call = tools(v5Bridge(state));
+  const dry = await call("projectionlab_update_plan_event", {
+    planIdentifier: "plan_main",
+    section: "income",
+    eventIdentifier: "plan_main_ev_salary",
+    pathChanges: { "start.modifier": 1 },
+  });
+  assert.doesNotMatch(dry.summary, /Starts:/);
+  assert.match(dry.summary, /modifier.*: 0 → 1\n/i);
+});
+
+test("kept accounts past the bound fold into a count of accounts", () => {
+  const keptAccounts = Array.from({ length: 13 }, (_, i) => ({ id: `a${i}`, name: `Account ${i}` }));
+  const summary = restoreCurrentFinancesSummary({ topLevelKeys: ["accounts"], keptAccounts });
+  assert.match(summary, /"Account 9", and 3 more accounts\n/);
+});
+
+test("a changed plan with no listed differences reads as replaced", () => {
+  const summary = restorePlansSummary({
+    currentCount: 1,
+    incomingCount: 1,
+    planDiff: [{ name: "Main Plan", status: "modified" }],
+  });
+  assert.match(summary, /- Replace plan "Main Plan"\n/);
+});
+
+test("every write tool's confirmed result carries its dry-run summary", async () => {
+  const state = v5Export();
+  state.documents.plans[0].variables = { inflation: 3 };
+  const expenses = structuredClone(state.documents.plans[0].expenses);
+  expenses.events[0].amount = 45000;
+  const held = {
+    id: "snap-v5",
+    timestamp: "2026-11-25T10:00:00.000Z",
+    operation: "updatePlanEvent",
+    sections: ["plans"],
+    layout: "v5",
+    data: { plans: v5Export().documents.plans },
+  };
+  const cases = [
+    ["projectionlab_update_account", { accountId: "acct_brokerage", pathChanges: { balance: 55000 } }],
+    ["projectionlab_update_plan_settings", { planIdentifier: "plan_main", section: "variables", changes: { inflation: 2.5 } }],
+    ["projectionlab_update_plan_section", { planIdentifier: "plan_main", section: "expenses", sectionData: expenses }],
+    ["projectionlab_clone_plan", { planIdentifier: "plan_main", newName: "Copy" }],
+    ["projectionlab_delete_plan", { planId: "plan_early" }],
+    ["projectionlab_restore_plans", { plans: structuredClone(state.documents.plans) }],
+    ["projectionlab_restore_current_finances", { currentFinances: structuredClone(state.documents.currentFinances) }],
+    ["projectionlab_rollback", { snapshotId: "snap-v5" }],
+  ];
+  for (const [name, input] of cases) {
+    const bridge = v5Bridge(structuredClone(state));
+    const call = tools(bridge, snapshotStore(held));
+    const dry = await call(name, input);
+    assert.equal(typeof dry.summary, "string", `${name}: ${JSON.stringify(dry)}`);
+    assert.deepEqual(bridge.writes, [], name);
+    const done = await call(name, { ...input, confirm: true });
+    assert.ok(!done.error, `${name}: ${JSON.stringify(done)}`);
+    assert.equal(done.summary, dry.summary, name);
+    assert.ok(bridge.writes.length > 0, name);
   }
 });

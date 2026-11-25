@@ -11,6 +11,12 @@ import { getEvents, requirePlans, type PlanObj } from "../plans.js";
 import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 import { deletePlanSummary } from "../changeSummary.js";
+import {
+  assertUnchangedDuringPrompt,
+  confirmWrite,
+  elicitationFallbackArg,
+  promptHint,
+} from "../writeConfirmation.js";
 
 export function registerDeletePlanTool(
   server: McpServer,
@@ -42,6 +48,7 @@ export function registerDeletePlanTool(
           .describe(
             "Set to true to execute. Default false returns a dry-run preview.",
           ),
+        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -50,7 +57,7 @@ export function registerDeletePlanTool(
         openWorldHint: true,
       },
     },
-    async ({ planId, confirm }) => {
+    async ({ planId, confirm, elicitationFallback }, extra) => {
       try {
         await requireEditsEnabled(bridge);
 
@@ -87,12 +94,24 @@ export function registerDeletePlanTool(
                   operation: "deletePlan",
                   ...preview,
                   summary,
+                  ...promptHint(server),
                   warning: `This will delete plan "${String(target.name)}" and all of its events. Set confirm=true to proceed. The plans are snapshotted first, so projectionlab_rollback can restore the plan.`,
                 }),
               },
             ],
           };
         }
+
+        const gate = await confirmWrite(server, {
+          tool: "projectionlab_delete_plan",
+          args: { planId },
+          summary,
+          fallback: elicitationFallback,
+          signal: extra?.signal,
+        });
+        if (!gate.proceed) return gate.result;
+        // The snapshot comes from the read before the prompt.
+        if (gate.prompted) await assertUnchangedDuringPrompt(bridge, data, ["plans"]);
 
         const snapshot = await snapshots.create("deletePlan", ["plans"], {
           plans,

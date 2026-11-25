@@ -63,6 +63,23 @@ function appUrl(): string {
   return raw;
 }
 
+const ELICITATION_MODES = ["auto", "off", "required"] as const;
+export type ElicitationMode = (typeof ELICITATION_MODES)[number];
+
+/** How write tools use the host's confirmation prompt (MCP form
+ * elicitation): "auto" asks when the host declares it, "off" never asks,
+ * "required" asks and offers no chat fallback when the prompt is dismissed. */
+function elicitationMode(): ElicitationMode {
+  const raw = (process.env.PL_ELICITATION ?? "").trim().toLowerCase();
+  if (raw === "") return "auto";
+  if (!ELICITATION_MODES.includes(raw as ElicitationMode)) {
+    throw new Error(
+      `Invalid value for PL_ELICITATION: "${process.env.PL_ELICITATION}" (expected auto, off, or required)`,
+    );
+  }
+  return raw as ElicitationMode;
+}
+
 function optionalBoolean(name: string): boolean | undefined {
   const value = process.env[name];
   if (value === undefined) return undefined;
@@ -96,6 +113,7 @@ export const config = {
   // On unless PL_UPDATE_CHECK is exactly "false"; the only registry request
   // the server makes is the one this gates.
   updateCheck: (process.env.PL_UPDATE_CHECK ?? "").trim().toLowerCase() !== "false",
+  elicitation: elicitationMode(),
   snapshotDir: expandHome(optional("PL_SNAPSHOT_DIR", "~/.projectionlab-mcp/snapshots")),
   logLevel: logLevel(),
 } as const;

@@ -40,6 +40,12 @@ import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 import { planEventChangeSummary } from "../changeSummary.js";
 import {
+  assertUnchangedDuringPrompt,
+  confirmWrite,
+  elicitationFallbackArg,
+  promptHint,
+} from "../writeConfirmation.js";
+import {
   baselinePlanId,
   eventLink,
   linkedFieldsError,
@@ -211,6 +217,7 @@ export function registerUpdatePlanEventTool(
           .describe(
             "Set to true to execute. Default false returns a dry-run field diff.",
           ),
+        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -226,7 +233,8 @@ export function registerUpdatePlanEventTool(
       patch,
       pathChanges,
       confirm,
-    }) => {
+      elicitationFallback,
+    }, extra) => {
       try {
         await requireEditsEnabled(bridge);
 
@@ -341,6 +349,7 @@ export function registerUpdatePlanEventTool(
                   event: eventLabel(event),
                   changes: renderedChanges,
                   summary,
+                  ...promptHint(server),
                   warning:
                     Object.keys(changes).length === 0
                       ? "Patch matches the current event - nothing would change."
@@ -371,6 +380,17 @@ export function registerUpdatePlanEventTool(
             ],
           };
         }
+
+        const gate = await confirmWrite(server, {
+          tool: "projectionlab_update_plan_event",
+          args: { planIdentifier, section, eventIdentifier, patch, pathChanges },
+          summary,
+          fallback: elicitationFallback,
+          signal: extra?.signal,
+        });
+        if (!gate.proceed) return gate.result;
+        // The snapshot comes from the read before the prompt.
+        if (gate.prompted) await assertUnchangedDuringPrompt(bridge, data, ["plans"]);
 
         const snapshot = await snapshots.create("updatePlanEvent", ["plans"], {
           plans,

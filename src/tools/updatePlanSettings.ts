@@ -22,6 +22,12 @@ import {
 import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 import { planSettingsChangeSummary } from "../changeSummary.js";
+import {
+  assertUnchangedDuringPrompt,
+  confirmWrite,
+  elicitationFallbackArg,
+  promptHint,
+} from "../writeConfirmation.js";
 
 export function registerUpdatePlanSettingsTool(
   server: McpServer,
@@ -61,6 +67,7 @@ export function registerUpdatePlanSettingsTool(
           .describe(
             "Set to true to execute. Default false returns a dry-run preview.",
           ),
+        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -69,7 +76,7 @@ export function registerUpdatePlanSettingsTool(
         openWorldHint: true,
       },
     },
-    async ({ planIdentifier, section, changes: incoming, confirm }) => {
+    async ({ planIdentifier, section, changes: incoming, confirm, elicitationFallback }, extra) => {
       try {
         await requireEditsEnabled(bridge);
 
@@ -112,6 +119,7 @@ export function registerUpdatePlanSettingsTool(
                   section,
                   changes: renderedChanges,
                   summary,
+                  ...promptHint(server),
                   warning:
                     Object.keys(changes).length === 0
                       ? "All supplied values already match the plan - nothing would change."
@@ -140,6 +148,17 @@ export function registerUpdatePlanSettingsTool(
             ],
           };
         }
+
+        const gate = await confirmWrite(server, {
+          tool: "projectionlab_update_plan_settings",
+          args: { planIdentifier, section, changes: incoming },
+          summary,
+          fallback: elicitationFallback,
+          signal: extra?.signal,
+        });
+        if (!gate.proceed) return gate.result;
+        // The snapshot comes from the read before the prompt.
+        if (gate.prompted) await assertUnchangedDuringPrompt(bridge, data, ["plans"]);
 
         const snapshot = await snapshots.create("updatePlanSettings", ["plans"], {
           plans,

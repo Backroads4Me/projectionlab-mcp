@@ -15,6 +15,12 @@ import {
 } from "../planVersion.js";
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
+import {
+  assertUnchangedDuringPrompt,
+  confirmWrite,
+  elicitationFallbackArg,
+  promptHint,
+} from "../writeConfirmation.js";
 import { redactSecrets, findRedactedSecretPaths } from "../redact.js";
 import {
   PLAN_SECTIONS,
@@ -231,6 +237,7 @@ export function registerUpdatePlanSectionTool(
           .describe(
             "planVersion from the dry-run. When set, the confirmed write is refused if the plan was saved in ProjectionLab after the preview.",
           ),
+        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -245,7 +252,8 @@ export function registerUpdatePlanSectionTool(
       sectionData,
       confirm,
       expectedPlanVersion,
-    }) => {
+      elicitationFallback,
+    }, extra) => {
       try {
         await requireEditsEnabled(bridge);
 
@@ -292,6 +300,7 @@ export function registerUpdatePlanSectionTool(
                   section,
                   diff: renderedDiff,
                   summary,
+                  ...promptHint(server),
                   warning: `This will replace the "${section}" section of plan "${plan.name}". Set confirm=true to proceed.`,
                 }),
               },
@@ -300,6 +309,17 @@ export function registerUpdatePlanSectionTool(
         }
 
         assertPlanVersion(plan, expectedPlanVersion);
+
+        const gate = await confirmWrite(server, {
+          tool: "projectionlab_update_plan_section",
+          args: { planIdentifier, section, sectionData, expectedPlanVersion },
+          summary,
+          fallback: elicitationFallback,
+          signal: extra?.signal,
+        });
+        if (!gate.proceed) return gate.result;
+        // The snapshot comes from the read before the prompt.
+        if (gate.prompted) await assertUnchangedDuringPrompt(bridge, data, ["plans"]);
 
         // Snapshot all plans before mutation
         const snapshot = await snapshots.create("updatePlanSection", ["plans"], {

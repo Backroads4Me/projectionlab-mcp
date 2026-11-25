@@ -52,6 +52,11 @@ checks on Node 20 for every pull request and push to `main`.
 - `src/plans.ts`: plan, section, and event lookup helpers shared by the tools.
 - `src/editAccess.ts`: the write gate every mutating tool calls first, and its
   `READ_ONLY_MODE` errors.
+- `src/writeConfirmation.ts`: the host confirmation prompt (MCP form
+  elicitation, `PL_ELICITATION`) every write tool asks after its dry-run
+  checks and before its snapshot, the `elicitationFallback: "chat"` records,
+  and the re-read after an accepted prompt that refuses before the snapshot
+  (`PLAN_CONFLICT`, `DATA_CONFLICT`) when the data changed meanwhile.
 - `src/versionCompare.ts`: numeric `major.minor.patch` comparison; `null` for
   anything unparsable, which callers treat as "say nothing".
 - `src/updateCheck.ts`: the one npm-registry lookup per server process
@@ -129,6 +134,11 @@ checks on Node 20 for every pull request and push to `main`.
   report `allowEdits: true`. The bootstrap snippet has no switch and only
   reads. `READ_METHODS` in `src/types/wire.ts` and `extension/src/wire.js`
   must list the same methods; any method missing from them counts as a write.
+- On a host that declares form elicitation (and `PL_ELICITATION` is not
+  `off`), a confirmed write writes only after the user accepts the host's
+  confirmation prompt (`confirmWrite` in `src/writeConfirmation.ts`). A host
+  without elicitation keeps the chat flow, where `confirm: true` is the
+  approval; no write tool gains a required argument.
 - Only one browser executor connects at a time; competing connections are
   answered with `BUSY` and stand by without disrupting the active session.
 - **Never** print, log, or persist `PL_API_KEY`. Anything written to disk

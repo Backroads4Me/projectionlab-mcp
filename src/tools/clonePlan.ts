@@ -18,6 +18,12 @@ import {
 import { exportSections } from "../layout.js";
 import { assertWritesSupported } from "./writeGuard.js";
 import { clonePlanSummary } from "../changeSummary.js";
+import {
+  assertUnchangedDuringPrompt,
+  confirmWrite,
+  elicitationFallbackArg,
+  promptHint,
+} from "../writeConfirmation.js";
 
 export function registerClonePlanTool(
   server: McpServer,
@@ -56,6 +62,7 @@ export function registerClonePlanTool(
           .describe(
             "Set to true to execute. Default false returns a dry-run preview.",
           ),
+        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -64,7 +71,7 @@ export function registerClonePlanTool(
         openWorldHint: true,
       },
     },
-    async ({ planIdentifier, newName, confirm }) => {
+    async ({ planIdentifier, newName, confirm, elicitationFallback }, extra) => {
       try {
         await requireEditsEnabled(bridge);
 
@@ -106,6 +113,7 @@ export function registerClonePlanTool(
                   operation: "clonePlan",
                   ...preview,
                   summary,
+                  ...promptHint(server),
                   note: "The new plan id is assigned again when confirmed.",
                   warning: `This will add plan "${String(clone.name)}" as a copy of "${String(source.name)}". Set confirm=true to proceed.`,
                 }),
@@ -113,6 +121,17 @@ export function registerClonePlanTool(
             ],
           };
         }
+
+        const gate = await confirmWrite(server, {
+          tool: "projectionlab_clone_plan",
+          args: { planIdentifier, newName },
+          summary,
+          fallback: elicitationFallback,
+          signal: extra?.signal,
+        });
+        if (!gate.proceed) return gate.result;
+        // The snapshot comes from the read before the prompt.
+        if (gate.prompted) await assertUnchangedDuringPrompt(bridge, data, ["plans"]);
 
         const snapshot = await snapshots.create("clonePlan", ["plans"], {
           plans,

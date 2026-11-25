@@ -367,7 +367,9 @@ Change the plan only when the user explicitly asks for that change.
   value first and write the new one on the same scale; `projectionlab://data-model`
   records each field's units and allowed values.
 - Never skip the dry run, and never pass `confirm: true` until the user has
-  said yes to the change that exact dry run showed.
+  said yes to the change that exact dry run showed. The one exception is a
+  dry run that carries a `confirmation` field: there the host's prompt asks
+  the user when you confirm.
 - Never write to a plan the user did not name. If the user named no plan and
   more than one exists, ask which one before calling any write tool.
 - Never invent an ID. Copy plan, account and event IDs exactly from
@@ -533,7 +535,8 @@ Copy this checklist and work through it for each change:
 Change progress:
 - [ ] 1. Read the current value and its path
 - [ ] 2. Dry run (no confirm) and describe the change in plain words
-- [ ] 3. Get the user's approval for this specific change
+- [ ] 3. Get the user's approval for this specific change (on a host whose
+        dry run carries a confirmation field, the host's prompt asks in step 4)
 - [ ] 4. Re-run the same call with confirm: true
 - [ ] 5. Re-read the field to verify it landed
 - [ ] 6. Ask the user to recalculate in ProjectionLab if impact matters
@@ -541,6 +544,16 @@ Change progress:
 
 - **Every write tool is a dry run unless `confirm: true` is passed.** Pass it
   only after the user approves the change the dry run showed.
+- **Some hosts ask the user themselves.** When a dry run carries a
+  `confirmation` field, the host shows the user a confirmation prompt with
+  the summary when you call with `confirm: true`. Describe the change
+  briefly and make the call; the prompt is the approval, so do not also ask
+  in chat. A result with `outcome: "declined"` means the user said no:
+  nothing was written, and do not retry unless they ask again. A result with
+  `outcome: "not_confirmed"` means the prompt was dismissed or could not be
+  shown: ask in chat, and if the user approves, repeat the same call with
+  `confirm: true` and `elicitationFallback: "chat"`. Send that argument only
+  after a `not_confirmed` result, never on a first call.
 - **Describe previews in the user's terms, never as JSON.** Name the plan and
   the item as they appear in ProjectionLab, and give each value the way the
   app shows it: "In Retire at 55, Travel goes from $10,000 to $12,000 a
@@ -588,6 +601,9 @@ Change progress:
   has no way to make that change, such as replacing Progress (see
   "ProjectionLab 5"). Nothing was written; help the user make the change in
   the app.
+- **`DATA_CONFLICT`** means Current Finances or Settings changed while the
+  confirmation prompt was open. Nothing was written. Re-run the dry run, show
+  the user the new preview, and confirm again.
 - **`CONTRACT_CHANGED`** means the ProjectionLab page changed between the
   server's version check and the write (for example, a tab on the other
   ProjectionLab version took over). Nothing was written. Run

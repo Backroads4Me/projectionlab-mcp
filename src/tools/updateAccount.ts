@@ -16,6 +16,12 @@ import {
 import { toJson } from "../json.js";
 import { log } from "../logger.js";
 import {
+  assertUnchangedDuringPrompt,
+  confirmWrite,
+  elicitationFallbackArg,
+  promptHint,
+} from "../writeConfirmation.js";
+import {
   applyExistingPathChanges,
   enumRefusalForNewValue,
   findPathChangeMismatches,
@@ -205,6 +211,7 @@ export function registerUpdateAccountTool(
           .describe(
             "Set to true to execute. Default false returns a validated dry-run preview.",
           ),
+        elicitationFallback: elicitationFallbackArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -213,7 +220,7 @@ export function registerUpdateAccountTool(
         openWorldHint: true,
       },
     },
-    async ({ accountId, data, pathChanges, force, confirm }) => {
+    async ({ accountId, data, pathChanges, force, confirm, elicitationFallback }, extra) => {
       try {
         await requireEditsEnabled(bridge);
         if ((data === undefined) === (pathChanges === undefined)) {
@@ -284,6 +291,7 @@ export function registerUpdateAccountTool(
                   ...entry.location,
                   changes: renderedChanges,
                   summary,
+                  ...promptHint(server),
                   warning:
                     Object.keys(result.changes).length === 0
                       ? "All supplied values already match the account - nothing would change."
@@ -312,6 +320,19 @@ export function registerUpdateAccountTool(
               },
             ],
           };
+        }
+
+        const gate = await confirmWrite(server, {
+          tool: "projectionlab_update_account",
+          args: { accountId, data, pathChanges, force },
+          summary,
+          fallback: elicitationFallback,
+          signal: extra?.signal,
+        });
+        if (!gate.proceed) return gate.result;
+        // The snapshot and the patch come from the read before the prompt.
+        if (gate.prompted) {
+          await assertUnchangedDuringPrompt(bridge, exportData, ["currentFinances"]);
         }
 
         const snapshot = await snapshots.create("updateAccount", ["currentFinances"], {
